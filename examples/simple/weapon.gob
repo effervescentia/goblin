@@ -1,0 +1,10 @@
+{
+  "$tmpl": {
+    ":name": { "$type": "string" },
+    ":base_damage": { "$type": "number" },
+    "attack": {
+      ":strength": { "$type": "number" },
+      "$func": "{:base_damage + :strength}"
+    }
+  }
+}
