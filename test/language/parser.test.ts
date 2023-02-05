@@ -396,36 +396,36 @@ describe('Language', () => {
       expect((result as FunctionCall).function_).to.be.instanceOf(
         DataReference,
       );
-      expect((result as FunctionCall).arguments_).to.eql([]);
+      expect((result as FunctionCall).arguments_).to.eql({});
     });
 
     it('should parse function call with arguments', () => {
-      const result = Language.Expression.tryParse('.foo(true, 123)');
+      const result = Language.Expression.tryParse(
+        '.foo(enabled: true, count: 123)',
+      );
 
       expect(result).to.be.instanceOf(FunctionCall);
       expect((result as FunctionCall).function_).to.be.instanceOf(
         DataReference,
       );
-      expect((result as FunctionCall).arguments_).to.have.length(2);
-      expect((result as FunctionCall).arguments_[0]).to.be.instanceOf(
-        BooleanLiteral,
-      );
-      expect((result as FunctionCall).arguments_[1]).to.be.instanceOf(
-        NumberLiteral,
-      );
+      expect((result as FunctionCall).arguments_)
+        .property('enabled')
+        .to.be.instanceOf(BooleanLiteral);
+      expect((result as FunctionCall).arguments_)
+        .property('count')
+        .to.be.instanceOf(NumberLiteral);
     });
 
     it('should parse nested function calls', () => {
-      const result = Language.Expression.tryParse('.foo(#bar())');
+      const result = Language.Expression.tryParse('.foo(from: #bar())');
 
       expect(result).to.be.instanceOf(FunctionCall);
       expect((result as FunctionCall).function_).to.be.instanceOf(
         DataReference,
       );
-      expect((result as FunctionCall).arguments_).to.have.length(1);
-      expect((result as FunctionCall).arguments_[0]).to.be.instanceOf(
-        FunctionCall,
-      );
+      expect((result as FunctionCall).arguments_)
+        .property('from')
+        .to.be.instanceOf(FunctionCall);
     });
   });
 

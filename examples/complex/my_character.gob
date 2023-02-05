@@ -1,0 +1,7 @@
+{
+  "strength": 3,
+  "equipped_weapon": "{@/weapons/fire_axe}",
+  "attack": {
+    "$func": "{#equipped_weapon.attack(strength: #strength)}"
+  }
+}

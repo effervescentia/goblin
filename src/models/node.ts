@@ -356,7 +356,8 @@ export class InitializeMacro extends MacroNode {
   public static try(data: Record<string, Node>): InitializeMacro | null {
     const node = data[this.KEY];
     if (!node) return null;
-    if (!(node instanceof ObjectNode)) throw new InvalidMacro(this.KEY, node);
+    if (!(node instanceof ExpressionNode))
+      throw new InvalidMacro(this.KEY, node);
 
     // TODO: validate expression separately?
 
@@ -365,7 +366,7 @@ export class InitializeMacro extends MacroNode {
 
   private constructor(
     public readonly parameters: Record<string, Node>,
-    public readonly template: ObjectNode,
+    public readonly template: ExpressionNode,
   ) {
     super();
   }

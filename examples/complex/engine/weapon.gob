@@ -1,0 +1,13 @@
+{
+  ":base_damage": { "$type": "number" },
+  ":damage_scaling": { "$type": "number" },
+  ":damage_type": { "$type": "{./damage_type}" },
+  "$tmpl": {
+    "base_damage": "{:base_damage}",
+    "damage_type": "{:damage_type}",
+    "attack": {
+      ":strength": { "$type": "number" },
+      "$func": "{(:base_damage + 1d8 + :strength) * :damage_scaling}"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "$init": "{@/engine/weapon}",
+  "base_damage": 3,
+  "damage_scaling": 1,
+  "damage_type": "fire"
+}
