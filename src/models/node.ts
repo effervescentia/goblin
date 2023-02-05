@@ -1,3 +1,5 @@
+import { Language } from '../language';
+import { Expression } from './expression';
 import { BooleanType, EnumType, NumberType, StringType, Type } from './type';
 
 class ValueNotImplemented extends Error {}
@@ -92,12 +94,15 @@ export class StringNode extends Node {
 }
 
 export class ExpressionNode extends Node {
-  constructor(public readonly value: string) {
+  public readonly expression: Expression;
+
+  constructor(public readonly text: string) {
     super();
+    this.expression = Language.parse(text);
   }
 
-  toString(indent?: number) {
-    return `${ExpressionNode.name}(${this.value})`;
+  toString(_indent?: number) {
+    return `${ExpressionNode.name}(${this.expression.toString()})`;
   }
 }
 

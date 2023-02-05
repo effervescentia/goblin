@@ -1,0 +1,37 @@
+import * as P from 'parsimmon';
+
+import {
+  Add,
+  And,
+  Divide,
+  Equal,
+  Exponent,
+  GreaterOrEqual,
+  GreaterThan,
+  LessOrEqual,
+  LessThan,
+  Multiply,
+  Negative,
+  Not,
+  NotEqual,
+  Or,
+  Subtract,
+} from '../models/expression';
+import { _, binaryLeft, binaryRight, unary } from './utils';
+
+export const OPERATIONS = [
+  unary(P.alt(Not.parse, Negative.parse)),
+  binaryRight(Exponent.parse),
+  binaryLeft(P.alt(Multiply.parse, Divide.parse)),
+  binaryLeft(P.alt(Add.parse, Subtract.parse)),
+  binaryLeft(
+    P.alt(
+      LessOrEqual.parse,
+      LessThan.parse,
+      GreaterOrEqual.parse,
+      GreaterThan.parse,
+    ),
+  ),
+  binaryLeft(P.alt(Equal.parse, NotEqual.parse)),
+  binaryLeft(P.alt(And.parse, Or.parse)),
+];
