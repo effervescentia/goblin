@@ -354,26 +354,26 @@ export class InitializeMacro extends MacroNode {
   private static KEY = '$init';
 
   public static try(data: Record<string, Node>): InitializeMacro | null {
-    const node = data[this.KEY];
+    const { [this.KEY]: node, ...arguments_ } = data;
     if (!node) return null;
     if (!(node instanceof ExpressionNode))
       throw new InvalidMacro(this.KEY, node);
 
     // TODO: validate expression separately?
 
-    return new InitializeMacro(ParameterMacro.extract(data), node);
+    return new InitializeMacro(node, arguments_);
   }
 
   private constructor(
-    public readonly parameters: Record<string, Node>,
     public readonly template: ExpressionNode,
+    public readonly arguments_: Record<string, Node>,
   ) {
     super();
   }
 
   toString(indent = 0) {
     return `${InitializeMacro.name}(${FunctionMacro.stringify(
-      this.parameters,
+      this.arguments_,
       this.template,
       indent,
     )})`;

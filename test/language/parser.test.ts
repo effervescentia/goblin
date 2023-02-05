@@ -31,11 +31,18 @@ import { Language } from '../../src/language/parser';
 
 describe('Language', () => {
   describe('parse literals', () => {
-    it('should parse a boolean literal', () => {
+    it('should parse a boolean TRUE literal', () => {
       const result = Language.Expression.tryParse('true');
 
       expect(result).to.be.instanceOf(BooleanLiteral);
       expect((result as BooleanLiteral).value).to.eq(true);
+    });
+
+    it('should parse a boolean FALSE literal', () => {
+      const result = Language.Expression.tryParse('false');
+
+      expect(result).to.be.instanceOf(BooleanLiteral);
+      expect((result as BooleanLiteral).value).to.eq(false);
     });
 
     it('should parse an integer literal', () => {
