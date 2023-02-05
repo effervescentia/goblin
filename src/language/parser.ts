@@ -8,7 +8,7 @@ import {
   FileReference,
   NumberLiteral,
   StringLiteral,
-} from '../models/expression';
+} from './expression';
 import { OPERATIONS } from './operations';
 import { _ } from './utils';
 

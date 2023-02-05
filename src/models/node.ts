@@ -1,5 +1,5 @@
-import { Language } from '../language';
-import { Expression } from './expression';
+import { Expression } from '../language/expression';
+import { Language } from '../language/parser';
 import { BooleanType, EnumType, NumberType, StringType, Type } from './type';
 
 class ValueNotImplemented extends Error {}

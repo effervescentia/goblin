@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/ban-types */
 import * as P from 'parsimmon';
 
-import { BooleanType, NumberType, StringType } from './type';
+import { BooleanType, NumberType, StringType } from '../../models/type';
 
 export abstract class Expression {
   // public abstract typeof(): Type;

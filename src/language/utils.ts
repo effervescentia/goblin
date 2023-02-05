@@ -4,7 +4,7 @@ import {
   BinaryOperation,
   Expression,
   UnaryOperation,
-} from '../models/expression';
+} from './expression';
 
 export const _ = P.optWhitespace;
 

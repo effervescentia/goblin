@@ -1,6 +1,5 @@
 import { expect } from 'chai';
 
-import { Language } from '../src/language';
 import {
   Add,
   And,
@@ -24,7 +23,8 @@ import {
   Reference,
   StringLiteral,
   Subtract,
-} from '../src/models/expression';
+} from '../src/language/expression';
+import { Language } from '../src/language/parser';
 
 describe('Language', () => {
   describe('parse literals', () => {

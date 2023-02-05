@@ -16,7 +16,7 @@ import {
   NotEqual,
   Or,
   Subtract,
-} from '../models/expression';
+} from './expression';
 import { _, binaryLeft, binaryRight, unary } from './utils';
 
 export const OPERATIONS = [
