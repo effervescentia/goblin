@@ -9,6 +9,7 @@ import {
   NumberLiteral,
   StringLiteral,
 } from './expression';
+import { DiceRoll } from './expression/dice-roll';
 import { OPERATIONS } from './operations';
 import { _ } from './utils';
 
@@ -26,7 +27,12 @@ export const Language = Object.assign(
     Term: (r) => P.alt(r.Literal, r.Identifier),
 
     Literal: () =>
-      P.alt(BooleanLiteral.parse, NumberLiteral.parse, StringLiteral.parse),
+      P.alt(
+        BooleanLiteral.parse,
+        DiceRoll.parse,
+        NumberLiteral.parse,
+        StringLiteral.parse,
+      ),
 
     Identifier: () =>
       P.alt(Argument.parse, DataReference.parse, FileReference.parse),

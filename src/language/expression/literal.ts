@@ -12,7 +12,7 @@ export class BooleanLiteral extends Expression {
     (s) => new BooleanLiteral(s === this.TRUE),
   );
 
-  private constructor(public readonly value: boolean) {
+  constructor(public readonly value: boolean) {
     super();
   }
 
@@ -30,7 +30,7 @@ export class NumberLiteral extends Expression {
     (s) => new NumberLiteral(Number(s)),
   );
 
-  private constructor(public readonly value: number) {
+  constructor(public readonly value: number) {
     super();
   }
 
@@ -54,7 +54,7 @@ export class StringLiteral extends Expression {
     (s) => new StringLiteral(s.replace(this.ESCAPED_QUOTES, this.QUOTE)),
   );
 
-  private constructor(public readonly value: string) {
+  constructor(public readonly value: string) {
     super();
   }
 

@@ -1,10 +1,6 @@
 import * as P from 'parsimmon';
 
-import {
-  BinaryOperation,
-  Expression,
-  UnaryOperation,
-} from './expression';
+import { BinaryOperation, Expression, UnaryOperation } from './expression';
 
 export const _ = P.optWhitespace;
 

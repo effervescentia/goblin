@@ -23,8 +23,9 @@ import {
   Reference,
   StringLiteral,
   Subtract,
-} from '../src/language/expression';
-import { Language } from '../src/language/parser';
+} from '../../src/language/expression';
+import { DiceRoll } from '../../src/language/expression/dice-roll';
+import { Language } from '../../src/language/parser';
 
 describe('Language', () => {
   describe('parse literals', () => {
@@ -68,6 +69,28 @@ describe('Language', () => {
 
       expect(result).to.be.instanceOf(StringLiteral);
       expect((result as StringLiteral).value).to.eq("it's");
+    });
+  });
+
+  describe('parse dice rolls', () => {
+    it('should not parse count < 1', () => {
+      const result = Language.Expression.parse('0d8');
+
+      expect(result.status).to.be.false;
+    });
+
+    it('should not parse max < 2', () => {
+      const result = Language.Expression.parse('2d1');
+
+      expect(result.status).to.be.false;
+    });
+
+    it('should parse valid roll', () => {
+      const result = Language.Expression.tryParse('3d6');
+
+      expect(result).to.be.instanceOf(DiceRoll);
+      expect((result as DiceRoll).count).to.eq(3);
+      expect((result as DiceRoll).max).to.eq(6);
     });
   });
 

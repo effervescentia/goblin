@@ -11,7 +11,7 @@ export class Argument extends Expression {
     (name) => new Argument(name),
   );
 
-  private constructor(public readonly name: string) {
+  constructor(public readonly name: string) {
     super();
   }
 
@@ -49,7 +49,7 @@ export class FileReference extends Reference {
     )
     .map((filePath) => new FileReference(filePath));
 
-  private constructor(public readonly path: string[]) {
+  constructor(public readonly path: string[]) {
     super();
   }
 
@@ -91,7 +91,7 @@ export class DataReference extends Reference {
 
   public static parse = P.alt(this.parseAbsolute, this.parseRelative);
 
-  private constructor(
+  constructor(
     public readonly file: FileReference,
     public readonly path: string[],
   ) {
