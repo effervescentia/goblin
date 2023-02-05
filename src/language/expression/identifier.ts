@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/ban-types */
 import * as P from 'parsimmon';
 
 import { Expression } from './base';

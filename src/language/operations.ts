@@ -6,6 +6,8 @@ import {
   Divide,
   Equal,
   Exponent,
+  Expression,
+  FunctionCall,
   GreaterOrEqual,
   GreaterThan,
   LessOrEqual,
@@ -19,7 +21,13 @@ import {
 } from './expression';
 import { _, binaryLeft, binaryRight, unary } from './utils';
 
-export const OPERATIONS = [
+export const OPERATIONS: Array<
+  (
+    parseNext: P.Parser<Expression>,
+    parseRoot: P.Parser<Expression>,
+  ) => P.Parser<Expression>
+> = [
+  FunctionCall.parse,
   unary(P.alt(Not.parse, Negative.parse)),
   binaryRight(Exponent.parse),
   binaryLeft(P.alt(Multiply.parse, Divide.parse)),

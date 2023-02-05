@@ -10,6 +10,7 @@ import {
   Equal,
   Exponent,
   FileReference,
+  FunctionCall,
   GreaterOrEqual,
   GreaterThan,
   LessOrEqual,
@@ -383,6 +384,47 @@ describe('Language', () => {
       expect(result).to.be.instanceOf(GreaterOrEqual);
       expect((result as GreaterOrEqual).lhs).to.be.instanceOf(Add);
       expect((result as GreaterOrEqual).rhs).to.be.instanceOf(Subtract);
+    });
+  });
+
+  describe('parse function calls', () => {
+    it('should parse function call without arguments', () => {
+      const result = Language.Expression.tryParse('.foo()');
+
+      expect(result).to.be.instanceOf(FunctionCall);
+      expect((result as FunctionCall).function_).to.be.instanceOf(
+        DataReference,
+      );
+      expect((result as FunctionCall).arguments_).to.eql([]);
+    });
+
+    it('should parse function call with arguments', () => {
+      const result = Language.Expression.tryParse('.foo(true, 123)');
+
+      expect(result).to.be.instanceOf(FunctionCall);
+      expect((result as FunctionCall).function_).to.be.instanceOf(
+        DataReference,
+      );
+      expect((result as FunctionCall).arguments_).to.have.length(2);
+      expect((result as FunctionCall).arguments_[0]).to.be.instanceOf(
+        BooleanLiteral,
+      );
+      expect((result as FunctionCall).arguments_[1]).to.be.instanceOf(
+        NumberLiteral,
+      );
+    });
+
+    it('should parse nested function calls', () => {
+      const result = Language.Expression.tryParse('.foo(#bar())');
+
+      expect(result).to.be.instanceOf(FunctionCall);
+      expect((result as FunctionCall).function_).to.be.instanceOf(
+        DataReference,
+      );
+      expect((result as FunctionCall).arguments_).to.have.length(1);
+      expect((result as FunctionCall).arguments_[0]).to.be.instanceOf(
+        FunctionCall,
+      );
     });
   });
 });

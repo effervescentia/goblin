@@ -37,8 +37,13 @@ export const Language = Object.assign(
     Identifier: () =>
       P.alt(Argument.parse, DataReference.parse, FileReference.parse),
 
-    Expression: (r) =>
-      OPERATIONS.reduce((acc, operation) => operation(acc), r.Term),
+    Expression: (r) => {
+      const parser: P.Parser<Expression> = P.lazy(() =>
+        OPERATIONS.reduce((acc, operation) => operation(acc, parser), r.Term),
+      );
+
+      return parser;
+    },
   }),
   {
     parse: (data: string): Expression => {
