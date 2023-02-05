@@ -1,0 +1,2 @@
+# goblin
+executable document language
