@@ -19,6 +19,7 @@ import {
   Or,
   Subtract,
 } from './expression';
+import { Group } from './expression/group';
 import { _, binaryLeft, binaryRight, unary } from './utils';
 
 export const OPERATIONS: Array<
@@ -27,6 +28,7 @@ export const OPERATIONS: Array<
     parseRoot: P.Parser<Expression>,
   ) => P.Parser<Expression>
 > = [
+  Group.parse,
   FunctionCall.parse,
   unary(P.alt(Not.parse, Negative.parse)),
   binaryRight(Exponent.parse),

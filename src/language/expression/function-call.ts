@@ -13,9 +13,9 @@ export class FunctionCall extends Expression {
     parseRoot: P.Parser<Expression>,
   ) =>
     parseNext.chain((next) =>
-      P.string(this.ARG_BEGIN)
-        .then(parseRoot.sepBy(P.seq(_, P.string(this.ARG_SEPARATOR), _)))
-        .skip(P.string(this.ARG_END))
+      parseRoot
+        .sepBy(P.seq(_, P.string(this.ARG_SEPARATOR), _))
+        .wrap(P.string(this.ARG_BEGIN), P.string(this.ARG_END))
         .map((arguments_) => new FunctionCall(next, arguments_))
         .or(P.of(next)),
     );

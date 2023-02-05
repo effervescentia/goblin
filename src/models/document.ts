@@ -14,6 +14,6 @@ export class Document {
 
     this.node = Node.from(data);
 
-    console.log(this.namespace.uuid, data, this.node.toString());
+    console.log(this.namespace.uuid, this.node.toString());
   }
 }

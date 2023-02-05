@@ -6,6 +6,7 @@ import {
   Argument,
   BooleanLiteral,
   DataReference,
+  DiceRoll,
   Divide,
   Equal,
   Exponent,
@@ -13,6 +14,7 @@ import {
   FunctionCall,
   GreaterOrEqual,
   GreaterThan,
+  Group,
   LessOrEqual,
   LessThan,
   Multiply,
@@ -25,7 +27,6 @@ import {
   StringLiteral,
   Subtract,
 } from '../../src/language/expression';
-import { DiceRoll } from '../../src/language/expression/dice-roll';
 import { Language } from '../../src/language/parser';
 
 describe('Language', () => {
@@ -425,6 +426,29 @@ describe('Language', () => {
       expect((result as FunctionCall).arguments_[0]).to.be.instanceOf(
         FunctionCall,
       );
+    });
+  });
+
+  describe('parse groups', () => {
+    it('should parse a single group', () => {
+      const result = Language.Expression.tryParse('(10 + 3)');
+
+      expect(result).to.be.instanceOf(Group);
+      expect((result as Group).expression).to.be.instanceOf(Add);
+    });
+
+    it('should parse nested groups', () => {
+      const result = Language.Expression.tryParse('(((10 + 3)))');
+
+      expect(result).to.be.instanceOf(Group);
+      expect((result as Group).expression).to.be.instanceOf(Group);
+      expect(
+        ((result as Group).expression as Group).expression,
+      ).to.be.instanceOf(Group);
+      expect(
+        (((result as Group).expression as Group).expression as Group)
+          .expression,
+      ).to.be.instanceOf(Add);
     });
   });
 });
