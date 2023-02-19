@@ -1,0 +1,5 @@
+{
+  "$init": "{@/engine/skill}",
+  "name": "Swim",
+  "description": "Use this while swimming in dangerous waters, diving, holding your breath for long periods, and so on. If you have this Skill you don't need to roll it for normal conditions. Characters without it are assumed to not be able to swim and need to test Swimming every round they remain in the water or start Drowning. Receive a penalty to this Skill equal to half the number of item slots filled."
+}

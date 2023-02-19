@@ -1,0 +1,14 @@
+{
+  "$init": "{@/engine/weapon}",
+  "name": "Sword",
+  "damage_table": {
+    "$init": "{@/engine/damage_table}",
+    "1": 4,
+    "2": 6,
+    "3": 6,
+    "4": 6,
+    "5": 6,
+    "6": 8,
+    "7plus": 10
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "$init": "{@/engine/skill}",
+  "name": "Golden Barge Pilot",
+  "description": "Test this to navigate between the stars on a ship with golden mirror sails."
+}

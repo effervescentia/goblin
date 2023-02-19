@@ -1,0 +1,5 @@
+{
+  "$init": "{@/engine/skill}",
+  "name": "Astrology",
+  "description": "An essential Skill for anyone intent on travelling the stars. Can be used to identify stars and constellations, to gather hints on the destination of interdimensional portals, and to make star charts."
+}

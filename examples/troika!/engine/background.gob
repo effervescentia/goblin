@@ -1,0 +1,10 @@
+{
+  ":name": { "$type": "string" },
+  ":description": { "$type": "string" },
+  ":proficiencies": { "$type": { "$value": "{./advanced_skill}" } },
+  "$tmpl": {
+    "name": "{:name}",
+    "description": "{:description}",
+    "proficiencies": "{:proficiencies}"
+  }
+}

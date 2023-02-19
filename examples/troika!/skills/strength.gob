@@ -1,0 +1,5 @@
+{
+  "$init": "{@/engine/skill}",
+  "name": "Strength",
+  "description": "Used for lifting and breaking things. May also be used to grapple people if no grappling-appropriate Weapon Skill is possessed, though it counts for half rounded up."
+}

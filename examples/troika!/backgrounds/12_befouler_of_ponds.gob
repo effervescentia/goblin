@@ -1,0 +1,22 @@
+{
+  "$init": "{@/engine/background}",
+  "name": "Befouler of Ponds",
+  "description": "You're a wise man, a high priest, a pond-pisser, a typical but committed adherent of P!P!Ssshrp. The bloated Toad God has no church other than the periphery of ponds where the foulness catches in the reeds and no congregation other than the gnats and dragonflies. You minister to them all the same.",
+  "advanced_skills": {
+    "swim": {
+      "$init": "{@/engine/advanced_skill}",
+      "name": "Swim",
+      "value": 3
+    },
+    "sneak": {
+      "$init": "{@/engine/advanced_skill}",
+      "name": "Sneak",
+      "value": 1
+    },
+    "second_sight": {
+      "$init": "{@/engine/advanced_skill}",
+      "name": "Second Sight",
+      "value": 1
+    }
+  }
+}

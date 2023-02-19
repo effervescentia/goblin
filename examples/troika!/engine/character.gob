@@ -1,0 +1,15 @@
+{
+  ":name": { "$type": "string" },
+  "$tmpl": {
+    "name": "{:name}",
+    "skill": "{1d3 + 3}",
+    "stamina": "{2d6 + 12}",
+    "luck": "{1d6 + 6}",
+    "monies": {
+      "silver": "{2d6}"
+    },
+    "inventory": [
+      
+    ]
+  }
+}

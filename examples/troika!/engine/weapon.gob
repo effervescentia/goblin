@@ -1,0 +1,8 @@
+{
+  ":name": { "$type": "string" },
+  ":damage_table": { "$type": "{./damage_table}" },
+  "$tmpl": {
+    "name": "{:name}",
+    "damage_table": "{:damage_table}"
+  }
+}

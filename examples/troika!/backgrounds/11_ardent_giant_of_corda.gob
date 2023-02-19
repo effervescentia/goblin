@@ -1,0 +1,27 @@
+{
+  "$init": "{@/engine/background}",
+  "name": "Ardent Giant of Corda",
+  "description": "Every giant has a different story about Corda, well told and interrupted with tears and laughter, of how they lost it and mean to find it soon enough but oh, what of today? We should drink and cheer, we'll search once again in the morning!",
+  "advanced_skills": {
+    "strength": {
+      "$init": "{@/engine/advanced_skill}",
+      "name": "Strength",
+      "value": 4
+    },
+    "astrology": {
+      "$init": "{@/engine/advanced_skill}",
+      "name": "Astrology",
+      "value": 3
+    },
+    "run": {
+      "$init": "{@/engine/advanced_skill}",
+      "name": "Run",
+      "value": 2
+    },
+    "climb": {
+      "$init": "{@/engine/advanced_skill}",
+      "name": "Climb",
+      "value": 2
+    }
+  }
+}

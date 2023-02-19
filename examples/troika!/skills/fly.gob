@@ -1,0 +1,5 @@
+{
+  "$init": "{@/engine/skill}",
+  "name": "Fly",
+  "description": "Use Fly much as you would Run. In normal situations this doesn't need testing, only in chases or high winds, maybe. Anyone attempting to Fly without this Skill must Test every Round to make sure they don't crash or lose control."
+}

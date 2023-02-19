@@ -1,0 +1,5 @@
+{
+  "$init": "{@/engine/skill}",
+  "name": "Acrobatics",
+  "description": "Used for rolling, balancing, falling, jumping, etc."
+}

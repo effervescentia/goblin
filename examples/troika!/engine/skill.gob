@@ -1,0 +1,8 @@
+{
+  ":name": { "$type": "string" },
+  ":description": { "$type": "string" },
+  "$tmpl": {
+    "name": "{:name}",
+    "description": "{:description}"
+  }
+}

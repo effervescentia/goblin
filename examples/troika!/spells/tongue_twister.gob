@@ -1,0 +1,6 @@
+{
+  "$init": "{@/engine/spell}",
+  "name": "Tongue Twister",
+  "cost": 2,
+  "description": "Beware! If a wizard screws their nose and twists their fingers at you then a Tongue Twister is coming your way. The target must Test their Luck (or Skill for Enemies) or have their tongue literally tied in knots. This requires some time and a fair bit of patience to disentangle."
+}

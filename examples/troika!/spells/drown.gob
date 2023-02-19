@@ -1,0 +1,6 @@
+{
+  "$init": "{@/engine/spell}",
+  "name": "Drown",
+  "cost": 4,
+  "description": "Cause a target's lungs to fill with water. They must Test their Luck (or Skill for Enemies). If they fail they start to Drown and are incapacitated as water pours from their mouth. They may Test again once per Turn until they pass, at which point the Spell ends."
+}

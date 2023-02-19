@@ -1,0 +1,5 @@
+{
+  "$init": "{@/engine/skill}",
+  "name": "Run",
+  "description": "When it matters how fast you are, or if you can reach somewhere in time, use this. A basic chase is an Roll Versus."
+}

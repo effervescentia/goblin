@@ -1,0 +1,6 @@
+{
+  "$init": "{@/engine/spell}",
+  "name": "Web",
+  "cost": 2,
+  "description": "Whether this is opening a portal to the plane of slime or channelling the sprites of sickness, all can agree that it is quite disgusting. The wizard blows forth the \"web\" from their nose and all in a cone extending 12 metres in front of the wizard are trapped unless they Test their Luck (or Skill for Enemies). Each Turn anything passing through or out of it must repeat the Test or become stuck. Dries up after 12 rounds."
+}

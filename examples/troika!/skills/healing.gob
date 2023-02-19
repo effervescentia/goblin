@@ -1,0 +1,5 @@
+{
+  "$init": "{@/engine/skill}",
+  "name": "Healing",
+  "description": "Used to stitch wounds and apply ointments, stop bleeding, slow poison and the like. Also used for stabilising dying people."
+}

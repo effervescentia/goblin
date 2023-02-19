@@ -1,0 +1,5 @@
+{
+  "$init": "{@/engine/skill}",
+  "name": "Evaluate",
+  "description": "Test this to get an idea of how much something is worth."
+}

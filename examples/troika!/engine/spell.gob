@@ -1,0 +1,10 @@
+{
+  ":name": { "$type": "string" },
+  ":cost": { "$type": "number" },
+  ":description": { "$type": "string" },
+  "$tmpl": {
+    "name": "{:name}",
+    "cost": "{:cost}",
+    "description": "{:description}"
+  }
+}

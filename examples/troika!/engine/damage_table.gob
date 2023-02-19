@@ -1,0 +1,18 @@
+{
+  ":1": { "$type": "number" },
+  ":2": { "$type": "number" },
+  ":3": { "$type": "number" },
+  ":4": { "$type": "number" },
+  ":5": { "$type": "number" },
+  ":6": { "$type": "number" },
+  ":7plus": { "$type": "number" },
+  "$tmpl": [
+    "{:1}",
+    "{:2}",
+    "{:3}",
+    "{:4}",
+    "{:5}",
+    "{:6}",
+    "{:7plus}"
+  ]
+}
