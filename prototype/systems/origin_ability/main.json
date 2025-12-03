@@ -1,0 +1,8 @@
+{
+  "brain": 0,
+  "power": 0,
+  "charm": 0,
+  "origin": {
+    "$ref": "origin.json"
+  }
+}

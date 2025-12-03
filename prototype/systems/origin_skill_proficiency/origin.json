@@ -1,0 +1,14 @@
+{
+  "$effect": {
+    "$set": [
+      {
+        "path": "@main.proficiency.athletics",
+        "value": true
+      },
+      {
+        "path": "@main.proficiency.persuasion",
+        "value": true
+      }
+    ]
+  }
+}

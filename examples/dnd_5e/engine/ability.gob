@@ -1,0 +1,10 @@
+{
+  "$enum": [
+    "charisma",
+    "constitution",
+    "dexterity",
+    "intelligence",
+    "strength",
+    "wisdom"
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "$effect": {
+    "$pool": {
+      "total": 3,
+      "max": 2,
+      "options": [
+        {
+          "$mod": {
+            "path": "@main.brain",
+            "value": "$count"
+          }
+        },
+        {
+          "$mod": {
+            "path": "@main.power",
+            "value": "$count"
+          }
+        },
+        {
+          "$mod": {
+            "path": "@main.charm",
+            "value": "$count"
+          }
+        }
+      ]
+    }
+  }
+}

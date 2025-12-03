@@ -1,0 +1,13 @@
+{
+  "abilities": {
+    "$choice": [
+      {
+        "dex": {
+          "type": "number",
+          "$min": 1,
+          "$max": 30
+        }
+      }
+    ]
+  }
+}

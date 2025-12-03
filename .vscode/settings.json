@@ -4,5 +4,10 @@
   },
   "files.associations": {
     "*.gob": "json"
-  }
+  },
+  "cSpell.words": [
+    "drow",
+    "dwarven",
+    "halfling"
+  ]
 }

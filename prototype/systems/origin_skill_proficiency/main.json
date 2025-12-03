@@ -1,0 +1,22 @@
+{
+  "ability": {
+    "strength": 4,
+    "charisma": 3
+  },
+  "proficiency_bonus": 2,
+  "proficiency": {
+    "athletics": false,
+    "persuasion": false
+  },
+  "skill": {
+    "athletics": {
+      "$expr": "@main.ability.strength + (@main.proficiency.athletics ? @main.proficiency_bonus : 0)"
+    },
+    "persuasion": {
+      "$expr": "@main.ability.charisma + (@main.proficiency.persuasion ? @main.proficiency_bonus : 0)"
+    }
+  },
+  "origin": {
+    "$ref": "origin.json"
+  }
+}
