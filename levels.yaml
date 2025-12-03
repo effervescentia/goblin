@@ -1,0 +1,70 @@
+$self: Class
+1:
+  ~$.features:
+   +martial_arts: {}
+   +unarmored_defense: {}
+2:
+  ~$.features:
+   +monks_focus: {}
+   +unarmored_movement: {}
+   +uncanny_metabolism: {}
+3:
+  ~$.features:
+   +deflect_attacks: {}
+   +monk_subclass: {}
+4:
+  ~$.features:
+   +ability_score_improvement_1: {}
+   +slow_fall: {}
+5:
+  ~$.features:
+   +extra_attack: {}
+   +stunning_strike: {}
+6:
+  ~$.features:
+   +empowered_strikes: {}
+   +subclass_feature_1: {}
+7:
+  ~$.features:
+   +evasion: {}
+8:
+  ~$.features:
+   +ability_score_improvement_2: {}
+9:
+  ~$.features:
+   +acrobatic_movement: {}
+10:
+  ~$.features:
+   +heightened_focus: {}
+   +self_restoration: {}
+11:
+  ~$.features:
+   +subclass_feature_2: {}
+12:
+  ~$.features:
+   +ability_score_improvement_3: {}
+13:
+  ~$.features:
+   +deflect_energy: {}
+14:
+  ~$.features:
+   +disciplined_survivor: {}
+15:
+  ~$.features:
+   +perfect_focus: {}
+16:
+  ~$.features:
+   +ability_score_improvement_4: {}
+17:
+  ~$.features:
+   +subclass_feature_3: {}
+18:
+  ~$.features:
+   +superior_defense: {}
+19:
+  ~$.features:
+   +ability_score_improvement_3: {}
+20:
+  ~$.features:
+   +ability_score_improvement_3: {}
+  
