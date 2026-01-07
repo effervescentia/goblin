@@ -1,0 +1,121 @@
+$: Player
+$.monk: {}
+1:
+  $.monk.martial_arts_die: 1d6
+  $.features:
+    +martial_arts:
+      :doc: |
+        Your practice of martial arts gives you mastery of combat styles.
+        (this accepts markdown)
+        **Bonus Unarmed Strike.** You can make an [Unarmed Strike]($.actions.unarmed_strike) as a Bonus Action.
+        (links can be used to reference other nodes)
+      $.proficiencies.weapon: # TODO: make proficiency references better
+        - +simple_melee
+        - +light_martial_melee
+      $if: # <only monk weapons, no armour or shield equipped>
+      $then:
+        $.actions.unarmed_strike:
+          +dice: $.monk.martial_arts_die
+          +type: bonus_action
+    
+    +unarmored_defense:
+      :doc: |
+        While you aren't wearing armor or wielding a Shield
+        your base [Armor Class]($.armor_class) equals 10
+        plus your [Dexterity]($.abilities.dexterity) and [Wisdom]($.abilities.wisdom) modifiers.
+      $if: # <no armour or shield equipped>
+      $then:
+        $.armor_class: 10 + $.abilities.dexterity.modifier + $.abilities.wisdom.modifier
+
+2:
+  $.features:
+    +monks_focus: {}
+    +unarmored_movement:
+      :doc: |
+        Your speed increases by 10 feet while you aren't wearing armor or wielding a Shield.
+      $.monk.unarmored_movement: 10
+      $if: # <no armour or shield equipped>
+      $then:
+        $.speed: $.speed + $.monk.unarmored_movement
+    
+    +uncanny_metabolism:
+      :doc: |
+        When you roll Initiative, you can regain all expended Focus Points
+      $.resources.focus_points:
+        # this rule should clamp the value of .value based on .max
+        '!validate':
+          - .value >= 0
+          - .value <= .max
+        value: 2
+        max: 2
+      $.initiative.roll(): | # TODO: only assign points if the user agrees & feature not used since long rest
+        $.resources.focus_points.value = $.resources.focus_points.max
+        $.initiative.roll()
+3:
+  $.features:
+    +deflect_attacks: {}
+    +monk_subclass: {}
+4:
+  $.features:
+    +ability_score_improvement_1: {}
+    +slow_fall: {}
+5:
+  $.monk.martial_arts_die: 1d8
+  $.features:
+    +extra_attack: {}
+    +stunning_strike: {}
+6:
+  $.monk.unarmored_movement: 15
+  $.features:
+    +empowered_strikes: {}
+    +subclass_feature_1: {}
+7:
+  $.features:
+    +evasion: {}
+8:
+  $.features:
+    +ability_score_improvement_2: {}
+9:
+  $.features:
+    +acrobatic_movement: {}
+10:
+  $.monk.unarmored_movement: 20
+  $.features:
+    +heightened_focus: {}
+    +self_restoration: {}
+
+11:
+  $.monk.martial_arts_die: 1d10
+  $.features:
+    +subclass_feature_2: {}
+12:
+  $.features:
+    +ability_score_improvement_3: {}
+13:
+  $.features:
+    +deflect_energy: {}
+14:
+  $.monk.unarmored_movement: 25
+  $.features:
+    +disciplined_survivor: {}
+15:
+  $.features:
+    +perfect_focus: {}
+16:
+  $.features:
+    +ability_score_improvement_4: {}
+
+17:
+  $.monk.martial_arts_die: 1d12
+  $.features:
+    +subclass_feature_3: {}
+18:
+  $.monk.unarmored_movement: 30
+  $.features:
+    +superior_defense: {}
+19:
+  $.features:
+    +epic_boon: {}
+20:
+  $.features:
+    +body_and_mind: {}

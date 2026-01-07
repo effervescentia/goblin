@@ -1,0 +1,2 @@
+utils:
+  ability_modifier(.): $math.floor(. - 10 / 2)
