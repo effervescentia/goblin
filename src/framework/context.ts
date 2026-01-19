@@ -58,17 +58,21 @@ export class AppContext {
       for (const [key, node] of unprocessed) {
         await match(node)
 
-          .with(P.instanceOf(FunctionRef), (function_) => {
-            unprocessed.delete(key);
-            this.values.set(key, function_.data);
-          })
+          .with(P.union(P.instanceOf(FunctionRef), P.instanceOf(PromiseRef)), async (dependent) => {
+            if (dependent.dependencies.every((ref) => this.values.has(ref))) {
+              await match(dependent)
 
-          .with(P.instanceOf(PromiseRef), async (promise) => {
-            if (promise.dependencies.every((ref) => this.values.has(ref))) {
-              unprocessed.delete(key);
-              this.values.set(key, await promise.evaluate());
-            } else {
-              console.log('missing', promise.dependencies);
+                .with(P.instanceOf(PromiseRef), async (promise) => {
+                  unprocessed.delete(key);
+                  this.values.set(key, await promise.evaluate());
+                })
+
+                .with(P.instanceOf(FunctionRef), (function_) => {
+                  unprocessed.delete(key);
+                  this.values.set(key, function_.data);
+                })
+
+                .exhaustive();
             }
           })
 
