@@ -67,6 +67,8 @@ export class AppContext {
             if (promise.dependencies.every((ref) => this.values.has(ref))) {
               unprocessed.delete(key);
               this.values.set(key, await promise.evaluate());
+            } else {
+              console.log('missing', promise.dependencies);
             }
           })
 
@@ -79,7 +81,7 @@ export class AppContext {
       }
 
       if (sizeBefore === unprocessed.size) {
-        console.log('unprocessable nodes', unprocessed);
+        console.log('unprocessable nodes', unprocessed, this.values);
 
         throw new Error('failed to solve');
       }

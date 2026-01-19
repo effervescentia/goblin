@@ -150,7 +150,7 @@ export abstract class Expression {
           }
 
           if (tokens[0] instanceof CloseParenthesisToken) {
-            return [tokens.slice(1), expression] as [Token[], Expression];
+            return Expression.parse(tokens.slice(1), new GroupExpression(expression));
           }
 
           throw new Error('expected close parenthesis after expression');
@@ -168,8 +168,13 @@ export abstract class Expression {
     try {
       const [tokens, expression] = Expression.parse(Token.tokenize(data));
 
+      if (!expression) {
+        console.log('failed to parse', data, tokens, expression);
+      }
+
       if (!tokens.length && expression) return expression;
     } catch {
+      console.log('failed to parse', data);
       return null;
     }
   }

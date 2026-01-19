@@ -1,7 +1,7 @@
 # classes:
 #   monk: $tmpl('monk.yaml')
 utils:
-  ability_modifier(x): '$.math.floor(x - 10 / 2)'
+  ability_modifier(x): '$.math.floor((x - 10) / 2)'
 # game:
 #   players:
 #     :type: $list($type('player.yaml'))
