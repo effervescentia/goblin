@@ -29,7 +29,7 @@ Gate the application of Effects & Rules by wrapping them in conditions
 - `:` - indicates metadata attached to the containing node
 - `@` - indicates the application
 - `.` - indicates the current node, common lambda argument
-- `#`
+- `#` - prefixes std library
 - `!` - indicates a predicate applied to the containing node
 - `*`
 - `&`

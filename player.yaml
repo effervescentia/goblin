@@ -33,7 +33,7 @@ hit_points:
 features: {}
 actions:
   unarmed_strike:
-    dice: d4
+    die: d4
     type: action
 proficiencies:
   weapon: []

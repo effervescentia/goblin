@@ -15,7 +15,7 @@ $.monk: {}
       $if: # <only monk weapons, no armour or shield equipped>
       $then:
         $.actions.unarmed_strike:
-          +dice: $.monk.martial_arts_die
+          +die: $.monk.martial_arts_die
           +type: bonus_action
     
     +unarmored_defense:
