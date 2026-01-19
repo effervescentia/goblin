@@ -411,3 +411,17 @@ export class DieRollExpression extends Expression {
     return this.dieRoll.toString();
   }
 }
+
+export class GroupExpression extends Expression {
+  constructor(public readonly inner: Expression) {
+    super();
+  }
+
+  public override execute(scope: Scope) {
+    return this.inner.execute(scope);
+  }
+
+  public override toString() {
+    return this.inner.toString();
+  }
+}
