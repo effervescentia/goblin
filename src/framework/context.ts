@@ -2,7 +2,7 @@ import { memoize } from 'micro-memoize';
 import { traverse } from 'radashi';
 import { match, P } from 'ts-pattern';
 import type { App } from './app';
-import LIBRARY from './library';
+import * as LIBRARY from './library';
 import {
   AppRef,
   DocumentNodeRef,

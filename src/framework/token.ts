@@ -26,7 +26,7 @@ export abstract class Token {
   }
 
   private static get SEQUENCES(): Array<ReturnType<typeof SequenceToken>> {
-    return [DieRollToken];
+    return [DieRollToken, StringToken];
   }
 
   private static get PATTERNS(): Array<ReturnType<typeof PatternToken>> {
@@ -125,6 +125,19 @@ export class DieRollToken extends SequenceToken(/^(?<count>[1-9]\d*)d(?<sides>[1
     if (!match?.groups) throw new Error('invalid construction of DieRollToken');
 
     this.dieRoll = new DieRoll(Number(match.groups.count), new Die(Number(match.groups.sides)));
+  }
+}
+
+export class StringToken extends SequenceToken(/^'(?<value>(?:[^']|\\')*)'/) {
+  public readonly value: string;
+
+  constructor(text: string) {
+    super(text);
+
+    const match = text.match(StringToken.PATTERN);
+    if (!match?.groups) throw new Error('invalid construction of StringToken');
+
+    this.value = match.groups.value!;
   }
 }
 

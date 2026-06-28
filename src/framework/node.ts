@@ -1,4 +1,5 @@
 import indentString from 'indent-string';
+import { mapEntries } from 'radashi';
 import type { NodeContext } from './context';
 import { Die } from './die';
 import type { Document } from './document';
@@ -150,13 +151,11 @@ export class ListNode extends Node<unknown[]> {
 }
 
 export class RecordNode extends Node<object> {
-  public readonly record = Object.fromEntries(
-    Object.entries(this.rawData).map(([key, value]) => {
-      const result = FunctionNode.safeParse(this.document, key, value);
+  public readonly record = mapEntries(this.rawData, (key, value) => {
+    const result = FunctionNode.safeParse(this.document, key, value);
 
-      return result ?? [key, this.document.node(value)];
-    }),
-  );
+    return result ?? [key, this.document.node(value)];
+  });
 
   public override isReady() {
     return Object.values(this.record).every((node) => node.isReady());
@@ -171,9 +170,7 @@ export class RecordNode extends Node<object> {
   }
 
   public override serialize(context: NodeContext) {
-    return Object.fromEntries(
-      Object.entries(this.record).map(([key, node]) => [key, node.serialize(context.child(key))]),
-    );
+    return mapEntries(this.record, (key, node) => [key, node.serialize(context.child(key))]);
   }
 
   public override toString() {
@@ -190,7 +187,7 @@ export class RecordNode extends Node<object> {
 export class FunctionNode extends Node<[string[], string]> {
   public static readonly SIGNATURE = /^(?<name>[a-zA-Z_]\w*)\((?<parameters>(?:[a-zA-Z_]\w*\s*(?:,\s*)?)*)\)$/;
 
-  public static safeParse(document: Document, signature: string, data: string) {
+  public static safeParse(document: Document, signature: string, data: string): [string, Node] | null {
     const match = signature.match(FunctionNode.SIGNATURE);
     if (!match?.groups) return null;
 
@@ -198,7 +195,7 @@ export class FunctionNode extends Node<[string[], string]> {
     if (!expression) return null;
 
     const parameters = match.groups.parameters!.split(',').map((text) => text.trim());
-    return [match.groups.name!, new FunctionNode(document, [parameters, data], expression)] as const;
+    return [match.groups.name!, new FunctionNode(document, [parameters, data], expression)];
   }
 
   constructor(

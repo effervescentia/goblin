@@ -1,7 +1,7 @@
 import { match, P } from 'ts-pattern';
 import type { NodeContext } from './context';
 import type { DieRoll } from './die';
-import { AppRef, type DocumentNodeRef, LibraryNodeRef, LibraryRef, ScopeRef, type UniversalRef } from './ref';
+import { AppRef, type DocumentNodeRef, type LibraryNodeRef, LibraryRef, ScopeRef, type UniversalRef } from './ref';
 import type { Scope } from './scope';
 import {
   AsteriskToken,
@@ -18,6 +18,7 @@ import {
   OpenParenthesisToken,
   PeriodToken,
   PlusSignToken,
+  StringToken,
   Token,
   WordToken,
 } from './token';
@@ -26,6 +27,7 @@ export abstract class Expression {
   private static parse(input: Token[], prev: Expression | null = null): [Token[], Expression | null] {
     if (!input.length) return [[], prev];
 
+    // biome-ignore lint/style/noNonNullAssertion: length checked
     const token = input[0]!;
 
     if (prev) {
@@ -126,9 +128,9 @@ export abstract class Expression {
 
         .with(P.instanceOf(DollarSignToken), () => Expression.parse(input.slice(1), new LibraryReferenceExpression()))
 
-        .with(P.instanceOf(AtSignToken), () => Expression.parse(input.slice(1), new AppReferenceExpression()))
+        .with(P.instanceOf(OctothorpeToken), () => Expression.parse(input.slice(1), new AppReferenceExpression()))
 
-        .with(P.instanceOf(OctothorpeToken), () => Expression.parse(input.slice(1), new ActorReferenceExpression()))
+        .with(P.instanceOf(AtSignToken), () => Expression.parse(input.slice(1), new ActorReferenceExpression()))
 
         .with(P.instanceOf(PeriodToken), () => Expression.parse(input.slice(1), new ScopeReferenceExpression()))
 
@@ -141,6 +143,10 @@ export abstract class Expression {
         )
 
         .with(P.instanceOf(WordToken), (word) => Expression.parse(input.slice(1), new IdentifierExpression(word.text)))
+
+        .with(P.instanceOf(StringToken), (string) =>
+          Expression.parse(input.slice(1), new StringExpression(string.value)),
+        )
 
         .with(P.instanceOf(OpenParenthesisToken), () => {
           const [tokens, expression] = Expression.parse(input.slice(1));
@@ -168,13 +174,8 @@ export abstract class Expression {
     try {
       const [tokens, expression] = Expression.parse(Token.tokenize(data));
 
-      if (!expression) {
-        console.log('failed to parse', data, tokens, expression);
-      }
-
       if (!tokens.length && expression) return expression;
     } catch {
-      console.log('failed to parse', data);
       return null;
     }
   }
@@ -202,7 +203,25 @@ export class IntegerExpression extends Expression {
   }
 }
 
-export abstract class ReferenceExpression extends Expression {}
+export class StringExpression extends Expression {
+  constructor(public readonly value: string) {
+    super();
+  }
+
+  public override execute() {
+    return this.value;
+  }
+
+  public override toString() {
+    return this.value;
+  }
+}
+
+export abstract class ReferenceExpression extends Expression {
+  public override execute(_scope: Scope) {
+    throw new Error('do not execute directly');
+  }
+}
 
 export class IdentifierExpression extends ReferenceExpression {
   constructor(public readonly text: string) {
@@ -223,40 +242,24 @@ export class IdentifierExpression extends ReferenceExpression {
 }
 
 export class LibraryReferenceExpression extends ReferenceExpression {
-  public override execute() {
-    throw new Error('do not execute directly');
-  }
-
   public override toString() {
     return '$';
   }
 }
 
 export class AppReferenceExpression extends ReferenceExpression {
-  public override execute() {
-    throw new Error('do not execute directly');
-  }
-
-  public override toString() {
-    return '@';
-  }
-}
-
-export class ActorReferenceExpression extends ReferenceExpression {
-  public override execute() {
-    throw new Error('do not execute directly');
-  }
-
   public override toString() {
     return '#';
   }
 }
 
-export class ScopeReferenceExpression extends ReferenceExpression {
-  public override execute() {
-    throw new Error('do not execute directly');
+export class ActorReferenceExpression extends ReferenceExpression {
+  public override toString() {
+    return '@';
   }
+}
 
+export class ScopeReferenceExpression extends ReferenceExpression {
   public override toString() {
     return '.';
   }
@@ -364,7 +367,7 @@ export abstract class ArithmeticExpression extends BinaryExpression {
     const rhs = this.rhs.execute(scope);
 
     if (typeof lhs !== 'number' || typeof rhs !== 'number') {
-      throw new Error(`failed to apply '${this.operator}' operator to one or more non-numeric values`);
+      throw new TypeError(`failed to apply '${this.operator}' operator to one or more non-numeric values`);
     }
 
     return this.apply(lhs, rhs);

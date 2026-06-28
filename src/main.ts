@@ -18,4 +18,6 @@ const app = new App(main);
 
 await process(app, main);
 
+console.log(app.toString());
+
 console.log(JSON.stringify(await app.evaluate(), null, 2));
