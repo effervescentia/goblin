@@ -170,11 +170,32 @@ describe('5e', () => {
     expect(data.data.attacks).toBe(2);
     expect(data.data.armor_class).toBe(10);
     expect(data.data.features.fighting_style).toEqual({
-      ':doc': 'Choose one: archery, defense, dueling, great-weapon fighting, protection, two-weapon fighting.',
+      ':doc': 'Pick the combat style you trained in.',
       ':param': true,
       ':type': 'string',
+      ':options': ['archery', 'defense', 'dueling', 'great_weapon_fighting', 'protection', 'two_weapon_fighting'],
       ':value': 'dueling',
     });
+  });
+
+  it('rejects a fighting style outside the options', () => {
+    expect(
+      cliFails(
+        '5e/main.yaml',
+        '--param',
+        'name=Aria',
+        '--param',
+        'xp=6500',
+        '--param',
+        'features.fighting_style=kung_fu',
+        '--param',
+        'features.martial_archetype=champion',
+        '--param',
+        'skills.trained=["athletics","perception"]',
+      ),
+    ).toContain(
+      'param options mismatch: features.fighting_style expected one of ["archery", "defense", "dueling", "great_weapon_fighting", "protection", "two_weapon_fighting"], got "kung_fu"',
+    );
   });
 
   it('rejects skill choices outside the options, duplicates, or wrong count', () => {

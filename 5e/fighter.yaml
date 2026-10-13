@@ -27,9 +27,10 @@ $: Character
   :unique: true
 '@.features':
   +fighting_style:
-    :doc: 'Choose one: archery, defense, dueling, great-weapon fighting, protection, two-weapon fighting.'
+    :doc: Pick the combat style you trained in.
     :param: true
     :type: string
+    :options: [archery, defense, dueling, great_weapon_fighting, protection, two_weapon_fighting]
   +second_wind:
     :doc: Regain hit points in a pinch, once per rest.
   +action_surge:
