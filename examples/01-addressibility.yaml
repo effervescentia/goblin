@@ -1,0 +1,19 @@
+# Addressibility (`.`, `$`, `@`, `#`) — see SYNTAX.md.
+#
+# `.`  current node (here: the `demo` record, so `.base` is its sibling)
+# `$`  this document's root
+# `@`  the actor root (`$` and `@` coincide: this document defines the actor)
+# `#`  the app root (shared globals; `$`/`@` fall back to it)
+#
+# NOTE: quote any expression containing ` #` — unquoted, YAML reads `#`
+# as a comment and truncates the expression.
+
+$: Character # bare-sigil type tag: not data, never serialized
+
+base: 10
+demo:
+  base: 4
+  from_current: .base # → 4
+  from_document: $.base # → 10
+  from_actor: '@.demo.base' # → 4
+  from_app: '#.demo.base' # → 4 (via fallback to this document)

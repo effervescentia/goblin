@@ -6,6 +6,8 @@
  *   goblin [entry.yaml] [--compact]
  *
  * With no entry file, the main document from `.goblin.yaml` is used.
+ * An entry containing a directory (`examples/foo.yaml`) is resolved with
+ * that directory as the root, so `$.tmpl('…')` paths are relative to it.
  * Resolved state goes to stdout (always valid JSON); errors go to stderr
  * with a non-zero exit code.
  */
@@ -42,6 +44,12 @@ export async function resolveAppState(cwd: string, entry?: string): Promise<unkn
       .then((t) => YAML.parse(t))) as { root: string; main: string };
     root = `${cwd}/${opts.root}`;
     main = opts.main;
+  } else if (main.includes('/')) {
+    // Resolve relative to the entry's own directory so `$.tmpl('…')`
+    // references stay local to it.
+    const slash = main.lastIndexOf('/');
+    root = main.startsWith('/') ? main.slice(0, slash) : `${cwd}/${main.slice(0, slash)}`;
+    main = main.slice(slash + 1);
   }
   const engine = new GoblinEngine(root);
   await preloadTemplates(engine, root, main);

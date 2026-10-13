@@ -1,0 +1,11 @@
+# Expressions: any string containing a sigil ref is evaluated.
+# Supports arithmetic, comparisons, parentheses, and nested calls.
+# Plain strings (no sigil) pass through untouched.
+
+strength: 15
+dexterity: 14
+
+sum: $.strength + $.dexterity # → 29
+mean: ($.strength + $.dexterity) / 2 # → 14.5
+strong: $.strength > $.dexterity # → true
+label: Fighter # no sigil → stays a string

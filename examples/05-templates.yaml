@@ -1,0 +1,5 @@
+# Templates: the tmpl helper inlines another document by file name.
+# The CLI preloads referenced templates (recursively) before evaluating.
+
+weapon: $.tmpl('05-greeting.yaml')
+backup: $.tmpl('05-greeting.yaml')

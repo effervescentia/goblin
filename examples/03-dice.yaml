@@ -1,0 +1,8 @@
+# Dice: `dN` / `NdM`.
+# Standalone → a Die spec (serialized back to text; rolls when used in math).
+# Inline in a larger expression → rolled immediately into a number.
+
+hit_die: d8 # → "d8"
+damage: 2d6 # → "2d6"
+initiative: 1d20 + 2 # → a rolled number between 3 and 22
+heal: $.hit_die + 0 # Die used in arithmetic rolls → 1..8

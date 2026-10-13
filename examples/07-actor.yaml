@@ -1,0 +1,19 @@
+# Actor side of an applied document — see 07-class.yaml.
+# Patch files are applied with `engine.apply(actor, '07-class.yaml', level)`,
+# covered end-to-end in src/examples.test.ts.
+
+$: Adventurer
+
+abilities:
+  dexterity:
+    base: 14
+    modifier: 2
+  wisdom:
+    base: 12
+    modifier: 1
+armor_class: '10 + $.abilities.dexterity.modifier' # → 12, overridden to 13 by the class
+features: {}
+actions:
+  unarmed_strike:
+    die: d4
+    type: action

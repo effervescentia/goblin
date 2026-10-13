@@ -1,0 +1,23 @@
+# Applied document (class/boon) for 07-actor.yaml.
+# Top-level `@.` keys target the ACTOR; `$` here would be this file's own root.
+# `+` marks additions, `$if`/`$then` gate application (empty `$if` = always),
+# numeric keys are level blocks applied in order up to the chosen level.
+
+$: Adventurer
+
+'@.boon': {}
+
+1:
+  '@.boon.die': 1d8
+  '@.features':
+    +unarmored_defense:
+      :doc: Base AC becomes 10 + Dex + Wis while unarmored.
+      $if: # empty (comment-only) $if counts as unconditional
+      $then:
+        '@.armor_class': 10 + @.abilities.dexterity.modifier + @.abilities.wisdom.modifier
+
+2:
+  '@.features':
+    +monks_focus: {}
+  '@.actions.unarmed_strike':
+    +die: '@.boon.die'

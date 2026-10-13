@@ -34,6 +34,16 @@ functions, patch keys, conditions, validation, or any other convention),
 update `SYNTAX.md` in the same change so the spec and the engine never drift
 apart. Treat a missing spec update as an incomplete change.
 
+## Examples
+
+- `examples/` must demonstrate every language feature from `SYNTAX.md`
+  (one focused `NN-name.yaml` file per feature, plus actor/class pairs for
+  applied-document syntax like path keys, `+` effects, and level blocks).
+- Every example must stay runnable: `src/examples.test.ts` resolves each file
+  through the real CLI and fails on non-zero exit or invalid JSON.
+- When syntax changes, update `SYNTAX.md`, `src/engine.ts`, `examples/`, and
+  the tests together — a feature without a working example is incomplete.
+
 ## Project notes
 
 - `bun src/main.ts` (or `bun run dev`) runs the demo CLI, which loads
