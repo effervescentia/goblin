@@ -5,7 +5,7 @@
 hit_points:
   :doc: Tracks health. See $.hit_points.max for the cap (refs here are inert).
   '!validate':
-    - . >= 0
-    - . <= .max
-  :value: 7
+    - .current >= 0
+    - .current <= .max
+  current: 7
   max: 12

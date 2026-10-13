@@ -76,9 +76,6 @@ export const THEN_KEY = '$then';
 /** Slot holding a `:param` node's filled value. */
 export const VALUE_KEY = 'value';
 
-/** The value slot of a value node: reads/writes funnel through it. */
-export const VALUE_SLOT = ':value';
-
 /** Printed function descriptor keys (see `serialize`). */
 export const PARAMS_KEY = ':params';
 export const SOURCE_KEY = ':source';

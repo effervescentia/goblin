@@ -175,19 +175,11 @@ evaluate with `.` bound to the containing node; use `.`-relative refs, since
 # Examples (examples/06-metadata-validation.yaml)
 hit_points:
   '!validate':
-    - . >= 0
-    - . <= .max
-  :value: 7
+    - .current >= 0
+    - .current <= .max
+  current: 7
   max: 12
 ```
-
-## Value slots (`:value`)
-
-A record carrying `:value` is a value node with siblings: bare refs
-derefence to the slot (`@.hit_points` reads `7`), longer paths read
-siblings (`@.hit_points.max`), and validation predicates use `.` for the
-value under test. Assigning the node writes the slot, preserving siblings.
-Plain `value` keys (e.g. resource counters) keep working as ordinary data.
 
 ## Applied documents: patches, effects, conditions
 
@@ -244,7 +236,7 @@ it assigns 5 and passes truthy. Comparisons always use `==`.
 ```yaml
 rest:
   short(): |
-    @.hit_points = $lib.math.min(@.hit_points + @.hit_die, @.hit_points.max)
+    @.hit_points.current = $lib.math.min(@.hit_points.current + @.hit_die, @.hit_points.max)
 ```
 
 ## Composition

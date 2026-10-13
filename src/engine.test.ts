@@ -32,12 +32,12 @@ function testEngine() {
     },
     hit_die: 'd6',
     hit_points: {
-      '!validate': ['. >= 0', '. <= .max'],
-      ':value': 3,
+      '!validate': ['.current >= 0', '.current <= .max'],
+      current: 3,
       max: 5,
     },
     rest: {
-      'short()': '#.hit_points = $lib.math.min(#.hit_points + #.hit_die, #.hit_points.max)',
+      'short()': '#.hit_points.current = $lib.math.min(#.hit_points.current + #.hit_die, #.hit_points.max)',
     },
   };
   engine.docs.set('main.yaml', doc);
@@ -180,8 +180,8 @@ describe('evaluate', () => {
       app: engine.appRoot,
       current: engine.appRoot,
     }) as Record<string, any>;
-    expect((appView.hit_points as Record<string, unknown>)[':value']).toBeGreaterThanOrEqual(3);
-    expect((appView.hit_points as Record<string, unknown>)[':value']).toBeLessThanOrEqual(5);
+    expect((appView.hit_points as Record<string, unknown>).current).toBeGreaterThanOrEqual(3);
+    expect((appView.hit_points as Record<string, unknown>).current).toBeLessThanOrEqual(5);
   });
 });
 
@@ -253,7 +253,7 @@ describe('apply', () => {
     engine.docs.set('gated.yaml', {
       '@.features': {
         '+sneak_attack': {
-          $if: '#.hit_points > #.hit_points.max',
+          $if: '#.hit_points.current > #.hit_points.max',
           $then: { '@.features': { '+never': {} } },
         },
       },
@@ -273,8 +273,8 @@ describe('validate', () => {
     const out = engine.evaluateDoc('main.yaml');
     expect(engine.validate(out)).toEqual([]);
 
-    const bad = { hit_points: { '!validate': ['. >= 0'], ':value': -2 } };
-    expect(engine.validate(bad)).toEqual(['. >= 0']);
+    const bad = { hit_points: { '!validate': ['.current >= 0'], current: -2 } };
+    expect(engine.validate(bad)).toEqual(['.current >= 0']);
   });
 });
 
@@ -303,8 +303,8 @@ describe('serialize', () => {
     expect(serialize((out.rest as { short: unknown }).short)).toEqual({
       ':type': 'function',
       ':params': [],
-      ':source': '#.hit_points = $lib.math.min(#.hit_points + #.hit_die, #.hit_points.max)',
-      ':deps': ['#.hit_points', '$.lib.math.min', '#.hit_die', '#.hit_points.max'],
+      ':source': '#.hit_points.current = $lib.math.min(#.hit_points.current + #.hit_die, #.hit_points.max)',
+      ':deps': ['#.hit_points.current', '$.lib.math.min', '#.hit_die', '#.hit_points.max'],
     });
   });
 });

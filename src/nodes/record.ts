@@ -1,4 +1,4 @@
-import { DEFAULT_KEY, DOCUMENT, IF_KEY, PARAM_KEY, THEN_KEY, TYPE_KEY, VALUE_SLOT } from '../constants';
+import { DEFAULT_KEY, DOCUMENT, IF_KEY, PARAM_KEY, THEN_KEY, TYPE_KEY } from '../constants';
 import type { GoblinEngine } from '../engine';
 import type { EvalRoots } from '../utils';
 import { checkParamType, isBareSigil, isMetaKey, isPathKey, isValidateKey, stripPlus } from '../utils';
@@ -15,10 +15,6 @@ export class RecordNode extends Node<Record<string, unknown>> {
     const out: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(record)) {
       if (isBareSigil(key) || key === DOCUMENT) continue; // `$: Player` type tag
-      if (key === VALUE_SLOT) {
-        out[key] = engine.evaluate(value, { ...scope, current: record, path: [...base, key] });
-        continue;
-      }
       if (isMetaKey(key)) {
         out[key] = value;
         continue;

@@ -28,7 +28,6 @@ import {
   TYPE_KEY,
   VALIDATE_KEY,
   VALUE_KEY,
-  VALUE_SLOT,
 } from './constants';
 import { FunctionNode } from './nodes/function';
 import { parse } from './nodes/parse';
@@ -48,7 +47,6 @@ import {
   isParamRecord,
   isPathKey,
   isValidateKey,
-  isValueRecord,
   joinPath,
   MATH_LIB,
   type MissingParam,
@@ -201,11 +199,6 @@ export class GoblinEngine {
     }
 
     if (segments.length === 0) {
-      // A bare read of a value node yields its slot (`.` in `!validate`
-      // rules reads the value under test); everything else evaluates as-is.
-      if (isValueRecord(base)) {
-        return this.evaluate((base as Record<string, unknown>)[VALUE_SLOT], { ...scope, current: base });
-      }
       return this.evaluate(base, scope);
     }
 
@@ -225,7 +218,7 @@ export class GoblinEngine {
         const fn = this.entryCallable(found, scope);
         if (fn !== undefined) return fn;
       }
-      const rawTarget = this.derefParam(found?.value, scope);
+      const rawTarget = this.derefParam(found?.value);
       if (rawTarget === undefined) {
         // Cross-namespace fallback into shared globals: `$`/`@` fall back
         // to the app root (e.g. `player.yaml` uses `@.utils.…` supplied by
@@ -235,7 +228,7 @@ export class GoblinEngine {
         if (fallbackFound !== null) {
           const fn = this.entryCallable(fallbackFound, scope);
           if (fn !== undefined) return fn;
-          return this.evaluate(this.derefParam(fallbackFound.value, scope), scope);
+          return this.evaluate(this.derefParam(fallbackFound.value), scope);
         }
         return undefined;
       }
@@ -251,19 +244,14 @@ export class GoblinEngine {
   }
 
   /**
-   * Value nodes dereference to their slot, so a bare `@.hit_points` reads
-   * the filled value: `:param` records read their materialized `value` slot
-   * (provided, default, or `null`), `:value` records evaluate their slot in
-   * place. Anything else passes through untouched.
+   * `:param` records dereference to their materialized `value` slot, so a
+   * bare `@.xp` reads the filled value (provided, default, or `null` when
+   * neither). Anything else passes through untouched.
    */
-  private derefParam(rawTarget: unknown, scope: EvalRoots): unknown {
+  private derefParam(rawTarget: unknown): unknown {
     if (isParamRecord(rawTarget)) {
       const slot = rawTarget[VALUE_KEY];
       return slot !== undefined ? slot : null;
-    }
-    if (isValueRecord(rawTarget)) {
-      const node = rawTarget as Record<string, unknown>;
-      return this.evaluate(node[VALUE_SLOT], { ...scope, current: node });
     }
     return rawTarget;
   }
@@ -307,13 +295,7 @@ export class GoblinEngine {
         const { root, path } = parseRef(ref);
         const base =
           root === CURRENT ? scope.current : root === DOCUMENT ? scope.doc : root === ACTOR ? scope.actor : scope.app;
-        // Assigning a value node writes its slot, preserving siblings.
-        const target = path.length > 0 ? getPath(base, path) : undefined;
-        if (isValueRecord(target)) {
-          setPath(base as Record<string, unknown>, [...path, VALUE_SLOT], value);
-        } else {
-          setPath(base as Record<string, unknown>, path, value);
-        }
+        setPath(base, path, value);
         this.cache.clear();
         return value;
       },

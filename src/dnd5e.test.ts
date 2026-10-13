@@ -79,7 +79,7 @@ const script = `
     baseMissing,
     mergedMissing,
     ac: v5.armor_class,
-    hp: { value: v5.hit_points[':value'], max: v5.hit_points.max },
+    hp: { value: v5.hit_points.current, max: v5.hit_points.max },
     trained: v5.skills.trained,
     surge: { value: v5.resources.action_surge.value, max: v5.resources.action_surge.max },
     swMin: sw >= 6,

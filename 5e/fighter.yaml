@@ -13,7 +13,7 @@ $: Character
 '@.hit_die': d10
 '@.hit_points':
   max: 10 + @.abilities.constitution.modifier
-  :value: '@.hit_points.max'
+  current: '@.hit_points.max'
 '@.proficiencies.armor':
   - all_armor
   - shields
