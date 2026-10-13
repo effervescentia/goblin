@@ -1,15 +1,7 @@
 import { DEFAULT_KEY, DOCUMENT, IF_KEY, PARAM_KEY, PARAM_VALUE_KEY, THEN_KEY, TYPE_KEY } from '../constants';
 import type { GoblinEngine } from '../engine';
 import type { EvalRoots } from '../utils';
-import {
-  checkParamConstraints,
-  checkParamType,
-  isBareSigil,
-  isMetaKey,
-  isPathKey,
-  isValidateKey,
-  stripPlus,
-} from '../utils';
+import { checkParamConstraints, checkParamType, isBareSigil, isMetaKey, isPathKey, isValidateKey } from '../utils';
 import { FunctionNode } from './function';
 import { Node } from './node';
 

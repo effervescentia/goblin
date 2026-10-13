@@ -273,7 +273,7 @@ describe('cli', () => {
       '--param',
       'features.fighting_style=dueling',
       '--param',
-      'features.martial_archetype=Champion',
+      'features.martial_archetype=champion',
       '--param',
       'skills.trained=["athletics","perception"]',
     ];

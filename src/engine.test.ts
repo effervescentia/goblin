@@ -122,6 +122,15 @@ describe('expressions', () => {
     expect(engine.evalExpr('$lib.math.floor(2.9)', scope)).toBe(2);
   });
 
+  it('does not resolve `$math` / `$.math` — the stdlib is `$lib` only', () => {
+    const { engine, scope } = testEngine();
+    expect(() => engine.evalExpr('$math.min(3, 5)', scope)).toThrow('unresolvable reference: $.math.min');
+    expect(() => engine.evalExpr('$.math.min(3, 5)', scope)).toThrow('unresolvable reference: $.math.min');
+    expect(() => engine.evalExpr('#.math.min(3, 5)', scope)).toThrow('unresolvable reference: #.math.min');
+    // No bare `math` binding leaks into compiled expressions either.
+    expect(() => engine.evalExpr('math.min(3, 5)', scope)).toThrow();
+  });
+
   it('merges yaml helpers into $lib over the natives', () => {
     const engine = new GoblinEngine('.');
     engine.mergeLib({ 'double(x)': 'x * 2' });
@@ -293,7 +302,7 @@ describe('serialize', () => {
       ':type': 'function',
       ':params': ['x'],
       ':source': '$lib.math.floor((x - 10) / 2)',
-      ':deps': ['$.lib.math.floor'],
+      ':deps': [],
     });
     expect(serialize((out.initiative as { roll: unknown }).roll)).toEqual({
       ':type': 'function',
@@ -305,7 +314,7 @@ describe('serialize', () => {
       ':type': 'function',
       ':params': [],
       ':source': '#.hit_points.current = $lib.math.min(#.hit_points.current + #.hit_die, #.hit_points.max)',
-      ':deps': ['#.hit_points.current', '$.lib.math.min', '#.hit_die', '#.hit_points.max'],
+      ':deps': ['#.hit_points.current', '#.hit_die', '#.hit_points.max'],
     });
   });
 });
@@ -320,6 +329,12 @@ describe('detectDeps', () => {
     expect(detectDeps("$tmpl('a.yaml')")).toEqual(['$.tmpl']);
     expect(detectDeps('$math.max(3, 5)')).toEqual(['$.math.max']);
     expect(detectDeps('1d20 + 2')).toEqual([]);
+  });
+
+  it('omits $lib refs', () => {
+    expect(detectDeps('$lib.math.floor(2.9)')).toEqual([]);
+    expect(detectDeps('$.lib.math.min(3, 5)')).toEqual([]);
+    expect(detectDeps('#.x + $lib.math.max(1, 2)')).toEqual(['#.x']);
   });
 
   it('trims whitespace from printed source', () => {

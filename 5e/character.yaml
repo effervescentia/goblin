@@ -2,7 +2,7 @@
 #
 # Play it:
 #   goblin 5e/character.yaml --param name=Aria --param xp=6500
-# Without params the CLI returns { query: [...] } (name, xp).
+# Without params the CLI returns { query: [...] } (name).
 #
 # Adopt a class in code (the CLI does not apply patches): evaluate the actor
 # to read its derived level, then engine.apply(actor, 'fighter.yaml', level).
@@ -58,7 +58,9 @@ initiative:
   base: $.abilities.dexterity.modifier
   'roll()': 1d20 + .base
 
-hit_die: d8
+hit_die:
+  :doc: Hit die granted by your class; the adopted class patch fills this slot.
+  :type: die
 hit_points:
   '!validate':
     - .current >= 0

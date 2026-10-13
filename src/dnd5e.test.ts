@@ -43,7 +43,7 @@ const script = `
     name: 'X',
     xp,
     'features.fighting_style': 'defense',
-    'features.martial_archetype': 'Champion',
+    'features.martial_archetype': 'champion',
     'skills.trained': ['athletics', 'perception'],
   });
 
@@ -91,7 +91,7 @@ const script = `
     ac: v5.armor_class,
     hp: { value: v5.hit_points.current, max: v5.hit_points.max },
     trained: v5.skills.trained[':value'],
-    surge: { value: v5.resources.action_surge.value, max: v5.resources.action_surge.max },
+    surge: { value: v5.resources.action_surge.current, max: v5.resources.action_surge.max },
     swMin: sw >= 6,
     swMax: sw <= 15,
     levels,
@@ -155,7 +155,7 @@ describe('5e', () => {
       '--param',
       'features.fighting_style=dueling',
       '--param',
-      'features.martial_archetype=Champion',
+      'features.martial_archetype=champion',
       '--param',
       'skills.trained=["athletics","perception"]',
     ) as {
@@ -187,7 +187,7 @@ describe('5e', () => {
       '--param',
       'features.fighting_style=dueling',
       '--param',
-      'features.martial_archetype=Champion',
+      'features.martial_archetype=champion',
     ];
     expect(cliFails(...base, '--param', 'skills.trained=["athletics","sneak"]')).toContain(
       'param options mismatch: skills.trained[1] expected one of ["acrobatics", "animal_handling", "athletics", "history", "insight", "intimidation", "perception", "survival"], got "sneak"',
@@ -223,7 +223,7 @@ describe('5e', () => {
       '--param',
       'features.fighting_style=dueling',
       '--param',
-      'features.martial_archetype=Champion',
+      'features.martial_archetype=champion',
       '--param',
       'skills.trained=["athletics","perception"]',
     ) as { data: { level: number; attacks: number } };

@@ -192,9 +192,10 @@ export class GoblinEngine {
     let base =
       root === CURRENT ? scope.current : root === DOCUMENT ? scope.doc : root === ACTOR ? scope.actor : scope.app;
     let segments = path;
-    // `$lib.…` addresses the standard library, unless the base document
-    // defines its own `lib` table (explicit bindings win).
-    if (segments[0] === 'lib' && (base == null || typeof base !== 'object' || getChild(base, 'lib') === undefined)) {
+    // `$lib.…` addresses the standard library (only when written as $lib, not $.lib),
+    // unless the base document defines its own `lib` table (explicit bindings win).
+    const isLibShortcut = ref.startsWith('$lib') && !ref.startsWith('$.lib');
+    if (isLibShortcut && segments[0] === 'lib' && (base == null || typeof base !== 'object' || getChild(base, 'lib') === undefined)) {
       base = this.library;
       segments = segments.slice(1);
     }

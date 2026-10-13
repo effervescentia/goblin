@@ -116,15 +116,16 @@ doubled: $.utils.double(21)  # → 42
 ```
 
 Serialized functions print as `{ :type, :params, :source, :deps }`, with
-the body's reference dependencies in order of first appearance. `:source` is
-whitespace-trimmed (block scalars leave trailing newlines):
+the body's reference dependencies in order of first appearance — `$lib` refs
+are omitted, since the stdlib is implicit. `:source` is whitespace-trimmed
+(block scalars leave trailing newlines):
 
 ```ts
 {
   ':type': 'function',
   ':params': ['x'],
   ':source': '$lib.math.floor((x - 10) / 2)',
-  ':deps': ['$.lib.math.floor'],
+  ':deps': [],
 }
 ```
 

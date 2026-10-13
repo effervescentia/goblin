@@ -139,7 +139,7 @@ export interface ParsedRef {
   path: string[];
 }
 
-/** Normalize `$math.min` → `$.math.min`, split into root + segments. */
+/** Normalize `@abilities.strength` → `@.abilities.strength`, split into root + segments. */
 export function parseRef(ref: string): ParsedRef {
   const sigil = ref[0] as ParsedRef['root'];
   let rest = ref.slice(1);
@@ -231,13 +231,23 @@ function splitStatements(body: string): string[] {
 function transpileStatement(stmt: string): { code: string; isAssign: boolean } {
   // Protect string literals from ref/dice rewriting.
   const literals: string[] = [];
+  // Protect $lib refs so they aren't normalized to $.lib by DOTLESS_SIGIL.
+  const libRefs: string[] = [];
+  const libPlaceholder = (m: string) => {
+    libRefs.push(m);
+    return `__LIB${libRefs.length - 1}__`;
+  };
   const protected_ = stmt
     .replace(STRING_LITERAL, (m) => {
       literals.push(m);
       return `__STR${literals.length - 1}__`;
     })
-    // Normalize dot-less sigils (`$math.min` → `$.math.min`).
-    .replace(DOTLESS_SIGIL, '$1.');
+    // Protect $lib refs (must come before DOTLESS_SIGIL).
+    .replace(/[$]lib(\.\w+)+/g, libPlaceholder)
+    // Normalize dot-less sigils (`@abilities` → `@.abilities`).
+    .replace(DOTLESS_SIGIL, '$1.')
+    // Restore $lib refs.
+    .replace(/__LIB(\d+)__/g, (_m, i: string) => libRefs[Number(i)]!);
 
   const assignIdx = protected_.search(ASSIGN_OP);
   if (assignIdx >= 0) {
@@ -253,12 +263,13 @@ function transpileStatement(stmt: string): { code: string; isAssign: boolean } {
 }
 
 function rewriteExpr(code: string): string {
-  const withDice = code.replace(INLINE_DICE, (_m, count: string, sides: string) => {
-    const n = count || '1';
-    return `__roll(${n}, ${sides})`;
-  });
   SIGIL_REF.lastIndex = 0;
-  return withDice.replace(SIGIL_REF, (m) => `__resolve(${JSON.stringify(m)})`);
+  return code
+    .replace(INLINE_DICE, (_m, count: string, sides: string) => {
+      const n = count || '1';
+      return `__roll(${n}, ${sides})`;
+    })
+    .replace(SIGIL_REF, (m) => `__resolve(${JSON.stringify(m)})`);
 }
 
 function restoreLiterals(code: string, literals: string[]): string {
@@ -285,9 +296,10 @@ export function compileBody(body: string, paramNames: string[] = []) {
           .join('\n')}`
       : `return (${codes[0]?.code ?? 'undefined'});`;
 
-  const fn = new Function('__resolve', '__assign', '__roll', 'math', ...paramNames, js) as (
-    ...args: unknown[]
-  ) => unknown;
+  // NOTE: no `math` (or other stdlib) free variable is bound here — the
+  // standard library is reachable only through `$lib.…`, so `$math` / `$.math`
+  // stay ordinary document refs that resolve to nothing.
+  const fn = new Function('__resolve', '__assign', '__roll', ...paramNames, js) as (...args: unknown[]) => unknown;
 
   return (hooks: ResolveHooks, params: Record<string, unknown> = {}) => {
     const roll = (count: number, sides: number) => {
@@ -295,7 +307,7 @@ export function compileBody(body: string, paramNames: string[] = []) {
       for (let i = 0; i < count; i++) total += 1 + Math.floor(Math.random() * sides);
       return total;
     };
-    const args = [hooks.resolve, hooks.assign, roll, MATH_LIB, ...paramNames.map((p) => params[p])];
+    const args = [hooks.resolve, hooks.assign, roll, ...paramNames.map((p) => params[p])];
     return fn(...args);
   };
 }
@@ -540,7 +552,10 @@ export function detectDeps(body: string): string[] {
   SIGIL_REF.lastIndex = 0;
   const matches = code.match(SIGIL_REF) ?? [];
   SIGIL_REF.lastIndex = 0;
-  return [...new Set(matches)];
+  // Omit $lib refs (stdlib is implicit).
+  return [...new Set(matches)].filter(
+    (m) => !m.startsWith('$lib') && !m.startsWith('$.lib'),
+  );
 }
 /** JSON-friendly serializer: Dice → `"d6"`, functions → `{ :type, :params, :source, :deps }`. */
 export function serialize(value: unknown): unknown {

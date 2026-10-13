@@ -1,15 +1,10 @@
 # D&D 5e Fighter. Applied onto a 5e/character.yaml actor:
 #   engine.apply(actor, 'fighter.yaml')
-# The engine knows nothing of levels: each gated node carries its own `$if`
-# on the actor's derived `@.level` (false applies nothing, leaving no
-# residue), and anything that is a pure function of level is an
-# unconditional expression that stays correct as XP grows.
 
 $: Character
 
 '@.fighter': {}
 
-# Martial training, gear, and grit — every fighter starts here.
 '@.hit_die': d10
 '@.hit_points':
   max: 10 + @.abilities.constitution.modifier
@@ -44,6 +39,7 @@ $: Character
     :doc: 'Choose a subclass: Champion, Battle Master, or Eldritch Knight.'
     :param: true
     :type: string
+    :options: [champion, battle_master, eldritch_knight]
     $if: '@.level >= 3'
   +ability_score_improvement_1:
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
@@ -96,7 +92,7 @@ $: Character
   +action_surge:
     :doc: Expend to gain an additional action.
     $if: '@.level >= 2'
-    value: 1
+    current: 1
     max: 1 + (@.level >= 17)
   +indomitable_points:
     :doc: Expend to reroll a failed save.

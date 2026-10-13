@@ -23,8 +23,8 @@ export const DIE_LITERAL = /^(\d*)d(\d+)$/;
 
 // NOTE: `[#$@]` below spells DOCUMENT + ACTOR + APP (`.` is matched
 // separately); keep in sync if sigils change.
-/** Sigil references (`.x`, `$.x`, `@.x`, `#.x`, bare sigils). Global: reset `lastIndex` around `.test`/`.match`. */
-export const SIGIL_REF = /([#$@]\.[A-Za-z_][\w.]*|[#$@](?![\w.]|\.\w)|\.[A-Za-z_][\w.]*|\.(?![\w.]))/g;
+/** Sigil references (`.x`, `$.x`, `@.x`, `#.x`, `$lib.x`, bare sigils). Global: reset `lastIndex` around `.test`/`.match`. */
+export const SIGIL_REF = /([$]lib(\.[A-Za-z_][\w.]*)?|[#$@]\.[A-Za-z_][\w.]*|[#$@](?![\w.]|\.\w)|\.[A-Za-z_][\w.]*|\.(?![\w.]))/g;
 
 /** Inline dice inside larger expressions. */
 export const INLINE_DICE = /\b(\d*)d(\d+)\b/g;
@@ -35,7 +35,7 @@ export const FUNCTION_KEY = /^([A-Za-z_]\w*)\(([^)]*)\)$/;
 /** Single `=` assignment (excludes `==`, `>=`, `<=`, `!=`). */
 export const ASSIGN_OP = /(?<![<>=!])=(?![>=])/;
 
-/** Dot-less sigils (`$math` → `$.math`); replacement is `'$1.'`. */
+/** Dot-less sigils (`@abilities` → `@.abilities`); replacement is `'$1.'`. */
 export const DOTLESS_SIGIL = /([#$@])(?=[A-Za-z_])/g;
 
 /** Quoted string literals, protected from ref/dice rewriting. */
