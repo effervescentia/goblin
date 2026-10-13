@@ -14,21 +14,19 @@
  *   blocks (`1:`, `2:` …) applied in order.
  */
 
+import { FunctionNode } from './nodes/function';
+import { parse } from './nodes/parse';
 import {
-  checkParamType,
   collectParams,
   compileBody,
   DIE_LITERAL,
   Die,
   deepClone,
-  detectDeps,
   type EvalRoots,
-  FUNCTION_KEY,
   getChildEntry,
   getPath,
   isBareSigil,
   isExpressionString,
-  isFunctionKey,
   isMetaKey,
   isPathKey,
   isValidateKey,
@@ -43,7 +41,6 @@ import {
   serialize,
   setPath,
   stripPlus,
-  tagFunction,
 } from './utils';
 
 export class GoblinEngine {
@@ -138,20 +135,9 @@ export class GoblinEngine {
     found: { parent: Record<string, unknown>; key: string; value: unknown },
     scope: EvalRoots,
   ): ((...args: unknown[]) => unknown) | undefined {
-    if (!isFunctionKey(found.key) || typeof found.value !== 'string') return undefined;
-    const name = found.key.match(FUNCTION_KEY)![1]!;
-    const params = found.key
-      .match(FUNCTION_KEY)![2]!
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const body = found.value;
-    const fnParent = found.parent;
-    const fn = (...args: unknown[]) => {
-      const callParams = Object.fromEntries(params.map((p, i) => [p, args[i]]));
-      return this.evalExpr(body, { ...scope, current: fnParent, params: callParams });
-    };
-    return tagFunction(fn, { name, params, source: body, deps: detectDeps(body) });
+    const fn = FunctionNode.match(found.key, found.value, found.parent);
+    if (!fn) return undefined;
+    return fn.evaluate(this, scope) as ((...args: unknown[]) => unknown) | undefined;
   }
 
   resolveRef(ref: string, scope: EvalRoots): unknown {
@@ -274,73 +260,14 @@ export class GoblinEngine {
    * Recursively evaluate a raw subtree. `scope.current` is the nearest
    * enclosing record so `.sibling` resolves correctly; `scope.path` tracks
    * its dotted path so `:param` nodes can look up user-provided values.
+   * Dispatches through `src/nodes` - one class per document node kind.
    */
   evaluate(raw: unknown, scope: EvalRoots): unknown {
     if (scope.path === undefined) {
       if (materializeParams(raw, scope.provided)) this.cache.clear();
       return this.evaluate(raw, { ...scope, path: [] });
     }
-    if (typeof raw === 'string') {
-      return isExpressionString(raw) ? this.evalExpr(raw, scope) : raw;
-    }
-    if (typeof raw !== 'object' || raw === null || raw instanceof Die) return raw;
-    if (Array.isArray(raw)) {
-      const base = scope.path ?? [];
-      return raw.map((item, index) => this.evaluate(item, { ...scope, path: [...base, String(index)] }));
-    }
-    const record = raw as Record<string, unknown>;
-    const base = scope.path ?? [];
-    const out: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(record)) {
-      if (isBareSigil(key) || key === '$') continue; // `$: Player` type tag
-      if (isMetaKey(key)) {
-        out[key] = value;
-        continue;
-      }
-      if (isValidateKey(key)) {
-        out[key] = value;
-        continue;
-      }
-      if (key === '$if' || key === '$then') {
-        continue; // control flow — consumed by apply(), never serialized
-      }
-      const fnMatch = key.match(FUNCTION_KEY);
-      if (fnMatch && typeof value === 'string') {
-        const params = fnMatch[2]!
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean);
-        const body = value;
-        const name = fnMatch[1]!;
-        const fnPath = [...base, name];
-        const fn = (...args: unknown[]) => {
-          const callParams = Object.fromEntries(params.map((p, i) => [p, args[i]]));
-          return this.evalExpr(body, { ...scope, current: record, params: callParams, path: fnPath });
-        };
-        out[name] = tagFunction(fn, { name, params, source: body, deps: detectDeps(body) });
-        continue;
-      }
-      if (key.startsWith('+')) {
-        out[key.slice(1)] = this.evaluate(value, { ...scope, current: record, path: [...base, key.slice(1)] });
-        continue;
-      }
-      if (isPathKey(key)) continue; // patch instruction — handled by apply()
-      out[key] = this.evaluate(value, { ...scope, current: record, path: [...base, key] });
-    }
-    if (record[':param']) {
-      const marker = record[':param'];
-      const paramKey = typeof marker === 'string' && marker ? marker : base.join('.');
-      const provided = scope.provided?.[paramKey];
-      if (provided === undefined) {
-        out['value'] = null;
-      } else {
-        const filled = this.evaluate(provided, scope);
-        const type = record[':type'];
-        if (typeof type === 'string' && type) checkParamType(type, filled, paramKey);
-        out['value'] = filled;
-      }
-    }
-    return out;
+    return parse(raw).evaluate(this, scope);
   }
 
   /** Evaluate a whole loaded document as an actor (`$` and `@` coincide). */
