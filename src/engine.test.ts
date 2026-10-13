@@ -1,14 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import {
-  Die,
-  type EvalRoots,
-  GoblinEngine,
-  isDieLiteral,
-  isExpressionString,
-  parseDie,
-  parseRef,
-  serialize,
-} from './engine';
+import { GoblinEngine } from './engine';
+import { Die, type EvalRoots, isDieLiteral, isExpressionString, parseDie, parseRef, serialize } from './utils';
 
 function testEngine() {
   const engine = new GoblinEngine('.');

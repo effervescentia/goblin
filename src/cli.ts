@@ -11,7 +11,8 @@
  * Resolved state goes to stdout (always valid JSON); errors go to stderr
  * with a non-zero exit code.
  */
-import { GoblinEngine, serialize } from './engine';
+import { GoblinEngine } from './engine';
+import { serialize } from './utils';
 
 export const USAGE = `goblin [entry.yaml] [--compact] [--help]
 
