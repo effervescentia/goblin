@@ -171,6 +171,8 @@ describe('RecordNode.stripMetadata', () => {
         level: 5,
         xp: { ':doc': 'XP.', ':param': true, ':type': 'integer', ':default': 0, ':value': 6500 },
         nick: { ':param': true, ':value': null },
+        attacks: { ':value': 2, ':events': [{ ':source': 'fighter.yaml', ':set': '1 + (@.level >= 5)' }] },
+        armor: { ':value': ['shields'], ':events': [{ ':add': ['shields'] }] },
       }),
     ).toEqual({
       name: 'Aria',
@@ -181,6 +183,8 @@ describe('RecordNode.stripMetadata', () => {
       level: 5,
       xp: 6500,
       nick: null,
+      attacks: 2,
+      armor: ['shields'],
     });
     expect(RecordNode.stripMetadata('d10')).toBe('d10');
     expect(RecordNode.stripMetadata(null)).toBeNull();

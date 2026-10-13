@@ -16,12 +16,17 @@
 
 import {
   ACTOR,
+  ADD_KEY,
   APP,
   CURRENT,
   DIE_LITERAL,
   DOCUMENT,
   IF_KEY,
+  OVERRIDE_SOURCE,
   PARAM_KEY,
+  PARAM_VALUE_KEY,
+  SET_KEY,
+  SOURCE_KEY,
   TEMPLATE_CALL,
   TEMPLATE_SCAN,
   THEN_KEY,
@@ -51,6 +56,7 @@ import {
   parentOf,
   parseRef,
   type ResolveHooks,
+  sameValue,
   setPath,
   stripPlus,
 } from './utils';
@@ -62,6 +68,13 @@ export class GoblinEngine {
   readonly appRoot: Record<string, unknown> = {};
   /** `$lib` — standard library: natives bound in code, yaml helpers merged on load. */
   readonly library: Record<string, unknown> = withNatives();
+  /** Patch writes per field, keyed by the record holding the field. */
+  private readonly fieldEvents = new WeakMap<object, Map<string, unknown[]>>();
+  /** Source document of a raw tree: loaded documents and `$tmpl('…')` clones. */
+  private readonly origins = new WeakMap<object, string>();
+  /** Source names for the apply in progress (the patch, and the actor under it). */
+  private applySource: string | undefined;
+  private actorSource: string | undefined;
   /** Resolved-value cache + cycle guard for lazy references. */
   private readonly cache = new Map<string, unknown>();
   private readonly resolving: string[] = [];
@@ -135,6 +148,9 @@ export class GoblinEngine {
   /** Store a document under `file`, merging top-level tables into `#`. */
   register(file: string, data: unknown): unknown {
     this.docs.set(file, data);
+    // First spelling wins, so a template registered under both its path and
+    // its bare name reports one stable source.
+    if (data && typeof data === 'object' && !this.origins.has(data)) this.origins.set(data, file);
     // Merge top-level `utils`/`math`-style tables into the app namespace
     // so `#.utils.…` works for self-contained docs like main.yaml.
     if (data && typeof data === 'object' && !Array.isArray(data)) {
@@ -214,7 +230,7 @@ export class GoblinEngine {
         const fn = this.entryCallable(found, scope);
         if (fn !== undefined) return fn;
       }
-      const rawTarget = this.derefParam(found?.value);
+      const rawTarget = this.derefValue(found?.value);
       if (rawTarget === undefined) {
         // Cross-namespace fallback into shared globals: `$`/`@` fall back
         // to the app root (e.g. `player.yaml` uses `@.utils.…` supplied by
@@ -224,7 +240,7 @@ export class GoblinEngine {
         if (fallbackFound !== null) {
           const fn = this.entryCallable(fallbackFound, scope);
           if (fn !== undefined) return fn;
-          return this.evaluate(this.derefParam(fallbackFound.value), scope);
+          return this.evaluate(this.derefValue(fallbackFound.value), scope);
         }
         return undefined;
       }
@@ -240,15 +256,18 @@ export class GoblinEngine {
   }
 
   /**
-   * `:param` records dereference to their materialized `value` slot, so a
-   * bare `@.xp` reads the filled value (provided, default, or `null` when
-   * neither). Anything else passes through untouched.
+   * Wrapper records dereference to the value they hold: a `:param` record to
+   * its materialized `value` slot (so a bare `@.xp` reads the filled value —
+   * provided, default, or `null`), a `{ :value, :events }` pair to its
+   * `:value` (so refs into evaluated output, e.g. `!validate` predicates,
+   * see through a field's history). Anything else passes through untouched.
    */
-  private derefParam(rawTarget: unknown): unknown {
+  private derefValue(rawTarget: unknown): unknown {
     if (RecordNode.isParam(rawTarget)) {
       const slot = rawTarget[VALUE_KEY];
       return slot !== undefined ? slot : null;
     }
+    if (RecordNode.isEvented(rawTarget)) return rawTarget[PARAM_VALUE_KEY];
     return rawTarget;
   }
 
@@ -311,7 +330,10 @@ export class GoblinEngine {
     if (tmpl) {
       const doc = this.docs.get(tmpl[1]!);
       if (doc === undefined) throw new Error(`template not loaded: ${tmpl[1]}`);
-      return deepClone(doc);
+      const clone = deepClone(doc);
+      // The clone keeps the document's name so patch events can cite it.
+      if (clone && typeof clone === 'object') this.origins.set(clone, tmpl[1]!);
+      return clone;
     }
     const run = compileBody(trimmed, Object.keys(scope.params ?? {}));
     return run(this.hooks(scope), scope.params ?? {});
@@ -365,23 +387,32 @@ export class GoblinEngine {
    * are replaced wholesale — derivations never run and missing paths are
    * created — but a `:param` record keeps its `:type` contract. Mutates like
    * `apply`; re-load or re-resolve for a pristine tree.
+   *
+   * Each value actually changed is filed as an `override` event, so a sheet
+   * shows the explicit value beating whatever derived it. Overrides apply
+   * both before and after the patches (explicit values always win), so a
+   * re-application that writes the value already in place is not an event.
    */
   applyOverrides(actorRaw: unknown, overrides: Record<string, unknown>): void {
-    for (const [key, value] of Object.entries(overrides)) {
-      const normalized = /^[.@#$]/.test(key) ? key : `@.${key}`;
-      const { root, path } = parseRef(normalized);
-      if (path.length === 0) continue;
-      const base = root === APP ? this.appRoot : actorRaw;
-      if (base === null || typeof base !== 'object') continue;
-      const existing = getPath(base, path);
-      if (existing !== null && typeof existing === 'object' && PARAM_KEY in (existing as Record<string, unknown>)) {
-        const record = existing as Record<string, unknown>;
-        const type = record[TYPE_KEY];
-        if (typeof type === 'string' && type) RecordNode.checkParamType(type, value, path.join('.'));
-        RecordNode.checkParamConstraints(record, value, path.join('.'));
+    this.asSource(OVERRIDE_SOURCE, actorRaw, () => {
+      for (const [key, value] of Object.entries(overrides)) {
+        const normalized = /^[.@#$]/.test(key) ? key : `@.${key}`;
+        const { root, path } = parseRef(normalized);
+        if (path.length === 0) continue;
+        const base = root === APP ? this.appRoot : actorRaw;
+        if (base === null || typeof base !== 'object') continue;
+        const existing = getPath(base, path);
+        if (existing !== null && typeof existing === 'object' && PARAM_KEY in (existing as Record<string, unknown>)) {
+          const record = existing as Record<string, unknown>;
+          const type = record[TYPE_KEY];
+          if (typeof type === 'string' && type) RecordNode.checkParamType(type, value, path.join('.'));
+          RecordNode.checkParamConstraints(record, value, path.join('.'));
+        }
+        const slot = this.ownerOf(base, path);
+        if (slot && !sameValue(existing, value)) this.recordEvent(slot.owner, slot.key, SET_KEY, deepClone(value));
+        setPath(base as Record<string, unknown>, path, deepClone(value));
       }
-      setPath(base as Record<string, unknown>, path, deepClone(value));
-    }
+    });
   }
 
   /**
@@ -428,19 +459,100 @@ export class GoblinEngine {
   apply(actorRaw: unknown, patchFile: string): unknown {
     const patch = this.docs.get(patchFile);
     if (patch === undefined) throw new Error(`patch document not loaded: ${patchFile}`);
-    return this.applyRaw(actorRaw, patch);
+    return this.applyRaw(actorRaw, patch, patchFile);
   }
 
-  /** Apply an in-memory patch (e.g. a `$tmpl('…')` clone) onto an actor. */
-  applyRaw(actorRaw: unknown, patch: unknown): unknown {
+  /**
+   * Apply an in-memory patch (e.g. a `$tmpl('…')` clone) onto an actor.
+   * `source` names the patch in the fields' event logs; it defaults to the
+   * document the tree came from, when the engine loaded it.
+   */
+  applyRaw(actorRaw: unknown, patch: unknown, source?: string): unknown {
     const scope: EvalRoots = {
       doc: patch,
       actor: actorRaw,
       app: this.appRoot,
       current: actorRaw,
     };
-    this.applyNode(actorRaw, patch, scope);
+    this.asSource(source ?? this.sourceOf(patch), actorRaw, () => this.applyNode(actorRaw, patch, scope));
     return actorRaw;
+  }
+
+  // -- change events --------------------------------------------------------
+
+  /** Run `write` with the event sources it should file writes under. */
+  private asSource(source: string | undefined, actorRaw: unknown, write: () => void): void {
+    const outerPatch = this.applySource;
+    const outerActor = this.actorSource;
+    this.applySource = source;
+    this.actorSource = this.sourceOf(actorRaw);
+    try {
+      write();
+    } finally {
+      this.applySource = outerPatch;
+      this.actorSource = outerActor;
+    }
+  }
+
+  /** The document a raw tree came from, when it is one the engine loaded. */
+  private sourceOf(raw: unknown): string | undefined {
+    return raw && typeof raw === 'object' ? this.origins.get(raw) : undefined;
+  }
+
+  /** One `{ :source?, :set | :add }` entry. */
+  private event(source: string | undefined, kind: string, value: unknown): Record<string, unknown> {
+    return source === undefined ? { [kind]: value } : { [SOURCE_KEY]: source, [kind]: value };
+  }
+
+  /**
+   * Note a patch write on `target[key]`, in application order. Call before
+   * writing: the first event on a field that already holds a value records
+   * that value first, so a history reads base-then-patch. Fields no patch
+   * ever touched stay event-free, and print as bare values.
+   */
+  private recordEvent(target: Record<string, unknown>, key: string, kind: string, value: unknown): void {
+    this.seedEvents(target, key).push(this.event(this.applySource, kind, value));
+  }
+
+  /**
+   * Open `target[key]`'s log, recording the value it already holds as the
+   * first event. Call before mutating in place (array appends), so the
+   * origin event captures what was there rather than the result.
+   */
+  private seedEvents(target: Record<string, unknown>, key: string): unknown[] {
+    let fields = this.fieldEvents.get(target);
+    if (fields === undefined) {
+      fields = new Map();
+      this.fieldEvents.set(target, fields);
+    }
+    let log = fields.get(key);
+    if (log === undefined) {
+      log = key in target ? [this.event(this.actorSource, SET_KEY, deepClone(target[key]))] : [];
+      fields.set(key, log);
+    }
+    return log;
+  }
+
+  /** The writes that produced `record[key]`, or undefined when untouched. */
+  eventsFor(record: object, key: string): unknown[] | undefined {
+    const log = this.fieldEvents.get(record)?.get(key);
+    return log && log.length > 0 ? log : undefined;
+  }
+
+  /**
+   * The record owning the last segment of `path` and the key within it,
+   * creating intermediate records the way `setPath` does so an event can be
+   * filed before the write lands.
+   */
+  private ownerOf(base: unknown, path: string[]): { owner: Record<string, unknown>; key: string } | null {
+    const key = path.at(-1);
+    if (key === undefined || base === null || typeof base !== 'object') return null;
+    let node = base as Record<string, unknown>;
+    for (const seg of path.slice(0, -1)) {
+      if (typeof node[seg] !== 'object' || node[seg] === null) node[seg] = {};
+      node = node[seg] as Record<string, unknown>;
+    }
+    return { owner: node, key };
   }
 
   /**
@@ -487,14 +599,19 @@ export class GoblinEngine {
       return;
     }
     if (Array.isArray(value)) {
+      const slot = this.ownerOf(base, path);
+      if (slot) this.seedEvents(slot.owner, slot.key); // before the append, not after
       let target = getPath(base, path);
       if (!Array.isArray(target)) {
         setPath(base, path, []);
         target = getPath(base, path);
       }
-      this.applyArray(target as unknown[], value);
+      const added = this.applyArray(target as unknown[], value);
+      if (slot && added.length > 0) this.recordEvent(slot.owner, slot.key, ADD_KEY, added);
       return;
     }
+    const slot = this.ownerOf(base, path);
+    if (slot) this.recordEvent(slot.owner, slot.key, SET_KEY, deepClone(value));
     setPath(base, path, deepClone(value));
   }
 
@@ -552,6 +669,11 @@ export class GoblinEngine {
     const k = stripPlus(key);
     if (value && typeof value === 'object' && !Array.isArray(value)) {
       if (!this.condPasses(value as Record<string, unknown>, scope)) return;
+      // A `+key` record (a feature, an action, a resource) is a change to the
+      // key itself: its fields may be pure metadata, so without this the
+      // addition would leave no trace. Scalar and array `+key` writes record
+      // their own content below, and are not double-logged here.
+      if (key !== k) this.recordEvent(target, k, ADD_KEY, k);
       // Always merge through mergeInto so nested `+`, path keys and
       // `$if`/`$then` wrappers are consumed rather than stored raw.
       if (typeof target[k] !== 'object' || target[k] === null || Array.isArray(target[k])) {
@@ -561,23 +683,36 @@ export class GoblinEngine {
       return;
     }
     if (Array.isArray(value)) {
+      this.seedEvents(target, k); // before the append, not after
       if (!Array.isArray(target[k])) target[k] = [];
-      this.applyArray(target[k] as unknown[], value);
+      const added = this.applyArray(target[k] as unknown[], value);
+      if (added.length > 0) this.recordEvent(target, k, ADD_KEY, added);
       return;
     }
+    this.recordEvent(target, k, SET_KEY, deepClone(value));
     target[k] = deepClone(value);
   }
 
-  /** Array patch: `+item` entries append (deduped), others append raw. */
-  private applyArray(target: unknown[], items: unknown[]): void {
+  /**
+   * Array patch: `+item` entries append (deduped), others append raw.
+   * Returns what was actually appended, for the field's event log.
+   */
+  private applyArray(target: unknown[], items: unknown[]): unknown[] {
+    const added: unknown[] = [];
     for (const item of items) {
       if (typeof item === 'string' && item.startsWith('+')) {
         const name = item.slice(1);
-        if (!target.includes(name)) target.push(name);
+        if (!target.includes(name)) {
+          target.push(name);
+          added.push(name);
+        }
       } else {
-        target.push(deepClone(item));
+        const clone = deepClone(item);
+        target.push(clone);
+        added.push(clone);
       }
     }
+    return added;
   }
 
   // -- validation ------------------------------------------------------------

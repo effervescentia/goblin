@@ -3,6 +3,10 @@
 # `+` marks additions. `$if` gates its whole node on actor state — false
 # applies nothing (not even `:doc`), so unearned content leaves no residue;
 # `$then` holds absolute patches applied when the condition holds.
+# Each field patched here prints as `{ :value, :events }` — the value plus the
+# writes that produced it, in order (dropped by `--strip-metadata`). A `+key`
+# addition records itself, so a feature made only of `:doc` still shows who
+# added it.
 
 '@.monk': {}
 '@.monk.martial_arts_die': 1d6

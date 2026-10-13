@@ -92,6 +92,20 @@ export const VALUE_KEY = 'value';
 /** Filled value shown on an evaluated `:param` record (display only). */
 export const PARAM_VALUE_KEY = ':value';
 
+// -- change events ---------------------------------------------------------
+
+/** A written field's change history: `{ :value, :events }` (see `apply`). */
+export const EVENTS_KEY = ':events';
+
+/** Event: the value a patch wrote over the field. */
+export const SET_KEY = ':set';
+
+/** Event `:source` for a value written by `applyOverrides` (CLI `--set`). */
+export const OVERRIDE_SOURCE = 'override';
+
+/** Event: the items a patch appended to an array field. */
+export const ADD_KEY = ':add';
+
 /** Printed function descriptor keys (see `FunctionNode.serialize`). */
 export const PARAMS_KEY = ':params';
 export const SOURCE_KEY = ':source';

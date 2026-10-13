@@ -3,6 +3,7 @@ import {
   DEFAULT_KEY,
   DOC_KEY,
   DOCUMENT,
+  EVENTS_KEY,
   FUNCTION_KEY,
   IF_KEY,
   LABEL_KEY,
@@ -41,6 +42,26 @@ export interface MissingParam {
 }
 
 export class RecordNode extends Node<Record<string, unknown>> {
+  /** A field printed with its change history: `{ :value, :events }`. */
+  static isEvented(node: unknown): node is Record<string, unknown> {
+    return typeof node === 'object' && node !== null && EVENTS_KEY in node && PARAM_VALUE_KEY in node;
+  }
+
+  /**
+   * Attach the writes that produced a value. A record takes `:events` as one
+   * more metadata key, in place — a feature or `:param` node keeps its own
+   * shape rather than gaining a wrapper layer. Everything else (scalars,
+   * arrays, dice) pairs up as `{ :value, :events }`. Untouched fields (no
+   * events) print bare, exactly as before.
+   */
+  static withEvents(value: unknown, events: unknown[] | undefined): unknown {
+    if (events === undefined) return value;
+    if (value !== null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Die)) {
+      return { ...(value as Record<string, unknown>), [EVENTS_KEY]: events };
+    }
+    return { [PARAM_VALUE_KEY]: value, [EVENTS_KEY]: events };
+  }
+
   /** A record declaring a user-provided value (`:param` marker present). */
   static isParam(node: unknown): node is Record<string, unknown> {
     return typeof node === 'object' && node !== null && PARAM_KEY in node;
@@ -168,7 +189,7 @@ export class RecordNode extends Node<Record<string, unknown>> {
     if (Array.isArray(value)) return value.map(RecordNode.stripMetadata);
     if (value && typeof value === 'object') {
       const rec = value as Record<string, unknown>;
-      if (RecordNode.isParam(rec)) {
+      if (RecordNode.isParam(rec) || RecordNode.isEvented(rec)) {
         return RecordNode.stripMetadata(rec[PARAM_VALUE_KEY] ?? null);
       }
       if (rec[TYPE_KEY] === 'function' && typeof rec[SOURCE_KEY] === 'string') {
@@ -210,11 +231,14 @@ export class RecordNode extends Node<Record<string, unknown>> {
         continue;
       }
       if (key.startsWith('+')) {
-        out[key.slice(1)] = engine.evaluate(value, { ...scope, current: record, path: [...base, key.slice(1)] });
+        const added = key.slice(1);
+        out[added] = engine.evaluate(value, { ...scope, current: record, path: [...base, added] });
         continue;
       }
       if (isPathKey(key)) continue; // patch instruction — handled by apply()
-      out[key] = engine.evaluate(value, { ...scope, current: record, path: [...base, key] });
+      const evaluated = engine.evaluate(value, { ...scope, current: record, path: [...base, key] });
+      // A field a patch wrote prints with its history (see `GoblinEngine.apply`).
+      out[key] = RecordNode.withEvents(evaluated, engine.eventsFor(record, key));
     }
     return out;
   }

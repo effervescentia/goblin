@@ -106,6 +106,8 @@ describe('examples', () => {
     const script = `
       import { GoblinEngine } from './src/engine.ts';
       const e = new GoblinEngine('examples');
+      // Fields a patch wrote print as { :value, :events } — read the value.
+      const val = (v) => (v && typeof v === 'object' && ':value' in v ? v[':value'] : v);
       await e.loadFile('07-actor.yaml');
       await e.loadFile('07-class.yaml');
       const run = (level) => {
@@ -118,13 +120,16 @@ describe('examples', () => {
       const l1 = run(1);
       const l2 = run(2);
       console.log(JSON.stringify({
-        l1ac: l1.armor_class,
-        l1die: String(l1.actions.unarmed_strike.die),
+        l1ac: val(l1.armor_class),
+        l1die: String(val(l1.actions.unarmed_strike.die)),
         l1focus: 'monks_focus' in l1.features,
         l1martial: 'martial_arts' in l1.features,
-        l2die: String(l2.actions.unarmed_strike.die),
-        l2type: l2.actions.unarmed_strike.type,
+        l2die: String(val(l2.actions.unarmed_strike.die)),
+        l2type: val(l2.actions.unarmed_strike.type),
         l2focus: 'monks_focus' in l2.features,
+        l2dieEvents: l2.actions.unarmed_strike.die[':events'],
+        martialEvents: l2.features.martial_arts[':events'],
+        martialDieEvents: l2.monk.martial_arts_die[':events'],
       }));
     `;
     const out = execFileSync('bun', ['-e', script], { cwd: root, encoding: 'utf8' });
@@ -136,6 +141,12 @@ describe('examples', () => {
       l2die: '1d8',
       l2type: 'bonus_action',
       l2focus: true,
+      // The actor's own `d4`, then the `$then` write that replaced it.
+      l2dieEvents: [{ ':set': 'd4' }, { ':source': '07-class.yaml', ':set': '1d8' }],
+      // A field the patch created has no origin event.
+      martialDieEvents: [{ ':source': '07-class.yaml', ':set': '1d6' }],
+      // A `+key` feature (metadata only) still records the addition.
+      martialEvents: [{ ':source': '07-class.yaml', ':add': 'martial_arts' }],
     });
   });
 });

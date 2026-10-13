@@ -232,6 +232,53 @@ syntax:
     '@.actions.unarmed_strike.type': bonus_action
 ```
 
+### Change events
+
+Every field a patch writes carries `:events`: the writes that produced it, in
+the order they were applied. A record takes `:events` as one more metadata
+key, so a feature or `:param` node keeps its own shape; everything else
+(scalars, arrays, dice) prints as a `{ :value, :events }` pair. Fields no
+patch touched print bare, as before.
+
+- `:source` names the document that made the change — the file name for
+  loaded documents and `$tmpl('…')` clones, the name passed to
+  `apply(actor, file)` / `applyRaw(actor, patch, source)` otherwise. It is
+  omitted when the engine has no name for the tree (e.g. a hand-built actor).
+  Values written by `applyOverrides` (the CLI's `--set`) report
+  `:source: override`, so an explicit value shows what it beat. Overrides
+  apply both before and after the patches, so one that re-writes the value
+  already in place is not recorded twice.
+- `:set` is the raw value written: the expression as written, not its result.
+- `:add` names what an addition added: the items an array patch appended
+  (deduplicated `+item` entries included), or the key a `+key` record
+  addition introduced. A `+key` holding a scalar or an array records that
+  value instead, so nothing is logged twice.
+- The first event is the value the field already held when the first patch
+  landed, so a history reads base-then-patch. A field a patch creates has no
+  such origin event.
+- Metadata (`:doc`, `:label`, …) and function definitions are never wrapped.
+
+```ts
+// 5e/main.yaml: actor character.yaml, adopt [fighter.yaml]
+"attacks": {                                   // a scalar pairs up
+  ":value": 2,
+  ":events": [
+    { ":source": "character.yaml", ":set": 1 },
+    { ":source": "fighter.yaml", ":set": "1 + (@.level >= 5) + (@.level >= 11) + (@.level >= 20)" }
+  ]
+},
+"second_wind": {                               // a record takes the key in place
+  ":label": "Second Wind",
+  ":doc": "Regain hit points in a pinch, once per rest.",
+  ":events": [{ ":source": "fighter.yaml", ":add": "second_wind" }]
+}
+```
+
+References see through the pair — `@.attacks` reads `2`, including from
+`!validate` predicates — and `--strip-metadata` collapses it to the value
+(dropping in-place `:events` with the other metadata), so stripped output is
+unchanged by this.
+
 ## Statements and assignment
 
 Bodies spanning multiple lines (or `;`-separated) are statement blocks. A
@@ -312,8 +359,8 @@ constraints, so a UI can prompt with a display name rather than a path.
   `null` when missing), so `@.xp` just works. Descending into a `:param`
   node's `value` slot does not resolve; data records like `hit_points.value`
   are unaffected.
-- The CLI `--strip-metadata` flag collapses `:param` records to their
-  `:value`, leaving plain values only.
+- The CLI `--strip-metadata` flag collapses `:param` records (and
+  `{ :value, :events }` pairs) to their `:value`, leaving plain values only.
 
 ```yaml
 # Examples (examples/08-parameters.yaml)

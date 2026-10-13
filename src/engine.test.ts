@@ -188,6 +188,11 @@ describe('evaluate', () => {
   });
 });
 
+/** Read a `{ :value, :events }` field (what a patch wrote) or a bare value. */
+function fieldValue(node: unknown): unknown {
+  return node && typeof node === 'object' && ':value' in node ? (node as Record<string, unknown>)[':value'] : node;
+}
+
 describe('apply', () => {
   function appliedEngine(level = 1) {
     const { engine, doc } = testEngine();
@@ -229,13 +234,40 @@ describe('apply', () => {
 
   it('applies additions, path patches and $then blocks', () => {
     const { out } = appliedEngine();
-    expect((out.monk as { martial_arts_die: Die }).martial_arts_die.toString()).toBe('1d6');
+    expect(String(fieldValue((out.monk as Record<string, unknown>).martial_arts_die))).toBe('1d6');
     expect(out.features).toHaveProperty('martial_arts');
     expect(out.features).toHaveProperty('unarmored_defense');
-    expect((out.features as Record<string, { ':doc': string }>)['martial_arts']?.[':doc']).toBe('martial arts mastery');
+    expect((out.features as Record<string, Record<string, unknown>>).martial_arts?.[':doc']).toBe(
+      'martial arts mastery',
+    );
     expect(out.armor_class).toBe(12);
-    expect((out.proficiencies as { weapon: string[] }).weapon).toEqual(['simple_melee', 'light_martial_melee']);
+    expect(fieldValue((out.proficiencies as Record<string, unknown>).weapon)).toEqual([
+      'simple_melee',
+      'light_martial_melee',
+    ]);
     expect(String((out.actions as { unarmed_strike: { die: unknown } }).unarmed_strike.die)).toBe('d4');
+  });
+
+  it('records the writes that produced each patched field, in order', () => {
+    const { out } = appliedEngine();
+    // The actor tree is a test fixture, not a loaded document, so the origin
+    // event has no `:source`; the patch is a registered document, so it does.
+    expect((out.monk as Record<string, unknown>).martial_arts_die).toEqual({
+      ':value': expect.anything(),
+      ':events': [{ ':source': 'monk.yaml', ':set': '1d6' }],
+    });
+    expect((out.proficiencies as Record<string, unknown>).weapon).toEqual({
+      ':value': ['simple_melee', 'light_martial_melee'],
+      ':events': [{ ':set': [] }, { ':source': 'monk.yaml', ':add': ['simple_melee', 'light_martial_melee'] }],
+    });
+    // A `+key` addition records who added it, even when the added record is
+    // nothing but metadata. A record takes `:events` in place — no wrapper.
+    expect((out.features as Record<string, unknown>).unarmored_defense).toEqual({
+      ':doc': 'tough without armor',
+      ':events': [{ ':source': 'monk.yaml', ':add': 'unarmored_defense' }],
+    });
+    // Untouched fields stay bare.
+    expect(out.armor_class).toBe(12);
   });
 
   it('gates content on $if conditions with no residue', () => {
@@ -244,9 +276,14 @@ describe('apply', () => {
     expect(String((l1.actions as { unarmed_strike: { die: unknown } }).unarmed_strike.die)).toBe('d4');
     const l2 = appliedEngine(2).out;
     expect(l2.features).toHaveProperty('monks_focus');
-    const strike = (l2.actions as { unarmed_strike: { die: unknown; type: unknown } }).unarmed_strike;
-    expect(String(strike.die)).toBe('1d8');
-    expect(strike.type).toBe('bonus_action');
+    const strike = (l2.actions as { unarmed_strike: Record<string, unknown> }).unarmed_strike;
+    expect(String(fieldValue(strike.die))).toBe('1d8');
+    expect(fieldValue(strike.type)).toBe('bonus_action');
+    // The `$then` write lands over the actor's own `d4`.
+    expect(strike.die).toEqual({
+      ':value': expect.anything(),
+      ':events': [{ ':set': 'd4' }, { ':source': 'monk.yaml', ':set': '1d8' }],
+    });
   });
 
   it('respects a false $if condition', () => {
@@ -278,6 +315,20 @@ describe('validate', () => {
 
     const bad = { hit_points: { '!validate': ['.current >= 0'], current: -2 } };
     expect(engine.validate(bad)).toEqual(['.current >= 0']);
+  });
+});
+
+describe('validate with patched fields', () => {
+  it('sees through `{ :value, :events }` in predicates', () => {
+    const engine = new GoblinEngine('.');
+    const actor: Record<string, unknown> = {
+      hit_points: { '!validate': ['.current >= 0', '.current <= .max'], current: 5, max: 5 },
+    };
+    engine.docs.set('patch.yaml', { '@.hit_points': { max: 12, current: '@.hit_points.max' } });
+    engine.apply(actor, 'patch.yaml');
+    const out = engine.evaluate(actor, { doc: actor, actor, app: engine.appRoot, current: actor });
+    expect(fieldValue((out as { hit_points: Record<string, unknown> }).hit_points.current)).toBe(12);
+    expect(engine.validate(out)).toEqual([]);
   });
 });
 
@@ -577,11 +628,16 @@ describe('parameters', () => {
     const resolved = engine.resolve('ov.yaml', {}, { computed: 99, 'brand.new': 1, name: 'Aria' }) as {
       data: Record<string, unknown>;
     };
+    // An override is a change like any other: it prints with its event.
     expect(resolved.data).toEqual({
-      computed: 99,
-      brand: { new: 1 },
-      name: 'Aria',
+      computed: { ':value': 99, ':events': [{ ':set': '1 + 1' }, { ':source': 'override', ':set': 99 }] },
+      brand: { new: { ':value': 1, ':events': [{ ':source': 'override', ':set': 1 }] } },
+      name: {
+        ':value': 'Aria',
+        ':events': [{ ':set': { ':doc': 'Your name.', ':param': true } }, { ':source': 'override', ':set': 'Aria' }],
+      },
     });
+    expect(RecordNode.stripMetadata(resolved.data)).toEqual({ computed: 99, brand: { new: 1 }, name: 'Aria' });
   });
 
   it('resolve keeps :type contracts on overridden params', () => {
@@ -670,6 +726,7 @@ describe('parameters', () => {
     expect(() => engine.resolve('ov.yaml', {}, { trained: ['a', 'b'] })).toThrow(
       'param count mismatch: trained expected 1 items, got 2',
     );
-    expect(engine.resolve('ov.yaml', {}, { trained: ['a'] })).toEqual({ data: { trained: ['a'] } });
+    const ok = engine.resolve('ov.yaml', {}, { trained: ['a'] }) as { data: Record<string, unknown> };
+    expect(fieldValue(ok.data.trained)).toEqual(['a']);
   });
 });

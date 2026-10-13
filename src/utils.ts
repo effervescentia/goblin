@@ -261,6 +261,22 @@ export function parentOf(base: unknown, path: string[]): unknown {
   return getPath(base, path.slice(0, -1));
 }
 
+/** Structural equality for raw document values (dice compare by spec text). */
+export function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a instanceof Die || b instanceof Die) return String(a) === String(b);
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((item, i) => sameValue(item, b[i]));
+  }
+  if (a && b && typeof a === 'object' && typeof b === 'object') {
+    const left = a as Record<string, unknown>;
+    const right = b as Record<string, unknown>;
+    const keys = Object.keys(left);
+    return keys.length === Object.keys(right).length && keys.every((k) => k in right && sameValue(left[k], right[k]));
+  }
+  return false;
+}
+
 export function stripPlus(key: string): string {
   return key.startsWith('+') ? key.slice(1) : key;
 }

@@ -31,6 +31,8 @@ const script = `
   import { GoblinEngine } from './src/engine.ts';
   import { RecordNode } from './src/nodes/record.ts';
   const e = new GoblinEngine('5e');
+  // Fields a patch wrote print as { :value, :events } — read the value.
+  const val = (v) => (v && typeof v === 'object' && ':value' in v ? v[':value'] : v);
   // Single load: engine discovery follows $tmpl refs (main → character,
   // fighter, levels) automatically.
   await e.loadFile('main.yaml');
@@ -72,7 +74,7 @@ const script = `
   })();
 
   const r = (xp) => run(xp).v;
-  const attacks = { 0: r(0).attacks, 6500: r(6500).attacks, 85000: r(85000).attacks, 355000: r(355000).attacks };
+  const attacks = { 0: val(r(0).attacks), 6500: val(r(6500).attacks), 85000: val(r(85000).attacks), 355000: val(r(355000).attacks) };
   const prof = { 0: r(0).proficiency_bonus, 6500: r(6500).proficiency_bonus, 48000: r(48000).proficiency_bonus, 225000: r(225000).proficiency_bonus };
   const v5 = r(6500);
   const sw = v5.actions.second_wind.heal();
@@ -88,18 +90,18 @@ const script = `
   console.log(JSON.stringify({
     baseMissing,
     mergedMissing,
-    ac: v5.armor_class,
-    hp: { value: v5.hit_points.current, max: v5.hit_points.max },
+    ac: val(v5.armor_class),
+    hp: { value: val(v5.hit_points.current), max: val(v5.hit_points.max) },
     trained: v5.skills.trained[':value'],
-    surge: { value: v5.resources.action_surge.current, max: v5.resources.action_surge.max },
+    surge: { value: val(v5.resources.action_surge.current), max: val(v5.resources.action_surge.max) },
     swMin: sw >= 6,
     swMax: sw <= 15,
     levels,
     attacks,
     prof,
     resolvedKeys: Object.keys(resolved),
-    resolvedAttacks: resolved.data.attacks,
-    resolvedLevel: resolved.data.level,
+    resolvedAttacks: val(resolved.data.attacks),
+    resolvedLevel: val(resolved.data.level),
   }));
 `;
 
@@ -161,17 +163,26 @@ describe('5e', () => {
     ) as {
       data: {
         level: number;
-        attacks: number;
+        attacks: Record<string, unknown>;
         armor_class: number;
         features: Record<string, unknown>;
       };
     };
     expect(data.data.level).toBe(5);
-    expect(data.data.attacks).toBe(2);
     expect(data.data.armor_class).toBe(10);
+    // A patched field carries the writes that produced it, in order.
+    expect(data.data.attacks).toEqual({
+      ':value': 2,
+      ':events': [
+        { ':source': 'character.yaml', ':set': 1 },
+        { ':source': 'fighter.yaml', ':set': '1 + (@.level >= 5) + (@.level >= 11) + (@.level >= 20)' },
+      ],
+    });
+    // A `+key` addition is itself a change: the feature records who added it.
     expect(data.data.features.extra_attack).toEqual({
       ':label': 'Extra Attack',
       ':doc': 'Strike twice whenever you take the Attack action.',
+      ':events': [{ ':source': 'fighter.yaml', ':add': 'extra_attack' }],
     });
     expect(data.data.features.fighting_style).toEqual({
       ':label': 'Fighting Style',
@@ -180,6 +191,7 @@ describe('5e', () => {
       ':type': 'string',
       ':options': ['archery', 'defense', 'dueling', 'great_weapon_fighting', 'protection', 'two_weapon_fighting'],
       ':value': 'dueling',
+      ':events': [{ ':source': 'fighter.yaml', ':add': 'fighting_style' }],
     });
   });
 
@@ -252,8 +264,15 @@ describe('5e', () => {
       'features.martial_archetype=champion',
       '--param',
       'skills.trained=["athletics","perception"]',
-    ) as { data: { level: number; attacks: number } };
-    expect(data.data.level).toBe(5);
-    expect(data.data.attacks).toBe(2);
+    ) as { data: { level: Record<string, unknown>; attacks: Record<string, unknown> } };
+    expect(data.data.attacks[':value']).toBe(2);
+    // `--set` beats the derivation it replaced, and says so.
+    expect(data.data.level).toEqual({
+      ':value': 5,
+      ':events': [
+        { ':source': 'character.yaml', ':set': '#.levels.level_for(@.xp)' },
+        { ':source': 'override', ':set': 5 },
+      ],
+    });
   });
 });
