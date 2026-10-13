@@ -16,8 +16,8 @@ $: Character
   - simple_weapons
   - martial_weapons
 '@.proficiencies.saving_throws':
-  - +strength
-  - +constitution
+  - strength
+  - constitution
 '@.skills.trained':
   :label: Skill Proficiencies
   :doc: 'Choose two: acrobatics, animal_handling, athletics, history, insight, intimidation, perception, survival.'
