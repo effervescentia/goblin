@@ -59,6 +59,9 @@ export const PARAM_KEY = ':param';
 /** Documentation attached to a node; never evaluated. */
 export const DOC_KEY = ':doc';
 
+/** Human-readable display name for a node (UI label); never evaluated. */
+export const LABEL_KEY = ':label';
+
 /** Declares a `:param` node's expected type. */
 export const TYPE_KEY = ':type';
 

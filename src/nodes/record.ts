@@ -5,6 +5,7 @@ import {
   DOCUMENT,
   FUNCTION_KEY,
   IF_KEY,
+  LABEL_KEY,
   OPTIONS_KEY,
   PARAM_KEY,
   PARAM_VALUE_KEY,
@@ -25,6 +26,8 @@ import { Node } from './node';
 export interface MissingParam {
   /** Dotted path of the node needing a value (`:param` alias when given). */
   path: string;
+  /** The node's `:label` — its display name — when attached. */
+  label?: string;
   /** The node's `:doc`, when attached. */
   doc?: string;
   /** The node's declared `:type`, when given. */
@@ -113,8 +116,11 @@ export class RecordNode extends Node<Record<string, unknown>> {
     eachParamRecord(raw, (record, key) => {
       const def = record[DEFAULT_KEY];
       if (def !== undefined && def !== null) return; // satisfied by default
+      const entry: MissingParam = { path: key };
+      const label = record[LABEL_KEY];
+      if (typeof label === 'string' && label) entry.label = label;
       const doc = record[DOC_KEY];
-      const entry: MissingParam = typeof doc === 'string' && doc ? { path: key, doc } : { path: key };
+      if (typeof doc === 'string' && doc) entry.doc = doc;
       const type = record[TYPE_KEY];
       if (typeof type === 'string' && type) {
         assertKnownParamType(type, key);
@@ -259,6 +265,7 @@ function eachParamRecord(raw: unknown, visit: (record: Record<string, unknown>, 
       if (
         key === PARAM_KEY ||
         key === DOC_KEY ||
+        key === LABEL_KEY ||
         key === TYPE_KEY ||
         key === VALIDATE_KEY ||
         key === IF_KEY ||

@@ -158,12 +158,20 @@ weapon: $tmpl('05-greeting.yaml')
 
 ## Metadata
 
-Any `:`-prefixed key (`:doc`, …) is documentation: copied verbatim, never
-evaluated — even if its text contains refs.
+Any `:`-prefixed key (`:label`, `:doc`, …) is documentation: copied verbatim,
+never evaluated — even if its text contains refs. `:label` is the node's
+display name, for UIs that list nodes by something friendlier than their key;
+`:doc` is the longer description.
 
 ```yaml
+# Examples (examples/06-metadata-validation.yaml)
+:label: Hit Points
 :doc: Tracks health. See $.hit_points.max for the cap (refs here are inert).
 ```
+
+Metadata rides along wherever the node goes: it survives `apply()`, shows up
+on evaluated `:param` records, and `:label` is reported with the outstanding
+params (see Parameters). `--strip-metadata` drops all of it.
 
 ## Validation
 
@@ -269,10 +277,11 @@ adopt:
 A record containing `:param` declares a value the user must provide. It
 evaluates to its declaration metadata plus a `:value` slot holding the
 filled value — provided, else `:default`, else `null`:
-`{ ':doc'?, ':param', ':type'?, ':default'?, ':value' }`.
+`{ ':label'?, ':doc'?, ':param', ':type'?, ':default'?, ':value' }`.
 `missingParams()` reports every such node as
-`[{ path, doc?, type?, options?, count?, unique? }]` — the dotted path
-needing a value plus the attached `:doc` and any choice constraints.
+`[{ path, label?, doc?, type?, options?, count?, unique? }]` — the dotted path
+needing a value plus the attached `:label` / `:doc` and any choice
+constraints, so a UI can prompt with a display name rather than a path.
 
 - `:param: true` keys the provided value by the node's dotted path.
 - `:param: 'alias'` keys it by the alias string instead.

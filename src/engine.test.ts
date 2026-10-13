@@ -338,16 +338,16 @@ describe('FunctionNode.detectDeps', () => {
 
 describe('parameters', () => {
   const doc = {
-    hero_name: { ':doc': 'The hero name.', ':param': true, ':type': 'string' },
+    hero_name: { ':label': 'Hero Name', ':doc': 'The hero name.', ':param': true, ':type': 'string' },
     level: { ':doc': 'Starting level.', ':param': 'start_level', ':type': 'integer' },
     attack_die: { ':param': true, ':type': 'die' },
     details: { title: { ':param': true } },
     hit_points: { value: 10, max: 10 },
   };
 
-  it('collects missing params with paths, docs, and types', () => {
+  it('collects missing params with paths, labels, docs, and types', () => {
     expect(RecordNode.collectParams(doc)).toEqual([
-      { path: 'hero_name', doc: 'The hero name.', type: 'string' },
+      { path: 'hero_name', label: 'Hero Name', doc: 'The hero name.', type: 'string' },
       { path: 'start_level', doc: 'Starting level.', type: 'integer' },
       { path: 'attack_die', type: 'die' },
       { path: 'details.title' },
@@ -375,7 +375,13 @@ describe('parameters', () => {
       string,
       Record<string, unknown>
     >;
-    expect(out.hero_name).toEqual({ ':doc': 'The hero name.', ':param': true, ':type': 'string', ':value': 'Aria' });
+    expect(out.hero_name).toEqual({
+      ':label': 'Hero Name',
+      ':doc': 'The hero name.',
+      ':param': true,
+      ':type': 'string',
+      ':value': 'Aria',
+    });
     expect(out.level).toEqual({ ':doc': 'Starting level.', ':param': 'start_level', ':type': 'integer', ':value': 3 });
     expect(out.attack_die?.[':value']).toBeInstanceOf(Die);
     expect(out.attack_die?.[':param']).toBe(true);
@@ -471,7 +477,7 @@ describe('parameters', () => {
     const engine = new GoblinEngine('.');
     engine.docs.set('params.yaml', doc);
     expect(engine.missingParams('params.yaml')).toEqual([
-      { path: 'hero_name', doc: 'The hero name.', type: 'string' },
+      { path: 'hero_name', label: 'Hero Name', doc: 'The hero name.', type: 'string' },
       { path: 'start_level', doc: 'Starting level.', type: 'integer' },
       { path: 'attack_die', type: 'die' },
       { path: 'details.title' },
@@ -493,7 +499,7 @@ describe('parameters', () => {
     const empty = engine.resolve('params.yaml', {});
     expect(empty).toEqual({
       query: [
-        { path: 'hero_name', doc: 'The hero name.', type: 'string' },
+        { path: 'hero_name', label: 'Hero Name', doc: 'The hero name.', type: 'string' },
         { path: 'start_level', doc: 'Starting level.', type: 'integer' },
         { path: 'attack_die', type: 'die' },
         { path: 'details.title' },
@@ -516,6 +522,7 @@ describe('parameters', () => {
       'details.title': 'Kid',
     }) as { data: Record<string, unknown> };
     expect(full.data.hero_name).toEqual({
+      ':label': 'Hero Name',
       ':doc': 'The hero name.',
       ':param': true,
       ':type': 'string',

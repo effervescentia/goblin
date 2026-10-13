@@ -60,7 +60,13 @@ describe('examples', () => {
   it('10-choice-params.yaml reports constraints in query, enforces them in data', () => {
     const query = cli('examples/10-choice-params.yaml') as { query: Array<Record<string, unknown>> };
     expect(query.query).toEqual([
-      { path: 'style', doc: 'Pick a fighting style.', type: 'string', options: ['archery', 'dueling'] },
+      {
+        path: 'style',
+        label: 'Fighting Style',
+        doc: 'Pick a fighting style.',
+        type: 'string',
+        options: ['archery', 'dueling'],
+      },
       {
         path: 'trained',
         doc: 'Pick two skills.',
@@ -79,6 +85,7 @@ describe('examples', () => {
       'trained=["arcana","stealth"]',
     ) as { data: Record<string, Record<string, unknown>> };
     expect(data.data.style).toEqual({
+      ':label': 'Fighting Style',
       ':doc': 'Pick a fighting style.',
       ':param': true,
       ':type': 'string',

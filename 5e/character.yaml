@@ -71,6 +71,7 @@ hit_points:
 features: {}
 actions:
   unarmed_strike:
+    :label: Unarmed Strike
     die: d4
     type: action
 proficiencies:

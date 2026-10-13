@@ -1,8 +1,10 @@
-# Metadata (`:doc`) and validation (`!validate`).
-# `:doc` is documentation: never evaluated, even with refs inside.
+# Metadata (`:label`, `:doc`) and validation (`!validate`).
+# `:label` is the node's display name and `:doc` its documentation: both are
+# copied verbatim, never evaluated, even with refs inside.
 # `!validate` lists predicates (`.` = containing node) checked by validate().
 
 hit_points:
+  :label: Hit Points
   :doc: Tracks health. See $.hit_points.max for the cap (refs here are inert).
   '!validate':
     - .current >= 0

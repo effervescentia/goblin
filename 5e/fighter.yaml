@@ -19,6 +19,7 @@ $: Character
   - +strength
   - +constitution
 '@.skills.trained':
+  :label: Skill Proficiencies
   :doc: 'Choose two: acrobatics, animal_handling, athletics, history, insight, intimidation, perception, survival.'
   :param: true
   :type: array
@@ -27,75 +28,96 @@ $: Character
   :unique: true
 '@.features':
   +fighting_style:
+    :label: Fighting Style
     :doc: Pick the combat style you trained in.
     :param: true
     :type: string
     :options: [archery, defense, dueling, great_weapon_fighting, protection, two_weapon_fighting]
   +second_wind:
+    :label: Second Wind
     :doc: Regain hit points in a pinch, once per rest.
   +action_surge:
+    :label: Action Surge
     :doc: Take one additional action on your turn. Restores on a short rest.
     $if: '@.level >= 2'
   +martial_archetype:
+    :label: Martial Archetype
     :doc: 'Choose a subclass: Champion, Battle Master, or Eldritch Knight.'
     :param: true
     :type: string
     :options: [champion, battle_master, eldritch_knight]
     $if: '@.level >= 3'
   +ability_score_improvement_1:
+    :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 4'
   +extra_attack:
+    :label: Extra Attack
     :doc: Strike twice whenever you take the Attack action.
     $if: '@.level >= 5'
   +ability_score_improvement_2:
+    :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 6'
   +subclass_feature_1:
+    :label: Martial Archetype Feature
     :doc: Martial archetype feature (see your subclass).
     $if: '@.level >= 7'
   +ability_score_improvement_3:
+    :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 8'
   +indomitable:
+    :label: Indomitable
     :doc: Reroll a failed saving throw, once per long rest.
     $if: '@.level >= 9'
   +subclass_feature_2:
+    :label: Martial Archetype Feature
     :doc: Martial archetype feature (see your subclass).
     $if: '@.level >= 10'
   +ability_score_improvement_4:
+    :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 12'
   +ability_score_improvement_5:
+    :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 14'
   +subclass_feature_3:
+    :label: Martial Archetype Feature
     :doc: Martial archetype feature (see your subclass).
     $if: '@.level >= 15'
   +ability_score_improvement_6:
+    :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 16'
   +subclass_feature_4:
+    :label: Martial Archetype Feature
     :doc: Martial archetype feature (see your subclass).
     $if: '@.level >= 18'
   +ability_score_improvement_7:
+    :label: Epic Boon
     :doc: Add +2 to one ability score or +1 to two, or take an epic boon feat.
     $if: '@.level >= 19'
 '@.actions':
   +second_wind:
+    :label: Second Wind
     :doc: Regain 1d10 + fighter level hit points.
     'heal()': 1d10 + @.level
   +extra_attack:
+    :label: Extra Attack
     :doc: Make two attacks instead of one (three at 11, four at 20).
     $if: '@.level >= 5'
 '@.attacks': 1 + (@.level >= 5) + (@.level >= 11) + (@.level >= 20)
 '@.resources':
   +action_surge:
+    :label: Action Surge
     :doc: Expend to gain an additional action.
     $if: '@.level >= 2'
     current: 1
     max: 1 + (@.level >= 17)
   +indomitable_points:
+    :label: Indomitable Uses
     :doc: Expend to reroll a failed save.
     $if: '@.level >= 9'
     value: 1

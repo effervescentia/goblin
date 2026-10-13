@@ -169,7 +169,12 @@ describe('5e', () => {
     expect(data.data.level).toBe(5);
     expect(data.data.attacks).toBe(2);
     expect(data.data.armor_class).toBe(10);
+    expect(data.data.features.extra_attack).toEqual({
+      ':label': 'Extra Attack',
+      ':doc': 'Strike twice whenever you take the Attack action.',
+    });
     expect(data.data.features.fighting_style).toEqual({
+      ':label': 'Fighting Style',
       ':doc': 'Pick the combat style you trained in.',
       ':param': true,
       ':type': 'string',
