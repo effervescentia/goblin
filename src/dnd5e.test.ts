@@ -29,7 +29,7 @@ function cliFails(entry: string, ...extra: string[]): string {
 
 const script = `
   import { GoblinEngine } from './src/engine.ts';
-  import { collectParams } from './src/utils.ts';
+  import { RecordNode } from './src/nodes/record.ts';
   const e = new GoblinEngine('5e');
   // Single load: engine discovery follows $tmpl refs (main → character,
   // fighter, levels) automatically.
@@ -60,7 +60,7 @@ const script = `
   const a3 = fresh();
   e.evaluate(a3, scopeOf(a3, { name: 'X', xp: 900 }));
   e.apply(a3, 'fighter.yaml');
-  const mergedMissing = collectParams(a3).map((m) => m.path).sort();
+  const mergedMissing = RecordNode.collectParams(a3).map((m) => m.path).sort();
 
   const levels = {};
   for (const xp of [0, 299, 300, 899, 900, 2699, 2700, 6499, 6500, 354999, 355000, 999999]) {

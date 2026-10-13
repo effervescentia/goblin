@@ -1,7 +1,7 @@
 import { YAML } from 'bun';
 import pino from 'pino';
 import { GoblinEngine } from './engine';
-import { serialize } from './utils';
+import { serialize } from './nodes/serialize';
 
 const debug = process.argv.includes('--debug');
 const log = pino({

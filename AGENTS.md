@@ -61,6 +61,20 @@ apart. Treat a missing spec update as an incomplete change.
   in `src/engine.test.ts` runtime-agnostic by seeding `engine.docs` directly
   instead of using `loadFile`.
 
+## Code layout
+
+- Node-specific utilities belong in `src/nodes/`, attached as static functions
+  or methods on the node class they serve (e.g. `FunctionNode.match`,
+  `DieNode.parse`, `RecordNode.collectParams`, each node's `serialize`) — not as
+  loose helpers in `src/utils.ts`. Keep `src/utils.ts` for genuinely shared,
+  node-agnostic code (refs, paths, expression compilation, serialization).
+- The standard library (`$lib`) lives in `src/lib/`: one file per namespace
+  (`math.ts`), listed in `src/lib/index.ts`, plus `src/lib/lib.yaml` for
+  yaml-defined helpers. Natives always win over yaml of the same name.
+- Imports stay acyclic: `src/utils.ts` may import from `src/nodes/` (e.g. `Die`),
+  so helpers it depends on must not be moved onto a node class that imports
+  back from `src/utils.ts`.
+
 ## Dependencies
 
 - Pin **exact** versions in `package.json` — no `^`, `~`, or other ranges.

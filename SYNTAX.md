@@ -92,7 +92,7 @@ holding the definition.
 
 The stdlib lives under `$lib`, implicitly loaded by the engine (native
 `math`: `floor`, `ceil`, `round`, `abs`, `min`, `max`, merged with
-`src/lib.yaml` when present). A document defining its own top-level `lib`
+`src/lib/lib.yaml` when present). A document defining its own top-level `lib`
 table takes precedence for `$lib.…` refs.
 
 ```yaml

@@ -1,4 +1,3 @@
-import { Die, isDieLiteral, isExpressionString, parseDie } from '../utils';
 import { BooleanNode } from './boolean';
 import { DieNode } from './die';
 import { ExpressionNode } from './expression';
@@ -12,13 +11,13 @@ import { UnexpectedNode } from './unexpected';
 
 /** Classify a raw document value into its node kind. */
 export function parse(raw: unknown): Node {
-  if (raw instanceof Die) return new DieNode(raw);
+  const die = DieNode.match(raw);
+  if (die) return die;
   if (raw === null || raw === undefined) return new NullNode(raw);
   if (typeof raw === 'boolean') return new BooleanNode(raw);
   if (typeof raw === 'number') return new NumberNode(raw);
   if (typeof raw === 'string') {
-    if (isDieLiteral(raw)) return new DieNode(parseDie(raw)!);
-    if (isExpressionString(raw)) return new ExpressionNode(raw);
+    if (ExpressionNode.matches(raw)) return new ExpressionNode(raw);
     return new StringNode(raw);
   }
   if (Array.isArray(raw)) return new ListNode(raw);

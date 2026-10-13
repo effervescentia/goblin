@@ -24,7 +24,8 @@ export const DIE_LITERAL = /^(\d*)d(\d+)$/;
 // NOTE: `[#$@]` below spells DOCUMENT + ACTOR + APP (`.` is matched
 // separately); keep in sync if sigils change.
 /** Sigil references (`.x`, `$.x`, `@.x`, `#.x`, `$lib.x`, bare sigils). Global: reset `lastIndex` around `.test`/`.match`. */
-export const SIGIL_REF = /([$]lib(\.[A-Za-z_][\w.]*)?|[#$@]\.[A-Za-z_][\w.]*|[#$@](?![\w.]|\.\w)|\.[A-Za-z_][\w.]*|\.(?![\w.]))/g;
+export const SIGIL_REF =
+  /([$]lib(\.[A-Za-z_][\w.]*)?|[#$@]\.[A-Za-z_][\w.]*|[#$@](?![\w.]|\.\w)|\.[A-Za-z_][\w.]*|\.(?![\w.]))/g;
 
 /** Inline dice inside larger expressions. */
 export const INLINE_DICE = /\b(\d*)d(\d+)\b/g;
@@ -88,7 +89,7 @@ export const VALUE_KEY = 'value';
 /** Filled value shown on an evaluated `:param` record (display only). */
 export const PARAM_VALUE_KEY = ':value';
 
-/** Printed function descriptor keys (see `serialize`). */
+/** Printed function descriptor keys (see `FunctionNode.serialize`). */
 export const PARAMS_KEY = ':params';
 export const SOURCE_KEY = ':source';
 export const DEPS_KEY = ':deps';

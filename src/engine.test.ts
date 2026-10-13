@@ -1,19 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { GoblinEngine } from './engine';
-import {
-  checkParamConstraints,
-  checkParamType,
-  collectParams,
-  Die,
-  detectDeps,
-  type EvalRoots,
-  isDieLiteral,
-  isExpressionString,
-  parseDie,
-  parseRef,
-  serialize,
-  tagFunction,
-} from './utils';
+import { Die, DieNode } from './nodes/die';
+import { ExpressionNode } from './nodes/expression';
+import { FunctionNode } from './nodes/function';
+import { RecordNode } from './nodes/record';
+import { serialize } from './nodes/serialize';
+import { type EvalRoots, parseRef } from './utils';
 
 function testEngine() {
   const engine = new GoblinEngine('.');
@@ -65,16 +57,16 @@ describe('parseRef', () => {
 
 describe('dice', () => {
   it('detects die literals', () => {
-    expect(isDieLiteral('d6')).toBe(true);
-    expect(isDieLiteral('2d6')).toBe(true);
-    expect(isDieLiteral('bonus_action')).toBe(false);
-    expect(isDieLiteral('1d20 + .base')).toBe(false);
+    expect(DieNode.isLiteral('d6')).toBe(true);
+    expect(DieNode.isLiteral('2d6')).toBe(true);
+    expect(DieNode.isLiteral('bonus_action')).toBe(false);
+    expect(DieNode.isLiteral('1d20 + .base')).toBe(false);
   });
 
   it('parses dice and preserves the label', () => {
-    expect(parseDie('1d6')).toEqual(new Die(1, 6, '1d6'));
-    expect(String(parseDie('d20'))).toBe('d20');
-    expect(parseDie('nope')).toBeNull();
+    expect(DieNode.parse('1d6')).toEqual(new Die(1, 6, '1d6'));
+    expect(String(DieNode.parse('d20'))).toBe('d20');
+    expect(DieNode.parse('nope')).toBeNull();
   });
 
   it('rolls within range', () => {
@@ -97,10 +89,10 @@ describe('dice', () => {
 
 describe('expressions', () => {
   it('detects expression strings', () => {
-    expect(isExpressionString('#.utils.ability_modifier(.base)')).toBe(true);
-    expect(isExpressionString('10 + $.abilities.dexterity.modifier')).toBe(true);
-    expect(isExpressionString('bonus_action')).toBe(false);
-    expect(isExpressionString('Player')).toBe(false);
+    expect(ExpressionNode.matches('#.utils.ability_modifier(.base)')).toBe(true);
+    expect(ExpressionNode.matches('10 + $.abilities.dexterity.modifier')).toBe(true);
+    expect(ExpressionNode.matches('bonus_action')).toBe(false);
+    expect(ExpressionNode.matches('Player')).toBe(false);
   });
 
   it('evaluates arithmetic and references', () => {
@@ -131,12 +123,13 @@ describe('expressions', () => {
     expect(() => engine.evalExpr('math.min(3, 5)', scope)).toThrow();
   });
 
-  it('merges yaml helpers into $lib over the natives', () => {
+  it('merges yaml helpers into $lib, natives winning on name clashes', () => {
     const engine = new GoblinEngine('.');
-    engine.mergeLib({ 'double(x)': 'x * 2' });
+    engine.mergeLib({ 'double(x)': 'x * 2', math: { 'floor(x)': '0', 'sign(x)': '1' } });
     const scope = { doc: {}, actor: {}, app: engine.appRoot, current: {}, path: [] };
     expect(engine.evalExpr('$lib.double(21)', scope)).toBe(42);
-    expect(engine.evalExpr('$lib.math.floor(2.9)', scope)).toBe(2);
+    expect(engine.evalExpr('$lib.math.sign(2.9)', scope)).toBe(1); // yaml extends the namespace
+    expect(engine.evalExpr('$lib.math.floor(2.9)', scope)).toBe(2); // native beats the yaml floor
   });
 
   it('throws on unresolvable references', () => {
@@ -319,26 +312,26 @@ describe('serialize', () => {
   });
 });
 
-describe('detectDeps', () => {
+describe('FunctionNode.detectDeps', () => {
   it('collects refs in order, deduplicated', () => {
-    expect(detectDeps('#.utils.ability_modifier(.base)')).toEqual(['#.utils.ability_modifier', '.base']);
-    expect(detectDeps('$.a + $.a + $.b')).toEqual(['$.a', '$.b']);
+    expect(FunctionNode.detectDeps('#.utils.ability_modifier(.base)')).toEqual(['#.utils.ability_modifier', '.base']);
+    expect(FunctionNode.detectDeps('$.a + $.a + $.b')).toEqual(['$.a', '$.b']);
   });
 
   it('ignores string literals, dice, and dot-less sigils normalized', () => {
-    expect(detectDeps("$tmpl('a.yaml')")).toEqual(['$.tmpl']);
-    expect(detectDeps('$math.max(3, 5)')).toEqual(['$.math.max']);
-    expect(detectDeps('1d20 + 2')).toEqual([]);
+    expect(FunctionNode.detectDeps("$tmpl('a.yaml')")).toEqual(['$.tmpl']);
+    expect(FunctionNode.detectDeps('$math.max(3, 5)')).toEqual(['$.math.max']);
+    expect(FunctionNode.detectDeps('1d20 + 2')).toEqual([]);
   });
 
   it('omits $lib refs', () => {
-    expect(detectDeps('$lib.math.floor(2.9)')).toEqual([]);
-    expect(detectDeps('$.lib.math.min(3, 5)')).toEqual([]);
-    expect(detectDeps('#.x + $lib.math.max(1, 2)')).toEqual(['#.x']);
+    expect(FunctionNode.detectDeps('$lib.math.floor(2.9)')).toEqual([]);
+    expect(FunctionNode.detectDeps('$.lib.math.min(3, 5)')).toEqual([]);
+    expect(FunctionNode.detectDeps('#.x + $lib.math.max(1, 2)')).toEqual(['#.x']);
   });
 
   it('trims whitespace from printed source', () => {
-    const fn = tagFunction(() => 1, { name: 'f', params: [], source: '  1d20 + 2\n', deps: [] });
+    const fn = FunctionNode.tag(() => 1, { name: 'f', params: [], source: '  1d20 + 2\n', deps: [] });
     expect(serialize(fn)).toEqual({ ':type': 'function', ':params': [], ':source': '1d20 + 2', ':deps': [] });
   });
 });
@@ -353,7 +346,7 @@ describe('parameters', () => {
   };
 
   it('collects missing params with paths, docs, and types', () => {
-    expect(collectParams(doc)).toEqual([
+    expect(RecordNode.collectParams(doc)).toEqual([
       { path: 'hero_name', doc: 'The hero name.', type: 'string' },
       { path: 'start_level', doc: 'Starting level.', type: 'integer' },
       { path: 'attack_die', type: 'die' },
@@ -362,10 +355,10 @@ describe('parameters', () => {
   });
 
   it('rejects unknown param types', () => {
-    expect(() => collectParams({ x: { ':param': true, ':type': 'spell' } })).toThrow(
+    expect(() => RecordNode.collectParams({ x: { ':param': true, ':type': 'spell' } })).toThrow(
       'unknown param type: spell (at x)',
     );
-    expect(() => checkParamType('spell', 'x', 'x')).toThrow('unknown param type');
+    expect(() => RecordNode.checkParamType('spell', 'x', 'x')).toThrow('unknown param type');
   });
 
   it('fills provided values at evaluate time, null when missing', () => {
@@ -411,7 +404,7 @@ describe('parameters', () => {
       retries: { ':param': true, ':type': 'integer', ':default': 3 },
       nick: { ':param': true },
     };
-    expect(collectParams(doc)).toEqual([{ path: 'nick' }]);
+    expect(RecordNode.collectParams(doc)).toEqual([{ path: 'nick' }]);
     const scope = (provided?: Record<string, unknown>): EvalRoots => ({
       doc,
       actor: doc,
@@ -544,7 +537,7 @@ describe('parameters', () => {
   it('validates array parameters', () => {
     const engine = new GoblinEngine('.');
     const doc = { tags: { ':doc': 'Tags.', ':param': true, ':type': 'array' } };
-    expect(collectParams(doc)).toEqual([{ path: 'tags', doc: 'Tags.', type: 'array' }]);
+    expect(RecordNode.collectParams(doc)).toEqual([{ path: 'tags', doc: 'Tags.', type: 'array' }]);
     const scope = (provided?: Record<string, unknown>): EvalRoots => ({
       doc,
       actor: doc,
@@ -633,13 +626,13 @@ describe('parameters', () => {
   });
 
   it('validates constraint declarations and default values', () => {
-    expect(() => checkParamConstraints({ ':options': 'nope' }, 'x', 'x')).toThrow(
+    expect(() => RecordNode.checkParamConstraints({ ':options': 'nope' }, 'x', 'x')).toThrow(
       'invalid :options for x: expected array, got string',
     );
-    expect(() => checkParamConstraints({ ':count': 'two' }, ['a'], 'x')).toThrow(
+    expect(() => RecordNode.checkParamConstraints({ ':count': 'two' }, ['a'], 'x')).toThrow(
       'invalid :count for x: expected non-negative integer, got string',
     );
-    expect(() => checkParamConstraints({ ':count': -1 }, ['a'], 'x')).toThrow(
+    expect(() => RecordNode.checkParamConstraints({ ':count': -1 }, ['a'], 'x')).toThrow(
       'invalid :count for x: expected non-negative integer, got number',
     );
     const engine = new GoblinEngine('.');
@@ -653,7 +646,7 @@ describe('parameters', () => {
 
   it('reports choice constraints in missing params', () => {
     expect(
-      collectParams({
+      RecordNode.collectParams({
         trained: { ':param': true, ':type': 'array', ':options': ['a', 'b'], ':count': 2, ':unique': true },
       }),
     ).toEqual([{ path: 'trained', type: 'array', options: ['a', 'b'], count: 2, unique: true }]);

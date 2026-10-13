@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parseArgs, parseParamValue, USAGE } from './cli';
-import { stripMetadata } from './utils';
+import { RecordNode } from './nodes/record';
 
 describe('parseArgs', () => {
   it('defaults to no entry and pretty output', () => {
@@ -156,10 +156,10 @@ describe('parseArgs', () => {
   });
 });
 
-describe('stripMetadata', () => {
+describe('RecordNode.stripMetadata', () => {
   it('drops :-prefixed and !validate keys recursively, keeping values', () => {
     expect(
-      stripMetadata({
+      RecordNode.stripMetadata({
         name: 'Aria',
         hit_points: { '!validate': ['.current >= 0'], current: 10, max: 10 },
         features: { second_wind: { ':doc': 'Regain.' } },
@@ -182,8 +182,8 @@ describe('stripMetadata', () => {
       xp: 6500,
       nick: null,
     });
-    expect(stripMetadata('d10')).toBe('d10');
-    expect(stripMetadata(null)).toBeNull();
+    expect(RecordNode.stripMetadata('d10')).toBe('d10');
+    expect(RecordNode.stripMetadata(null)).toBeNull();
   });
 });
 

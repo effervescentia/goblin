@@ -1,8 +1,26 @@
-import { FUNCTION_KEY } from '../constants';
+import {
+  DEPS_KEY,
+  DOTLESS_SIGIL,
+  FUNCTION_KEY,
+  PARAMS_KEY,
+  SIGIL_REF,
+  SOURCE_KEY,
+  STRING_LITERAL,
+  TYPE_KEY,
+} from '../constants';
 import type { GoblinEngine } from '../engine';
 import type { EvalRoots } from '../utils';
-import { detectDeps, isFunctionKey, tagFunction } from '../utils';
 import { Node } from './node';
+
+/** Metadata attached to engine-created function closures for printing. */
+export interface GoblinFunctionMeta {
+  name: string;
+  params: string[];
+  /** The raw body string from the document. */
+  source: string;
+  /** Sigil refs the body resolves, in order of first appearance. */
+  deps: string[];
+}
 
 /**
  * A `name()` / `name(params)` key with a string body. Evaluates to a tagged
@@ -26,9 +44,59 @@ export class FunctionNode extends Node<string> {
       .filter(Boolean);
   }
 
+  /** Function-definition key: `name()` / `name(p1, p2)`. */
+  static isKey(key: string): boolean {
+    return FUNCTION_KEY.test(key);
+  }
+
   static match(key: string, value: unknown, record: Record<string, unknown>): FunctionNode | null {
-    if (typeof value !== 'string' || !isFunctionKey(key)) return null;
+    if (typeof value !== 'string' || !FunctionNode.isKey(key)) return null;
     return new FunctionNode(key, value, record);
+  }
+
+  /**
+   * Detect a body's reference dependencies: sigil refs outside string
+   * literals, dot-less sigils normalized, deduplicated in order.
+   */
+  static detectDeps(body: string): string[] {
+    const code = body.replace(STRING_LITERAL, '').replace(DOTLESS_SIGIL, '$1.');
+    SIGIL_REF.lastIndex = 0;
+    const matches = code.match(SIGIL_REF) ?? [];
+    SIGIL_REF.lastIndex = 0;
+    // Omit $lib refs (stdlib is implicit).
+    return [...new Set(matches)].filter((m) => !m.startsWith('$lib') && !m.startsWith('$.lib'));
+  }
+
+  /** Tag a closure with its document metadata. Survives as `$goblin`. */
+  static tag(fn: (...args: unknown[]) => unknown, meta: GoblinFunctionMeta): (...args: unknown[]) => unknown {
+    (fn as unknown as Record<string, unknown>).$goblin = meta;
+    return fn;
+  }
+
+  /** Read back `$goblin` metadata, if present. */
+  static metaOf(value: unknown): GoblinFunctionMeta | undefined {
+    if (typeof value !== 'function') return undefined;
+    const meta = (value as unknown as Record<string, unknown>).$goblin;
+    return typeof meta === 'object' && meta !== null ? (meta as GoblinFunctionMeta) : undefined;
+  }
+
+  /**
+   * Printed form: the `{ :type, :params, :source, :deps }` descriptor read
+   * back from the closure's `$goblin` tag. Untagged callables (engine natives
+   * like `$lib.math.floor`) print as `[fn name()]`.
+   */
+  static serialize(fn: unknown): unknown {
+    const meta = FunctionNode.metaOf(fn);
+    if (meta) {
+      return {
+        [TYPE_KEY]: 'function',
+        [PARAMS_KEY]: meta.params,
+        [SOURCE_KEY]: meta.source.trim(),
+        [DEPS_KEY]: meta.deps,
+      };
+    }
+    const name = (fn as { name?: unknown }).name;
+    return `[fn ${typeof name === 'string' && name ? name : 'anonymous'}()]`;
   }
 
   override evaluate(engine: GoblinEngine, scope: EvalRoots): unknown {
@@ -37,6 +105,11 @@ export class FunctionNode extends Node<string> {
       const callParams = Object.fromEntries(this.params.map((p, i) => [p, args[i]]));
       return engine.evalExpr(this.body, { ...scope, current: this.record, params: callParams, path: fnPath });
     };
-    return tagFunction(fn, { name: this.name, params: this.params, source: this.body, deps: detectDeps(this.body) });
+    return FunctionNode.tag(fn, {
+      name: this.name,
+      params: this.params,
+      source: this.body,
+      deps: FunctionNode.detectDeps(this.body),
+    });
   }
 }

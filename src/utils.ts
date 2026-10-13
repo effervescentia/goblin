@@ -2,40 +2,28 @@
  * Goblin — pure utilities for `.yaml` documents.
  *
  * Engine-independent helpers shared by `engine.ts`, `cli.ts`, and tests:
- * dice, reference parsing, expression compilation, path access, and the
- * JSON-friendly serializer. Nothing here may import from `engine.ts`.
+ * reference parsing, expression compilation, and path access. Node-specific
+ * helpers live on their node class in `./nodes` (dice on `DieNode`, `:param`
+ * records and metadata stripping on `RecordNode`, printing on each node's
+ * `serialize`). Nothing here may import from `engine.ts`.
  */
 
 import {
   ACTOR,
   APP,
   ASSIGN_OP,
-  COUNT_KEY,
   CURRENT,
-  DEFAULT_KEY,
-  DEPS_KEY,
-  DIE_LITERAL,
-  DOC_KEY,
   DOCUMENT,
   DOTLESS_SIGIL,
   FUNCTION_KEY,
-  IF_KEY,
   INLINE_DICE,
   META_PREFIX,
-  OPTIONS_KEY,
-  PARAM_KEY,
-  PARAM_VALUE_KEY,
-  PARAMS_KEY,
   SIGIL_REF,
   type Sigil,
-  SOURCE_KEY,
   STRING_LITERAL,
-  THEN_KEY,
-  TYPE_KEY,
-  UNIQUE_KEY,
   VALIDATE_KEY,
-  VALUE_KEY,
 } from './constants';
+import { Die } from './nodes/die';
 
 export interface EvalRoots {
   /** `$` — top of the current document. */
@@ -54,55 +42,6 @@ export interface EvalRoots {
   provided?: Record<string, unknown>;
 }
 
-export class Die {
-  constructor(
-    public readonly count: number,
-    public readonly sides: number,
-    private readonly label?: string,
-  ) {}
-
-  roll(): number {
-    let total = 0;
-    for (let i = 0; i < this.count; i++) {
-      total += 1 + Math.floor(Math.random() * this.sides);
-    }
-    return total;
-  }
-
-  /** Arithmetic with a die rolls it (`hit_points + hit_die`). */
-  valueOf(): number {
-    return this.roll();
-  }
-
-  [Symbol.toPrimitive](hint: string): string | number {
-    return hint === 'string' ? this.toString() : this.roll();
-  }
-
-  toString(): string {
-    return this.label ?? `${this.count > 1 ? this.count : ''}d${this.sides}`;
-  }
-}
-
-export const MATH_LIB: Record<string, (...args: number[]) => number> = {
-  floor: (n: number) => Math.floor(n),
-  ceil: (n: number) => Math.ceil(n),
-  round: (n: number) => Math.round(n),
-  abs: (n: number) => Math.abs(n),
-  min: (...ns: number[]) => Math.min(...ns),
-  max: (...ns: number[]) => Math.max(...ns),
-};
-
-export function isDieLiteral(s: string): boolean {
-  return DIE_LITERAL.test(s.trim());
-}
-
-export function parseDie(s: string): Die | null {
-  const m = s.trim().match(DIE_LITERAL);
-  if (!m) return null;
-  const count = m[1] ? Number(m[1]) : 1;
-  return new Die(count, Number(m[2]), s.trim());
-}
-
 /** Any `:`-prefixed key (`:doc`, …) is metadata: never evaluated. */
 export function isMetaKey(key: string): boolean {
   return key.startsWith(META_PREFIX);
@@ -111,10 +50,6 @@ export function isMetaKey(key: string): boolean {
 /** `!validate` / `'!validate'` predicate list. */
 export function isValidateKey(key: string): boolean {
   return key === VALIDATE_KEY;
-}
-
-export function isFunctionKey(key: string): boolean {
-  return FUNCTION_KEY.test(key);
 }
 
 /** Quoted or bare path patch, e.g. `@.features`, `#.hit_points.value`. */
@@ -126,12 +61,6 @@ export function isPathKey(key: string): boolean {
 /** Bare sigil (`$`, `@`, `#`, `.`) — a type annotation, not data. */
 export function isBareSigil(key: string): boolean {
   return key.length === 1 && (key === CURRENT || key === DOCUMENT || key === ACTOR || key === APP);
-}
-
-export function isExpressionString(s: string): boolean {
-  if (isDieLiteral(s)) return true;
-  SIGIL_REF.lastIndex = 0;
-  return SIGIL_REF.test(s);
 }
 
 export interface ParsedRef {
@@ -334,274 +263,4 @@ export function parentOf(base: unknown, path: string[]): unknown {
 
 export function stripPlus(key: string): string {
   return key.startsWith('+') ? key.slice(1) : key;
-}
-
-export interface MissingParam {
-  /** Dotted path of the node needing a value (`:param` alias when given). */
-  path: string;
-  /** The node's `:doc`, when attached. */
-  doc?: string;
-  /** The node's declared `:type`, when given. */
-  type?: string;
-  /** The node's allowed values (`:options`), when declared. */
-  options?: unknown[];
-  /** The node's required item count (`:count`), when declared. */
-  count?: number;
-  /** Present when the node requires distinct array items (`:unique: true`). */
-  unique?: boolean;
-}
-
-/** A record declaring a user-provided value (`:param` marker present). */
-export function isParamRecord(node: unknown): node is Record<string, unknown> {
-  return typeof node === 'object' && node !== null && PARAM_KEY in node;
-}
-
-const PARAM_TYPES = ['string', 'number', 'integer', 'boolean', 'die', 'array', 'record'] as const;
-
-function describeValue(value: unknown): string {
-  if (value === null) return 'null';
-  if (value instanceof Die) return 'die';
-  if (Array.isArray(value)) return 'array';
-  return typeof value;
-}
-
-/** Throw on undeclared type names. */
-export function assertKnownParamType(type: string, path: string): void {
-  if (!(PARAM_TYPES as readonly string[]).includes(type)) {
-    throw new Error(`unknown param type: ${type} (at ${path})`);
-  }
-}
-
-/** Throw on unknown types or provided values of the wrong type. */
-export function checkParamType(type: string, value: unknown, path: string): void {
-  assertKnownParamType(type, path);
-  const ok =
-    type === 'string'
-      ? typeof value === 'string'
-      : type === 'number'
-        ? typeof value === 'number' && !Number.isNaN(value)
-        : type === 'integer'
-          ? typeof value === 'number' && Number.isInteger(value)
-          : type === 'boolean'
-            ? typeof value === 'boolean'
-            : type === 'die'
-              ? value instanceof Die
-              : type === 'array'
-                ? Array.isArray(value)
-                : typeof value === 'object' && value !== null && !Array.isArray(value);
-  if (!ok) throw new Error(`param type mismatch: ${path} expected ${type}, got ${describeValue(value)}`);
-}
-
-/** Render a value for `param options mismatch` messages (JSON, falling back to String). */
-function formatOption(value: unknown): string {
-  try {
-    const rendered = JSON.stringify(value);
-    return typeof rendered === 'string' ? rendered : String(value);
-  } catch {
-    return String(value);
-  }
-}
-
-/**
- * Enforce a `:param` record's choice constraints against a filled value.
- * `:options` restricts membership (scalar must equal one entry; every array
- * item must equal one); `:unique: true` requires distinct array items;
- * `:count` requires an exact array length. Malformed declarations throw
- * even when the value is absent; `:unique`/`:count` ignore non-array values.
- */
-export function checkParamConstraints(record: Record<string, unknown>, value: unknown, path: string): void {
-  const options = record[OPTIONS_KEY];
-  if (options !== undefined && !Array.isArray(options)) {
-    throw new Error(`invalid :options for ${path}: expected array, got ${describeValue(options)}`);
-  }
-  const count = record[COUNT_KEY];
-  if (count !== undefined && (typeof count !== 'number' || !Number.isInteger(count) || count < 0)) {
-    throw new Error(`invalid :count for ${path}: expected non-negative integer, got ${describeValue(count)}`);
-  }
-  if (Array.isArray(options)) {
-    const list = `[${options.map(formatOption).join(', ')}]`;
-    if (Array.isArray(value)) {
-      value.forEach((item, index) => {
-        if (!options.includes(item)) {
-          throw new Error(
-            `param options mismatch: ${path}[${index}] expected one of ${list}, got ${formatOption(item)}`,
-          );
-        }
-      });
-    } else if (!options.includes(value)) {
-      throw new Error(`param options mismatch: ${path} expected one of ${list}, got ${formatOption(value)}`);
-    }
-  }
-  if (Array.isArray(value) && record[UNIQUE_KEY] === true) {
-    const seen = new Set<unknown>();
-    for (const item of value) {
-      if (seen.has(item)) {
-        throw new Error(`param uniqueness mismatch: ${path} has duplicate item ${formatOption(item)}`);
-      }
-      seen.add(item);
-    }
-  }
-  if (typeof count === 'number' && Array.isArray(value) && value.length !== count) {
-    throw new Error(`param count mismatch: ${path} expected ${count} items, got ${value.length}`);
-  }
-}
-
-/**
- * Structural walk collecting every `:param` record as `{ path, doc?, type? }`
- * per node needing a user-provided value. Patch instructions (`@.…` keys) are
- * not descended — params belong in actor-defining (or merged) trees.
- */
-function eachParamRecord(raw: unknown, visit: (record: Record<string, unknown>, key: string) => void): void {
-  const visitNode = (node: unknown, path: string[]) => {
-    if (Array.isArray(node)) {
-      node.forEach((item, index) => visitNode(item, [...path, String(index)]));
-      return;
-    }
-    if (!node || typeof node !== 'object') return;
-    const record = node as Record<string, unknown>;
-    const marker = record[PARAM_KEY];
-    if (marker) visit(record, typeof marker === 'string' && marker ? marker : path.join('.'));
-    for (const [key, value] of Object.entries(record)) {
-      if (
-        key === PARAM_KEY ||
-        key === DOC_KEY ||
-        key === TYPE_KEY ||
-        key === VALIDATE_KEY ||
-        key === IF_KEY ||
-        key === THEN_KEY
-      )
-        continue;
-      if (isBareSigil(key) || key === DOCUMENT || isPathKey(key)) continue;
-      const fnMatch = key.match(FUNCTION_KEY);
-      visitNode(value, [...path, fnMatch ? fnMatch[1]! : stripPlus(key)]);
-    }
-  };
-  visitNode(raw, []);
-}
-
-export function collectParams(raw: unknown): MissingParam[] {
-  const missing: MissingParam[] = [];
-  eachParamRecord(raw, (record, key) => {
-    const def = record[DEFAULT_KEY];
-    if (def !== undefined && def !== null) return; // satisfied by default
-    const doc = record[DOC_KEY];
-    const entry: MissingParam = typeof doc === 'string' && doc ? { path: key, doc } : { path: key };
-    const type = record[TYPE_KEY];
-    if (typeof type === 'string' && type) {
-      assertKnownParamType(type, key);
-      entry.type = type;
-    }
-    const options = record[OPTIONS_KEY];
-    if (Array.isArray(options)) entry.options = [...options];
-    const count = record[COUNT_KEY];
-    if (typeof count === 'number') entry.count = count;
-    if (record[UNIQUE_KEY] === true) entry.unique = true;
-    missing.push(entry);
-  });
-  return missing;
-}
-
-/**
- * Fill raw `:param` records with `value` slots (provided, else `:default`,
- * else `null`) so `<path>.value` references resolve like any other node.
- * Returns true when anything was written. Idempotent.
- */
-export function materializeParams(raw: unknown, provided: Record<string, unknown> = {}): boolean {
-  let wrote = false;
-  eachParamRecord(raw, (record, key) => {
-    const def = record[DEFAULT_KEY];
-    const hasDefault = def !== undefined && def !== null;
-    record[VALUE_KEY] = provided[key] !== undefined ? provided[key] : hasDefault ? def : null;
-    wrote = true;
-  });
-  return wrote;
-}
-
-/** Metadata attached to engine-created function closures for printing. */
-export interface GoblinFunctionMeta {
-  name: string;
-  params: string[];
-  /** The raw body string from the document. */
-  source: string;
-  /** Sigil refs the body resolves, in order of first appearance. */
-  deps: string[];
-}
-
-/** Tag a closure with its document metadata. Survives as `$goblin`. */
-export function tagFunction(
-  fn: (...args: unknown[]) => unknown,
-  meta: GoblinFunctionMeta,
-): (...args: unknown[]) => unknown {
-  (fn as unknown as Record<string, unknown>).$goblin = meta;
-  return fn;
-}
-
-/** Read back `$goblin` metadata, if present. */
-export function functionMeta(value: unknown): GoblinFunctionMeta | undefined {
-  if (typeof value !== 'function') return undefined;
-  const meta = (value as unknown as Record<string, unknown>).$goblin;
-  return typeof meta === 'object' && meta !== null ? (meta as GoblinFunctionMeta) : undefined;
-}
-
-/**
- * Detect a body's reference dependencies: sigil refs outside string
- * literals, dot-less sigils normalized, deduplicated in order.
- */
-export function detectDeps(body: string): string[] {
-  const code = body.replace(STRING_LITERAL, '').replace(DOTLESS_SIGIL, '$1.');
-  SIGIL_REF.lastIndex = 0;
-  const matches = code.match(SIGIL_REF) ?? [];
-  SIGIL_REF.lastIndex = 0;
-  // Omit $lib refs (stdlib is implicit).
-  return [...new Set(matches)].filter(
-    (m) => !m.startsWith('$lib') && !m.startsWith('$.lib'),
-  );
-}
-/** JSON-friendly serializer: Dice → `"d6"`, functions → `{ :type, :params, :source, :deps }`. */
-export function serialize(value: unknown): unknown {
-  if (value instanceof Die) return value.toString();
-  if (typeof value === 'function') {
-    const meta = functionMeta(value);
-    if (meta)
-      return {
-        [TYPE_KEY]: 'function',
-        [PARAMS_KEY]: meta.params,
-        [SOURCE_KEY]: meta.source.trim(),
-        [DEPS_KEY]: meta.deps,
-      };
-    const name = (value as { name?: unknown }).name;
-    return `[fn ${typeof name === 'string' && name ? name : 'anonymous'}()]`;
-  }
-  if (Array.isArray(value)) return value.map(serialize);
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, serialize(v)]));
-  }
-  return value;
-}
-
-/**
- * Recursively drop metadata keys (`:…` and `!validate`) from resolved
- * output. `:param` records collapse to their `:value`; serialized functions
- * (`{ :type: 'function', :source, … }`) print as their source expression;
- * other records left empty (e.g. `{ :doc }`) collapse to `null`. Arrays are
- * mapped item-wise; scalars pass through.
- */
-export function stripMetadata(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stripMetadata);
-  if (value && typeof value === 'object') {
-    const rec = value as Record<string, unknown>;
-    if (isParamRecord(rec)) {
-      return stripMetadata(rec[PARAM_VALUE_KEY] ?? null);
-    }
-    if (rec[TYPE_KEY] === 'function' && typeof rec[SOURCE_KEY] === 'string') {
-      return rec[SOURCE_KEY];
-    }
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(rec)) {
-      if (isMetaKey(k) || isValidateKey(k)) continue;
-      out[k] = stripMetadata(v);
-    }
-    return Object.keys(out).length === 0 ? null : out;
-  }
-  return value;
 }

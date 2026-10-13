@@ -29,34 +29,28 @@ import {
   VALIDATE_KEY,
   VALUE_KEY,
 } from './constants';
+import { withNatives } from './lib';
+import { Die, DieNode } from './nodes/die';
+import { ExpressionNode } from './nodes/expression';
 import { FunctionNode } from './nodes/function';
 import { parse } from './nodes/parse';
+import { type MissingParam, RecordNode } from './nodes/record';
+import { serialize } from './nodes/serialize';
 import {
-  checkParamConstraints,
-  checkParamType,
-  collectParams,
   compileBody,
-  Die,
   deepClone,
   type EvalRoots,
   getChild,
   getChildEntry,
   getPath,
   isBareSigil,
-  isExpressionString,
   isMetaKey,
-  isParamRecord,
   isPathKey,
   isValidateKey,
   joinPath,
-  MATH_LIB,
-  type MissingParam,
-  materializeParams,
   parentOf,
-  parseDie,
   parseRef,
   type ResolveHooks,
-  serialize,
   setPath,
   stripPlus,
 } from './utils';
@@ -66,10 +60,8 @@ export class GoblinEngine {
   readonly docs = new Map<string, unknown>();
   /** `#` — shared global namespace (cross-doc values). */
   readonly appRoot: Record<string, unknown> = {};
-  /** `$lib` — standard library: native math bound in code, yaml helpers merged on load. */
-  readonly library: Record<string, unknown> = {
-    math: { ...MATH_LIB },
-  };
+  /** `$lib` — standard library: natives bound in code, yaml helpers merged on load. */
+  readonly library: Record<string, unknown> = withNatives();
   /** Resolved-value cache + cycle guard for lazy references. */
   private readonly cache = new Map<string, unknown>();
   private readonly resolving: string[] = [];
@@ -89,17 +81,15 @@ export class GoblinEngine {
     return data;
   }
 
-  /** Merge a parsed library document over the native defaults. */
+  /** Merge a parsed library document under the native defaults. */
   mergeLib(data: unknown): void {
     if (!data || typeof data !== 'object' || Array.isArray(data)) return;
-    const record = data as Record<string, unknown>;
-    Object.assign(this.library, record);
-    this.library.math = { ...((record.math as Record<string, unknown> | undefined) ?? {}), ...MATH_LIB };
+    Object.assign(this.library, withNatives(data as Record<string, unknown>));
   }
 
   /**
-   * Implicitly load the stdlib document living next to the engine module
-   * (`src/lib.yaml`). Missing files are normal (tests seed documents
+   * Implicitly load the stdlib document shipped with the engine
+   * (`src/lib/lib.yaml`). Missing files are normal (tests seed documents
    * directly) — the in-code natives stand alone.
    */
   private async ensureLib(): Promise<void> {
@@ -107,7 +97,7 @@ export class GoblinEngine {
     this.libLoaded = true;
     try {
       const { YAML } = await import('bun');
-      const text = await Bun.file(new URL('./lib.yaml', import.meta.url)).text();
+      const text = await Bun.file(new URL('./lib/lib.yaml', import.meta.url)).text();
       this.mergeLib(YAML.parse(text));
     } catch {
       /* no lib file — natives stand alone */
@@ -195,7 +185,11 @@ export class GoblinEngine {
     // `$lib.…` addresses the standard library (only when written as $lib, not $.lib),
     // unless the base document defines its own `lib` table (explicit bindings win).
     const isLibShortcut = ref.startsWith('$lib') && !ref.startsWith('$.lib');
-    if (isLibShortcut && segments[0] === 'lib' && (base == null || typeof base !== 'object' || getChild(base, 'lib') === undefined)) {
+    if (
+      isLibShortcut &&
+      segments[0] === 'lib' &&
+      (base == null || typeof base !== 'object' || getChild(base, 'lib') === undefined)
+    ) {
       base = this.library;
       segments = segments.slice(1);
     }
@@ -251,7 +245,7 @@ export class GoblinEngine {
    * neither). Anything else passes through untouched.
    */
   private derefParam(rawTarget: unknown): unknown {
-    if (isParamRecord(rawTarget)) {
+    if (RecordNode.isParam(rawTarget)) {
       const slot = rawTarget[VALUE_KEY];
       return slot !== undefined ? slot : null;
     }
@@ -274,10 +268,10 @@ export class GoblinEngine {
     let parent: unknown = scope.current;
     let entry: { parent: Record<string, unknown>; key: string; value: unknown } | null = null;
     for (const seg of path) {
-      if (typeof node === 'string' && node !== scope.current && isExpressionString(node)) {
+      if (typeof node === 'string' && node !== scope.current && ExpressionNode.matches(node)) {
         node = this.evaluate(node, { ...scope, current: parent });
       }
-      if (seg === VALUE_KEY && isParamRecord(node)) return null;
+      if (seg === VALUE_KEY && RecordNode.isParam(node)) return null;
       entry = getChildEntry(node, seg);
       if (entry === null) return null;
       parent = node;
@@ -306,7 +300,7 @@ export class GoblinEngine {
 
   evalExpr(expr: string, scope: EvalRoots): unknown {
     const trimmed = expr.trim();
-    const die = parseDie(trimmed);
+    const die = DieNode.parse(trimmed);
     if (die && trimmed.match(DIE_LITERAL)) {
       // Standalone dice literal — return the spec, don't roll.
       if (trimmed === die.toString() || trimmed === `1d${die.sides}`.replace(/^1d/, 'd')) return die;
@@ -333,7 +327,7 @@ export class GoblinEngine {
    */
   evaluate(raw: unknown, scope: EvalRoots): unknown {
     if (scope.path === undefined) {
-      if (materializeParams(raw, scope.provided)) this.cache.clear();
+      if (RecordNode.materializeParams(raw, scope.provided)) this.cache.clear();
       return this.evaluate(raw, { ...scope, path: [] });
     }
     return parse(raw).evaluate(this, scope);
@@ -343,7 +337,7 @@ export class GoblinEngine {
   evaluateDoc(file: string, provided?: Record<string, unknown>): unknown {
     const raw = this.docs.get(file);
     if (raw === undefined) throw new Error(`document not loaded: ${file}`);
-    if (materializeParams(raw, provided)) this.cache.clear();
+    if (RecordNode.materializeParams(raw, provided)) this.cache.clear();
     const scope: EvalRoots = {
       doc: raw,
       actor: raw,
@@ -362,7 +356,7 @@ export class GoblinEngine {
   missingParams(file: string): MissingParam[] {
     const raw = this.docs.get(file);
     if (raw === undefined) throw new Error(`document not loaded: ${file}`);
-    return collectParams(raw);
+    return RecordNode.collectParams(raw);
   }
 
   /**
@@ -383,8 +377,8 @@ export class GoblinEngine {
       if (existing !== null && typeof existing === 'object' && PARAM_KEY in (existing as Record<string, unknown>)) {
         const record = existing as Record<string, unknown>;
         const type = record[TYPE_KEY];
-        if (typeof type === 'string' && type) checkParamType(type, value, path.join('.'));
-        checkParamConstraints(record, value, path.join('.'));
+        if (typeof type === 'string' && type) RecordNode.checkParamType(type, value, path.join('.'));
+        RecordNode.checkParamConstraints(record, value, path.join('.'));
       }
       setPath(base as Record<string, unknown>, path, deepClone(value));
     }
@@ -417,7 +411,7 @@ export class GoblinEngine {
     overrides: Record<string, unknown> = {},
   ): { data: unknown } | { query: MissingParam[] } {
     this.applyOverrides(actorRaw, overrides);
-    const outstanding = collectParams(actorRaw).filter((param) => provided[param.path] === undefined);
+    const outstanding = RecordNode.collectParams(actorRaw).filter((param) => provided[param.path] === undefined);
     if (outstanding.length > 0) return { query: outstanding };
     const scope: EvalRoots = { doc: actorRaw, actor: actorRaw, app: this.appRoot, current: actorRaw, provided };
     return { data: serialize(this.evaluate(actorRaw, scope)) };
