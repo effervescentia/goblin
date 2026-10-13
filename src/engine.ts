@@ -15,6 +15,8 @@
  */
 
 import {
+  checkParamType,
+  collectParams,
   compileBody,
   DIE_LITERAL,
   Die,
@@ -29,10 +31,12 @@ import {
   isPathKey,
   isValidateKey,
   MATH_LIB,
+  type MissingParam,
   parentOf,
   parseDie,
   parseRef,
   type ResolveHooks,
+  serialize,
   setPath,
   stripPlus,
   walkRaw,
@@ -199,7 +203,8 @@ export class GoblinEngine {
 
   /**
    * Recursively evaluate a raw subtree. `scope.current` is the nearest
-   * enclosing record so `.sibling` resolves correctly.
+   * enclosing record so `.sibling` resolves correctly; `scope.path` tracks
+   * its dotted path so `:param` nodes can look up user-provided values.
    */
   evaluate(raw: unknown, scope: EvalRoots): unknown {
     if (typeof raw === 'string') {
@@ -207,9 +212,11 @@ export class GoblinEngine {
     }
     if (typeof raw !== 'object' || raw === null || raw instanceof Die) return raw;
     if (Array.isArray(raw)) {
-      return raw.map((item) => this.evaluate(item, scope));
+      const base = scope.path ?? [];
+      return raw.map((item, index) => this.evaluate(item, { ...scope, path: [...base, String(index)] }));
     }
     const record = raw as Record<string, unknown>;
+    const base = scope.path ?? [];
     const out: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(record)) {
       if (isBareSigil(key) || key === '$') continue; // `$: Player` type tag
@@ -232,24 +239,38 @@ export class GoblinEngine {
           .filter(Boolean);
         const body = value;
         const name = fnMatch[1]!;
+        const fnPath = [...base, name];
         out[name] = (...args: unknown[]) => {
           const callParams = Object.fromEntries(params.map((p, i) => [p, args[i]]));
-          return this.evalExpr(body, { ...scope, current: record, params: callParams });
+          return this.evalExpr(body, { ...scope, current: record, params: callParams, path: fnPath });
         };
         continue;
       }
       if (key.startsWith('+')) {
-        out[key.slice(1)] = this.evaluate(value, { ...scope, current: record });
+        out[key.slice(1)] = this.evaluate(value, { ...scope, current: record, path: [...base, key.slice(1)] });
         continue;
       }
       if (isPathKey(key)) continue; // patch instruction — handled by apply()
-      out[key] = this.evaluate(value, { ...scope, current: record });
+      out[key] = this.evaluate(value, { ...scope, current: record, path: [...base, key] });
+    }
+    if (record[':param']) {
+      const marker = record[':param'];
+      const paramKey = typeof marker === 'string' && marker ? marker : base.join('.');
+      const provided = scope.provided?.[paramKey];
+      if (provided === undefined) {
+        out['value'] = null;
+      } else {
+        const filled = this.evaluate(provided, scope);
+        const type = record[':type'];
+        if (typeof type === 'string' && type) checkParamType(type, filled, paramKey);
+        out['value'] = filled;
+      }
     }
     return out;
   }
 
   /** Evaluate a whole loaded document as an actor (`$` and `@` coincide). */
-  evaluateDoc(file: string): unknown {
+  evaluateDoc(file: string, provided?: Record<string, unknown>): unknown {
     const raw = this.docs.get(file);
     if (raw === undefined) throw new Error(`document not loaded: ${file}`);
     const scope: EvalRoots = {
@@ -257,8 +278,33 @@ export class GoblinEngine {
       actor: raw,
       app: this.appRoot,
       current: raw,
+      path: [],
+      provided,
     };
     return this.evaluate(raw, scope);
+  }
+
+  /**
+   * Report every `:param` node in a loaded document as `[{ path, doc? }]`
+   * — paths needing user-provided values plus each node's attached `:doc`.
+   */
+  missingParams(file: string): MissingParam[] {
+    const raw = this.docs.get(file);
+    if (raw === undefined) throw new Error(`document not loaded: ${file}`);
+    return collectParams(raw);
+  }
+
+  /**
+   * Resolve a document against user-provided values (keyed by dotted path
+   * or `:param` alias). Satisfied documents return `{ data }` with the
+   * serialized result; otherwise `{ query }` holds only the outstanding
+   * params. Provided values of the wrong `:type` still throw.
+   */
+  resolve(file: string, provided: Record<string, unknown> = {}): { data: unknown } | { query: MissingParam[] } {
+    const missing = this.missingParams(file);
+    const outstanding = missing.filter((param) => provided[param.path] === undefined);
+    if (outstanding.length > 0) return { query: outstanding };
+    return { data: serialize(this.evaluateDoc(file, provided)) };
   }
 
   // -- patches (class files, levels, conditions) ----------------------------

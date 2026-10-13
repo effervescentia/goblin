@@ -12,8 +12,8 @@ const files = readdirSync(join(root, 'examples'))
   .filter((f) => f.endsWith('.yaml'))
   .sort();
 
-function cli(entry: string): unknown {
-  const out = execFileSync('bun', ['src/cli.ts', entry, '--compact'], {
+function cli(entry: string, ...extra: string[]): unknown {
+  const out = execFileSync('bun', ['src/cli.ts', entry, '--compact', ...extra], {
     cwd: root,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -26,6 +26,25 @@ describe('examples', () => {
     const state = cli(`examples/${file}`);
     expect(typeof state).toBe('object');
     expect(state).not.toBeNull();
+  });
+
+  it('08-parameters.yaml returns a query until satisfied, then data', () => {
+    const query = cli('examples/08-parameters.yaml') as {
+      query: Array<{ path: string }>;
+    };
+    expect(query.query.map((param) => param.path).sort()).toEqual(['details.title', 'hero_name', 'starting_level']);
+
+    const data = cli(
+      'examples/08-parameters.yaml',
+      '--param',
+      'hero_name=Aria',
+      '--param',
+      'starting_level=3',
+      '--param',
+      'details.title=Kid',
+    ) as { data: Record<string, { value: unknown }> };
+    expect(data.data.hero_name?.value).toBe('Aria');
+    expect(data.data.level?.value).toBe(3);
   });
 
   it('applies 07-class.yaml to 07-actor.yaml with level gating', () => {

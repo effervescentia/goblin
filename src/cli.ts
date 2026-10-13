@@ -12,32 +12,51 @@
  * with a non-zero exit code.
  */
 import { GoblinEngine } from './engine';
-import { serialize } from './utils';
 
-export const USAGE = `goblin [entry.yaml] [--compact] [--help]
+export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--help]
 
-Resolves a goblin document and prints the application state as JSON.
+Resolves a goblin document and prints the result as JSON: either
+{ "data": … } when all :param values are satisfied, or
+{ "query": […] } listing the outstanding parameters.
 
 Arguments:
   entry.yaml    Entry document (default: main from .goblin.yaml).
                 If it contains a directory, $.tmpl('…') resolves relative to it.
   --compact     Single-line JSON output (default: pretty-printed).
+  --param       Provide a :param value (repeatable). Values parse as JSON,
+                falling back to strings: --param level=3 --param name=Aria
   --help, -h    Show this help.`;
 
 export interface CliArgs {
   entry?: string;
   compact: boolean;
   help: boolean;
+  params: Record<string, unknown>;
+}
+
+/** Parse a --param value as JSON, falling back to a plain string. */
+export function parseParamValue(raw: string): unknown {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
 }
 
 /** Pure argv parsing (excludes node/bun binary and script name). */
 export function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { compact: false, help: false };
-  for (const arg of argv) {
+  const args: CliArgs = { compact: false, help: false, params: {} };
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]!;
     if (arg === '--compact') {
       args.compact = true;
     } else if (arg === '--help' || arg === '-h') {
       args.help = true;
+    } else if (arg === '--param') {
+      const pair = argv[++i];
+      const eq = pair?.indexOf('=') ?? -1;
+      if (pair === undefined || eq <= 0) throw new Error(`--param expects key=value, got: ${pair ?? '(nothing)'}`);
+      args.params[pair.slice(0, eq)] = parseParamValue(pair.slice(eq + 1));
     } else if (!arg.startsWith('-') && args.entry === undefined) {
       args.entry = arg;
     } else {
@@ -47,7 +66,11 @@ export function parseArgs(argv: string[]): CliArgs {
   return args;
 }
 
-export async function resolveAppState(cwd: string, entry?: string): Promise<unknown> {
+export async function resolveAppState(
+  cwd: string,
+  entry?: string,
+  provided: Record<string, unknown> = {},
+): Promise<ReturnType<GoblinEngine['resolve']>> {
   // Bun-only: the CLI entry point always runs under Bun (or compiled).
   const { YAML } = await import('bun');
   let root = cwd;
@@ -68,7 +91,7 @@ export async function resolveAppState(cwd: string, entry?: string): Promise<unkn
   const engine = new GoblinEngine(root);
   await preloadTemplates(engine, root, main);
   await engine.loadFile(main);
-  return serialize(engine.evaluateDoc(main));
+  return engine.resolve(main, provided);
 }
 
 /**
@@ -108,7 +131,7 @@ if (import.meta.main) {
       process.stdout.write(`${USAGE}\n`);
       process.exit(0);
     }
-    const state = await resolveAppState(process.cwd(), args.entry);
+    const state = await resolveAppState(process.cwd(), args.entry, args.params);
     process.stdout.write(`${JSON.stringify(state, null, args.compact ? 0 : 2)}\n`);
   } catch (err) {
     console.error(err instanceof Error ? err.message : err);

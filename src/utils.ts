@@ -17,6 +17,10 @@ export interface EvalRoots {
   current: unknown;
   /** Function call arguments, e.g. `x` in `ability_modifier(x)`. */
   params?: Record<string, unknown>;
+  /** Dotted path of `current` in the evaluated output (drives `:param` lookup). */
+  path?: string[];
+  /** User-provided values for `:param` nodes, keyed by dotted path or alias. */
+  provided?: Record<string, unknown>;
 }
 
 export class Die {
@@ -275,6 +279,88 @@ export function parentOf(base: unknown, path: string[]): unknown {
 
 export function stripPlus(key: string): string {
   return key.startsWith('+') ? key.slice(1) : key;
+}
+
+export interface MissingParam {
+  /** Dotted path of the node needing a value (`:param` alias when given). */
+  path: string;
+  /** The node's `:doc`, when attached. */
+  doc?: string;
+  /** The node's declared `:type`, when given. */
+  type?: string;
+}
+
+const PARAM_TYPES = ['string', 'number', 'integer', 'boolean', 'die', 'array', 'record'] as const;
+
+function describeValue(value: unknown): string {
+  if (value === null) return 'null';
+  if (value instanceof Die) return 'die';
+  if (Array.isArray(value)) return 'array';
+  return typeof value;
+}
+
+/** Throw on undeclared type names. */
+export function assertKnownParamType(type: string, path: string): void {
+  if (!(PARAM_TYPES as readonly string[]).includes(type)) {
+    throw new Error(`unknown param type: ${type} (at ${path})`);
+  }
+}
+
+/** Throw on unknown types or provided values of the wrong type. */
+export function checkParamType(type: string, value: unknown, path: string): void {
+  assertKnownParamType(type, path);
+  const ok =
+    type === 'string'
+      ? typeof value === 'string'
+      : type === 'number'
+        ? typeof value === 'number' && !Number.isNaN(value)
+        : type === 'integer'
+          ? typeof value === 'number' && Number.isInteger(value)
+          : type === 'boolean'
+            ? typeof value === 'boolean'
+            : type === 'die'
+              ? value instanceof Die
+              : type === 'array'
+                ? Array.isArray(value)
+                : typeof value === 'object' && value !== null && !Array.isArray(value);
+  if (!ok) throw new Error(`param type mismatch: ${path} expected ${type}, got ${describeValue(value)}`);
+}
+
+/**
+ * Structural walk collecting every `:param` record as `{ path, doc?, type? }`
+ * per node needing a user-provided value. Patch instructions (`@.…` keys) are
+ * not descended — params belong in actor-defining (or merged) trees.
+ */
+export function collectParams(raw: unknown): MissingParam[] {
+  const missing: MissingParam[] = [];
+  const visit = (node: unknown, path: string[]) => {
+    if (Array.isArray(node)) {
+      node.forEach((item, index) => visit(item, [...path, String(index)]));
+      return;
+    }
+    if (!node || typeof node !== 'object') return;
+    const record = node as Record<string, unknown>;
+    const marker = record[':param'];
+    if (marker) {
+      const key = typeof marker === 'string' && marker ? marker : path.join('.');
+      const doc = record[':doc'];
+      const entry: MissingParam = typeof doc === 'string' && doc ? { path: key, doc } : { path: key };
+      const type = record[':type'];
+      if (typeof type === 'string' && type) {
+        assertKnownParamType(type, key);
+        entry.type = type;
+      }
+      missing.push(entry);
+    }
+    for (const [key, value] of Object.entries(record)) {
+      if (key === ':param' || key === ':doc' || key === '!validate' || key === '$if' || key === '$then') continue;
+      if (isBareSigil(key) || key === '$' || isPathKey(key)) continue;
+      const fnMatch = key.match(FUNCTION_KEY);
+      visit(value, [...path, fnMatch ? fnMatch[1]! : stripPlus(key)]);
+    }
+  };
+  visit(raw, []);
+  return missing;
 }
 
 /** JSON-friendly serializer: Dice → `"d6"`, functions → `"[fn name()]"`. */

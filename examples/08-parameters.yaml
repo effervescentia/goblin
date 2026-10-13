@@ -1,0 +1,23 @@
+# Parameters: records marked `:param` must be provided by the user.
+# `engine.missingParams()` reports `[{ path, doc }]` for each one — the
+# dotted path needing a value plus the attached `:doc`.
+# Provided values (keyed by path, or by alias when `:param` holds a string)
+# fill `value` at evaluate time; missing params evaluate `value: null`.
+
+hero_name:
+  :doc: The hero's name, as sung by bards.
+  :param: true
+  :type: string
+
+level:
+  :doc: Starting level, 1 through 20.
+  :param: starting_level
+  :type: integer
+
+details:
+  title:
+    :param: true
+
+hit_points:
+  value: 10
+  max: 10

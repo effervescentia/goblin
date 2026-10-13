@@ -196,6 +196,74 @@ rest:
     #.hit_points.value = $.math.min(#.hit_points.value + #.hit_die, #.hit_points.max)
 ```
 
+## Parameters
+
+A record containing `:param` declares a value the user must provide. It
+evaluates to `{ ':doc'?, ':param', value }`, where `value` comes from the
+provided values (or `null` when missing). `missingParams()` reports every
+such node as `[{ path, doc?, type? }]` — the dotted path needing a
+value plus the attached `:doc`.
+
+- `:param: true` keys the provided value by the node's dotted path.
+- `:param: 'alias'` keys it by the alias string instead.
+- `:type` declares the expected type: `string`, `number`, `integer`,
+  `boolean`, `die`, `array`, or `record`. Filling a value of the wrong type
+  throws (`param type mismatch: …`); unknown names throw (`unknown param
+  type: …`). Untyped params accept anything. The type is included in the
+  `missingParams` report.
+- `:param` records survive `apply()` (markers copy with other `:meta`), so
+  patch files can declare params reported against the merged actor.
+
+```yaml
+# Examples (examples/08-parameters.yaml)
+hero_name:
+  :doc: The hero's name, as sung by bards.
+  :param: true
+  :type: string
+
+level:
+  :doc: Starting level, 1 through 20.
+  :param: starting_level
+  :type: integer
+```
+
+```ts
+engine.missingParams('08-parameters.yaml');
+// [
+//   { path: 'hero_name', doc: 'The hero's name, as sung by bards.', type: 'string' },
+//   { path: 'starting_level', doc: 'Starting level, 1 through 20.', type: 'integer' },
+//   { path: 'details.title' },
+// ]
+engine.evaluateDoc('08-parameters.yaml', { hero_name: 'Aria' });
+// hero_name → { ':doc': '…', ':param': true, ':type': 'string', value: 'Aria' }
+engine.evaluateDoc('08-parameters.yaml', { starting_level: 'high' });
+// throws: param type mismatch: starting_level expected integer, got string
+```
+
+## Resolution
+
+`resolve(file, provided)` answers a document in one call, returning an
+envelope that is either satisfied or asking:
+
+- All `:param` keys present in `provided` → `{ data }` with the serialized
+  evaluated document.
+- Otherwise → `{ query }` with **only** the outstanding params
+  (satisfied ones are filtered out).
+- Provided values of the wrong `:type` still throw instead of resolving.
+
+```ts
+engine.resolve('08-parameters.yaml', {});
+// { query: [
+//   { path: 'hero_name', doc: '…', type: 'string' },
+//   { path: 'starting_level', doc: '…', type: 'integer' },
+//   { path: 'details.title' },
+// ] }
+engine.resolve('08-parameters.yaml', { hero_name: 'Aria' });
+// { query: [ …starting_level…, …details.title… ] }  (hero_name filtered)
+engine.resolve('08-parameters.yaml', { hero_name: 'Aria', starting_level: 3, 'details.title': 'Kid' });
+// { data: { hero_name: { …, value: 'Aria' }, … } }
+```
+
 ## Evaluation model
 
 - **Lazy and on-demand**: refs resolve when reached; forward references work.

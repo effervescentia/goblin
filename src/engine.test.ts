@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { GoblinEngine } from './engine';
-import { Die, type EvalRoots, isDieLiteral, isExpressionString, parseDie, parseRef, serialize } from './utils';
+import {
+  checkParamType,
+  collectParams,
+  Die,
+  type EvalRoots,
+  isDieLiteral,
+  isExpressionString,
+  parseDie,
+  parseRef,
+  serialize,
+} from './utils';
 
 function testEngine() {
   const engine = new GoblinEngine('.');
@@ -252,5 +262,118 @@ describe('serialize', () => {
     expect(serialize(new Die(1, 6, '1d6'))).toBe('1d6');
     expect(serialize(function roll() {})).toBe('[fn roll()]');
     expect(serialize({ a: [new Die(1, 4, 'd4')] })).toEqual({ a: ['d4'] });
+  });
+});
+
+describe('parameters', () => {
+  const doc = {
+    hero_name: { ':doc': 'The hero name.', ':param': true, ':type': 'string' },
+    level: { ':doc': 'Starting level.', ':param': 'start_level', ':type': 'integer' },
+    attack_die: { ':param': true, ':type': 'die' },
+    details: { title: { ':param': true } },
+    hit_points: { value: 10, max: 10 },
+  };
+
+  it('collects missing params with paths, docs, and types', () => {
+    expect(collectParams(doc)).toEqual([
+      { path: 'hero_name', doc: 'The hero name.', type: 'string' },
+      { path: 'start_level', doc: 'Starting level.', type: 'integer' },
+      { path: 'attack_die', type: 'die' },
+      { path: 'details.title' },
+    ]);
+  });
+
+  it('rejects unknown param types', () => {
+    expect(() => collectParams({ x: { ':param': true, ':type': 'spell' } })).toThrow(
+      'unknown param type: spell (at x)',
+    );
+    expect(() => checkParamType('spell', 'x', 'x')).toThrow('unknown param type');
+  });
+
+  it('fills provided values at evaluate time, null when missing', () => {
+    const engine = new GoblinEngine('.');
+    const scope = (provided?: Record<string, unknown>): EvalRoots => ({
+      doc,
+      actor: doc,
+      app: engine.appRoot,
+      current: doc,
+      path: [],
+      provided,
+    });
+    const out = engine.evaluate(doc, scope({ hero_name: 'Aria', start_level: 3, attack_die: '1d8' })) as Record<
+      string,
+      { value: unknown }
+    >;
+    expect(out.hero_name?.value).toBe('Aria');
+    expect(out.level?.value).toBe(3);
+    expect(out.attack_die?.value).toBeInstanceOf(Die);
+    expect((out.details as unknown as Record<string, { value: unknown }>).title?.value).toBeNull();
+    expect(out.hit_points).toEqual({ value: 10, max: 10 });
+  });
+
+  it('throws on provided values of the wrong type', () => {
+    const engine = new GoblinEngine('.');
+    engine.docs.set('params.yaml', doc);
+    expect(() => engine.evaluateDoc('params.yaml', { start_level: 'high' })).toThrow(
+      'param type mismatch: start_level expected integer, got string',
+    );
+    expect(() => engine.evaluateDoc('params.yaml', { hero_name: 42 })).toThrow(
+      'param type mismatch: hero_name expected string, got number',
+    );
+  });
+
+  it('exposes missing params for loaded documents', () => {
+    const engine = new GoblinEngine('.');
+    engine.docs.set('params.yaml', doc);
+    expect(engine.missingParams('params.yaml')).toEqual([
+      { path: 'hero_name', doc: 'The hero name.', type: 'string' },
+      { path: 'start_level', doc: 'Starting level.', type: 'integer' },
+      { path: 'attack_die', type: 'die' },
+      { path: 'details.title' },
+    ]);
+    const out = engine.evaluateDoc('params.yaml', { hero_name: 'Aria' }) as Record<string, { value: unknown }>;
+    expect(out.hero_name?.value).toBe('Aria');
+    expect(out.level?.value).toBeNull();
+  });
+
+  it('resolves to data when satisfied, query with only outstanding params when not', () => {
+    const engine = new GoblinEngine('.');
+    engine.docs.set('params.yaml', doc);
+
+    const empty = engine.resolve('params.yaml', {});
+    expect(empty).toEqual({
+      query: [
+        { path: 'hero_name', doc: 'The hero name.', type: 'string' },
+        { path: 'start_level', doc: 'Starting level.', type: 'integer' },
+        { path: 'attack_die', type: 'die' },
+        { path: 'details.title' },
+      ],
+    });
+
+    const partial = engine.resolve('params.yaml', { hero_name: 'Aria' });
+    expect(partial).toEqual({
+      query: [
+        { path: 'start_level', doc: 'Starting level.', type: 'integer' },
+        { path: 'attack_die', type: 'die' },
+        { path: 'details.title' },
+      ],
+    });
+
+    const full = engine.resolve('params.yaml', {
+      hero_name: 'Aria',
+      start_level: 3,
+      attack_die: '1d8',
+      'details.title': 'Kid',
+    }) as { data: Record<string, { value: unknown }> };
+    expect(full.data.hero_name?.value).toBe('Aria');
+    expect(full.data.level?.value).toBe(3);
+    expect(full.data.attack_die?.value).toBe('1d8');
+    expect((full.data.details as unknown as Record<string, { value: unknown }>).title?.value).toBe('Kid');
+  });
+
+  it('resolve returns data for documents without params', () => {
+    const { engine } = testEngine();
+    const resolved = engine.resolve('main.yaml', {}) as { data: Record<string, unknown> };
+    expect((resolved.data.abilities as Record<string, { modifier: number }>).strength?.modifier).toBe(2);
   });
 });

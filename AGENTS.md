@@ -51,8 +51,8 @@ apart. Treat a missing spec update as an incomplete change.
   The final evaluated state always logs; diagnostics need `--debug`
   (validation failures always log as errors).
 - `bun run build` compiles `src/cli.ts` to a `build/goblin` binary
-  (`goblin [entry.yaml] [--compact] [--help]`) that prints the resolved application
-  state as JSON to stdout. `src/cli.ts` is Bun-only; keep `parseArgs` pure
+  (`goblin [entry.yaml] [--compact] [--param key=value] [--help]`) that prints
+  the resolution envelope (`{ data }` or `{ query }`) as JSON to stdout. `src/cli.ts` is Bun-only; keep `parseArgs` pure
   so `src/cli.test.ts` stays runtime-agnostic.
 - `src/engine.ts` transpiles goblin expressions with `new Function` — every
   `.name` token is treated as a goblin ref, so avoid introducing bare JS
