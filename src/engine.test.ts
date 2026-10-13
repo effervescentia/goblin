@@ -4,12 +4,14 @@ import {
   checkParamType,
   collectParams,
   Die,
+  detectDeps,
   type EvalRoots,
   isDieLiteral,
   isExpressionString,
   parseDie,
   parseRef,
   serialize,
+  tagFunction,
 } from './utils';
 
 function testEngine() {
@@ -263,6 +265,47 @@ describe('serialize', () => {
     expect(serialize(function roll() {})).toBe('[fn roll()]');
     expect(serialize({ a: [new Die(1, 4, 'd4')] })).toEqual({ a: ['d4'] });
   });
+
+  it('prints tagged functions as source/dependencies objects', () => {
+    const { engine } = testEngine();
+    const out = engine.evaluateDoc('main.yaml') as Record<string, any>;
+    expect(serialize(out.utils.ability_modifier)).toEqual({
+      $type: 'function',
+      params: ['x'],
+      source: '$.math.floor((x - 10) / 2)',
+      dependencies: ['$.math.floor'],
+    });
+    expect(serialize((out.initiative as { roll: unknown }).roll)).toEqual({
+      $type: 'function',
+      params: [],
+      source: '1d20 + .base',
+      dependencies: ['.base'],
+    });
+    expect(serialize((out.rest as { short: unknown }).short)).toEqual({
+      $type: 'function',
+      params: [],
+      source: '#.hit_points.value = $.math.min(#.hit_points.value + #.hit_die, #.hit_points.max)',
+      dependencies: ['#.hit_points.value', '$.math.min', '#.hit_die', '#.hit_points.max'],
+    });
+  });
+});
+
+describe('detectDeps', () => {
+  it('collects refs in order, deduplicated', () => {
+    expect(detectDeps('#.utils.ability_modifier(.base)')).toEqual(['#.utils.ability_modifier', '.base']);
+    expect(detectDeps('$.a + $.a + $.b')).toEqual(['$.a', '$.b']);
+  });
+
+  it('ignores string literals, dice, and dot-less sigils normalized', () => {
+    expect(detectDeps("$.tmpl('a.yaml')")).toEqual(['$.tmpl']);
+    expect(detectDeps('$math.max(3, 5)')).toEqual(['$.math.max']);
+    expect(detectDeps('1d20 + 2')).toEqual([]);
+  });
+
+  it('trims whitespace from printed source', () => {
+    const fn = tagFunction(() => 1, { name: 'f', params: [], source: '  1d20 + 2\n', deps: [] });
+    expect(serialize(fn)).toEqual({ $type: 'function', params: [], source: '1d20 + 2', dependencies: [] });
+  });
 });
 
 describe('parameters', () => {
@@ -369,6 +412,27 @@ describe('parameters', () => {
     expect(full.data.level?.value).toBe(3);
     expect(full.data.attack_die?.value).toBe('1d8');
     expect((full.data.details as unknown as Record<string, { value: unknown }>).title?.value).toBe('Kid');
+  });
+
+  it('validates array parameters', () => {
+    const engine = new GoblinEngine('.');
+    const doc = { tags: { ':doc': 'Tags.', ':param': true, ':type': 'array' } };
+    expect(collectParams(doc)).toEqual([{ path: 'tags', doc: 'Tags.', type: 'array' }]);
+    const scope = (provided?: Record<string, unknown>): EvalRoots => ({
+      doc,
+      actor: doc,
+      app: engine.appRoot,
+      current: doc,
+      path: [],
+      provided,
+    });
+    const filled = engine.evaluate(doc, scope({ tags: ['a', 'b'] })) as Record<string, { value: unknown }>;
+    expect(filled.tags?.value).toEqual(['a', 'b']);
+    const empty = engine.evaluate(doc, scope({ tags: [] })) as Record<string, { value: unknown }>;
+    expect(empty.tags?.value).toEqual([]);
+    expect(() => engine.evaluate(doc, scope({ tags: 'nope' }))).toThrow(
+      'param type mismatch: tags expected array, got string',
+    );
   });
 
   it('resolve returns data for documents without params', () => {

@@ -21,8 +21,10 @@ import {
   DIE_LITERAL,
   Die,
   deepClone,
+  detectDeps,
   type EvalRoots,
   FUNCTION_KEY,
+  getChildEntry,
   getPath,
   isBareSigil,
   isExpressionString,
@@ -40,7 +42,7 @@ import {
   serialize,
   setPath,
   stripPlus,
-  walkRaw,
+  tagFunction,
 } from './utils';
 
 export class GoblinEngine {
@@ -61,7 +63,11 @@ export class GoblinEngine {
   async loadFile(file: string): Promise<unknown> {
     const { YAML } = await import('bun');
     const text = await Bun.file(`${this.rootDir}/${file}`.replace(/\/\//g, '/')).text();
-    const data = YAML.parse(text);
+    return this.register(file, YAML.parse(text));
+  }
+
+  /** Store a document under `file`, merging top-level tables into `#`. */
+  register(file: string, data: unknown): unknown {
     this.docs.set(file, data);
     // Merge top-level `utils`/`math`-style tables into the app namespace
     // so `#.utils.…` works for self-contained docs like main.yaml.
@@ -101,6 +107,7 @@ export class GoblinEngine {
     scope: EvalRoots,
   ): ((...args: unknown[]) => unknown) | undefined {
     if (!isFunctionKey(found.key) || typeof found.value !== 'string') return undefined;
+    const name = found.key.match(FUNCTION_KEY)![1]!;
     const params = found.key
       .match(FUNCTION_KEY)![2]!
       .split(',')
@@ -108,10 +115,11 @@ export class GoblinEngine {
       .filter(Boolean);
     const body = found.value;
     const fnParent = found.parent;
-    return (...args: unknown[]) => {
+    const fn = (...args: unknown[]) => {
       const callParams = Object.fromEntries(params.map((p, i) => [p, args[i]]));
       return this.evalExpr(body, { ...scope, current: fnParent, params: callParams });
     };
+    return tagFunction(fn, { name, params, source: body, deps: detectDeps(body) });
   }
 
   resolveRef(ref: string, scope: EvalRoots): unknown {
@@ -125,27 +133,6 @@ export class GoblinEngine {
       if (fn !== undefined) return fn;
     }
 
-    // Walk with function-key awareness so `ability_modifier` finds
-    // the raw `ability_modifier(x)` entry and returns a callable.
-    const found = walkRaw(base, path);
-    if (found !== null) {
-      const fn = this.entryCallable(found, scope);
-      if (fn !== undefined) return fn;
-    }
-    const rawTarget = found?.value;
-    if (rawTarget === undefined) {
-      // Cross-namespace fallback into shared globals: `$`/`@` fall back
-      // to the app root (e.g. `player.yaml` uses `@.utils.…` supplied by
-      // the app), `#` falls back to the current document.
-      const fallbackRoot = root === '#' ? scope.doc : scope.app;
-      const fallbackFound = walkRaw(fallbackRoot, path);
-      if (fallbackFound !== null) {
-        const fn = this.entryCallable(fallbackFound, scope);
-        if (fn !== undefined) return fn;
-        return this.evaluate(fallbackFound.value, scope);
-      }
-      return undefined;
-    }
     const key = this.cacheKey(ref, scope);
     if (this.cache.has(key)) return this.cache.get(key);
     if (this.resolving.includes(key)) {
@@ -153,6 +140,29 @@ export class GoblinEngine {
     }
     this.resolving.push(key);
     try {
+      // Scope-aware walk with function-key awareness, so `ability_modifier`
+      // finds the raw `ability_modifier(x)` entry. Intermediate expression
+      // strings (e.g. a `$.tmpl('…')` table) evaluate on the way down, with
+      // `.` bound to their enclosing record.
+      const found = this.walkScoped(base, path, scope);
+      if (found !== null) {
+        const fn = this.entryCallable(found, scope);
+        if (fn !== undefined) return fn;
+      }
+      const rawTarget = found?.value;
+      if (rawTarget === undefined) {
+        // Cross-namespace fallback into shared globals: `$`/`@` fall back
+        // to the app root (e.g. `player.yaml` uses `@.utils.…` supplied by
+        // the app), `#` falls back to the current document.
+        const fallbackRoot = root === '#' ? scope.doc : scope.app;
+        const fallbackFound = this.walkScoped(fallbackRoot, path, scope);
+        if (fallbackFound !== null) {
+          const fn = this.entryCallable(fallbackFound, scope);
+          if (fn !== undefined) return fn;
+          return this.evaluate(fallbackFound.value, scope);
+        }
+        return undefined;
+      }
       const value = this.evaluate(rawTarget, {
         ...scope,
         current: parentOf(base, path) ?? scope.current,
@@ -162,6 +172,32 @@ export class GoblinEngine {
     } finally {
       this.resolving.pop();
     }
+  }
+
+  /**
+   * Like walkRaw, but expression strings met along the path evaluate first
+   * so refs can descend through them (e.g. `$.thresholds.l2` where
+   * `thresholds` is `$.tmpl('levels.yaml')`). Terminates: re-entering the
+   * same ref hits the resolving guard with a stabilized scope.
+   */
+  private walkScoped(
+    base: unknown,
+    path: string[],
+    scope: EvalRoots,
+  ): { parent: Record<string, unknown>; key: string; value: unknown } | null {
+    let node: unknown = base;
+    let parent: unknown = scope.current;
+    let entry: { parent: Record<string, unknown>; key: string; value: unknown } | null = null;
+    for (const seg of path) {
+      if (typeof node === 'string' && node !== scope.current && isExpressionString(node)) {
+        node = this.evaluate(node, { ...scope, current: parent });
+      }
+      entry = getChildEntry(node, seg);
+      if (entry === null) return null;
+      parent = node;
+      node = entry.value;
+    }
+    return entry;
   }
 
   private hooks(scope: EvalRoots): ResolveHooks {
@@ -245,10 +281,11 @@ export class GoblinEngine {
         const body = value;
         const name = fnMatch[1]!;
         const fnPath = [...base, name];
-        out[name] = (...args: unknown[]) => {
+        const fn = (...args: unknown[]) => {
           const callParams = Object.fromEntries(params.map((p, i) => [p, args[i]]));
           return this.evalExpr(body, { ...scope, current: record, params: callParams, path: fnPath });
         };
+        out[name] = tagFunction(fn, { name, params, source: body, deps: detectDeps(body) });
         continue;
       }
       if (key.startsWith('+')) {
@@ -307,10 +344,21 @@ export class GoblinEngine {
    * params. Provided values of the wrong `:type` still throw.
    */
   resolve(file: string, provided: Record<string, unknown> = {}): { data: unknown } | { query: MissingParam[] } {
-    const missing = this.missingParams(file);
-    const outstanding = missing.filter((param) => provided[param.path] === undefined);
+    const raw = this.docs.get(file);
+    if (raw === undefined) throw new Error(`document not loaded: ${file}`);
+    return this.resolveRaw(raw, provided);
+  }
+
+  /**
+   * Resolve an in-memory actor tree (e.g. composed from `actor`/`adopt`
+   * entry keys): `{ data }` when `provided` satisfies all params, else
+   * `{ query }` with only the outstanding ones.
+   */
+  resolveRaw(actorRaw: unknown, provided: Record<string, unknown> = {}): { data: unknown } | { query: MissingParam[] } {
+    const outstanding = collectParams(actorRaw).filter((param) => provided[param.path] === undefined);
     if (outstanding.length > 0) return { query: outstanding };
-    return { data: serialize(this.evaluateDoc(file, provided)) };
+    const scope: EvalRoots = { doc: actorRaw, actor: actorRaw, app: this.appRoot, current: actorRaw, provided };
+    return { data: serialize(this.evaluate(actorRaw, scope)) };
   }
 
   // -- patches (class files, levels, conditions) ----------------------------
@@ -322,6 +370,11 @@ export class GoblinEngine {
   apply(actorRaw: unknown, patchFile: string, maxLevel = Number.MAX_SAFE_INTEGER): unknown {
     const patch = this.docs.get(patchFile);
     if (patch === undefined) throw new Error(`patch document not loaded: ${patchFile}`);
+    return this.applyRaw(actorRaw, patch, maxLevel);
+  }
+
+  /** Apply an in-memory patch (e.g. a `$.tmpl('…')` clone) onto an actor. */
+  applyRaw(actorRaw: unknown, patch: unknown, maxLevel = Number.MAX_SAFE_INTEGER): unknown {
     const scope: EvalRoots = {
       doc: patch,
       actor: actorRaw,

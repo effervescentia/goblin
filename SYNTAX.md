@@ -59,7 +59,9 @@ operator semantics apply. String literals inside expressions are protected
 from rewriting.
 
 Every `.name` token is treated as a goblin reference — avoid bare JS property
-access (e.g. `foo.bar`) inside expression strings.
+access (e.g. `foo.bar`) inside expression strings. Comparisons coerce to
+`0`/`1` in arithmetic, so thresholds can derive levels without conditionals
+(see `5e/character.yaml`).
 
 ```yaml
 mean: ($.strength + $.dexterity) / 2  # → 14.5
@@ -106,11 +108,32 @@ doubled: $.utils.double(21)  # → 42
 'lucky()': 1d20              # zero-arg callable
 ```
 
+Serialized functions print as `{ $type, params, source, dependencies }`, with
+the body's reference dependencies in order of first appearance. `source` is
+whitespace-trimmed (block scalars leave trailing newlines):
+
+```ts
+{
+  $type: 'function',
+  params: ['x'],
+  source: '$.math.floor((x - 10) / 2)',
+  dependencies: ['$.math.floor'],
+}
+```
+
 ## Templates
 
 `$.tmpl('file.yaml')` inlines a deep clone of another loaded document. The
 referenced file must already be loaded — the CLI preloads `$.tmpl('…')`
 references recursively before evaluating.
+
+A tmpl'd document's functions stay callable through the inlined table, with
+`.` bound to the template root:
+
+```yaml
+levels: $.tmpl('levels.yaml')
+level: $.levels.level_for(@.xp.value)
+```
 
 ```yaml
 # Examples (examples/05-templates.yaml, examples/05-greeting.yaml)
@@ -196,6 +219,24 @@ rest:
     #.hit_points.value = $.math.min(#.hit_points.value + #.hit_die, #.hit_points.max)
 ```
 
+## Composition
+
+A root entry may compose an actor from an `actor` base plus an `adopt` list
+of patches (each a `$.tmpl('…')` expression or an inline object). The runner
+resolves the base, reads the actor's derived `level`, applies each patch in
+order at that level, then resolves the merged result — so choices declared
+by adopted patches surface in the `{ query }` envelope. Template paths are
+root-relative; nested references resolve relative to their own file.
+
+```yaml
+# Examples (5e/main.yaml)
+$: Character
+
+actor: $.tmpl('character.yaml')
+adopt:
+  - $.tmpl('fighter.yaml')
+```
+
 ## Parameters
 
 A record containing `:param` declares a value the user must provide. It
@@ -270,6 +311,8 @@ engine.resolve('08-parameters.yaml', { hero_name: 'Aria', starting_level: 3, 'de
 
 - **Lazy and on-demand**: refs resolve when reached; forward references work.
   Resolved values are cached per (document, actor, node, ref).
+- Intermediate expression strings (e.g. a `$.tmpl('…')` table) evaluate on
+  the way down, so refs can descend through them (`$.thresholds.l2`).
 - **Circular references** throw (`circular reference: a -> b -> a`).
 - **Unresolvable references** throw (`unresolvable reference: …`).
 - Loading a file merges its top-level tables into the app namespace

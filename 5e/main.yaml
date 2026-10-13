@@ -1,0 +1,17 @@
+# 5e/main.yaml — root entry: a complete playable fighter.
+#
+# `actor` is the base document; `adopt` lists patches applied in order, each
+# at the actor's derived `level` (read after a first pass with `provided`).
+# Template paths resolve relative to their own file.
+#
+# Play: goblin 5e/main.yaml --param name=Aria --param xp=6500 \
+#         --param features.fighting_style=dueling \
+#         --param features.martial_archetype=Champion \
+#         --param skills.trained='["athletics", "perception"]'
+# Missing choices come back as { query }; a full sheet as { data }.
+
+$: Character
+
+actor: $.tmpl('character.yaml')
+adopt:
+  - $.tmpl('fighter.yaml')

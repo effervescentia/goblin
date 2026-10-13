@@ -4,84 +4,157 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 // End-to-end over the real 5e/ documents (parsed by Bun, so shelled out like
-// src/examples.test.ts): leveling, class adoption, choices, and progression.
+// src/examples.test.ts): XP thresholds, class adoption at the derived level,
+// choices, and progression.
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+function cli(entry: string, ...extra: string[]): unknown {
+  const out = execFileSync('bun', ['src/cli.ts', entry, '--compact', ...extra], {
+    cwd: root,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  return JSON.parse(out);
+}
 
 const script = `
   import { GoblinEngine } from './src/engine.ts';
   import { collectParams } from './src/utils.ts';
   const e = new GoblinEngine('5e');
   await e.loadFile('character.yaml');
+  await e.loadFile('levels.yaml');
   await e.loadFile('fighter.yaml');
 
   const baseMissing = e.missingParams('character.yaml').map((m) => m.path).sort();
 
   const fresh = () => structuredClone(e.docs.get('character.yaml'));
   const scopeOf = (actor, provided) => ({ doc: actor, actor, app: e.appRoot, current: actor, provided });
+  const baseProvided = (xp) => ({
+    name: 'X',
+    xp,
+    'features.fighting_style': 'defense',
+    'features.martial_archetype': 'Champion',
+    'skills.trained': ['athletics', 'perception'],
+  });
 
-  // Fighter 3 with all choices provided.
+  // Derive the level from XP, then adopt the fighter at that level.
+  const run = (xp) => {
+    const a = fresh();
+    const lv = e.evaluate(a, scopeOf(a, baseProvided(xp))).level;
+    e.apply(a, 'fighter.yaml', lv);
+    return { lv, v: e.evaluate(a, scopeOf(a, baseProvided(xp))) };
+  };
+
   const a3 = fresh();
   e.apply(a3, 'fighter.yaml', 3);
   const mergedMissing = collectParams(a3).map((m) => m.path).sort();
-  const provided3 = { name: 'Aria', level: 3, 'features.fighting_style': 'defense', 'features.martial_archetype': 'Champion', 'skills.trained': ['athletics', 'perception'] };
-  const v3 = e.evaluate(a3, scopeOf(a3, provided3));
-  const sw = v3.actions.second_wind.heal();
 
-  // Attacks and proficiency across levels.
-  const attacks = {};
-  const prof = {};
-  for (const lv of [1, 3, 5, 11, 20]) {
-    const a = fresh();
-    e.apply(a, 'fighter.yaml', lv);
-    const v = e.evaluate(a, scopeOf(a, { name: 'X', level: lv, 'features.fighting_style': 'defense', 'features.martial_archetype': 'Champion', 'skills.trained': [] }));
-    attacks[lv] = v.attacks;
-    if (lv === 1 || lv === 5 || lv === 9 || lv === 17) prof[lv] = v.proficiency_bonus;
+  const levels = {};
+  for (const xp of [0, 299, 300, 899, 900, 2699, 2700, 6499, 6500, 354999, 355000, 999999]) {
+    levels[xp] = run(xp).lv;
   }
-  const a9 = fresh();
-  e.apply(a9, 'fighter.yaml', 9);
-  prof[9] = e.evaluate(a9, scopeOf(a9, { name: 'X', level: 9, 'features.fighting_style': 'defense', 'features.martial_archetype': 'Champion', 'skills.trained': [] })).proficiency_bonus;
-  const a17 = fresh();
-  e.apply(a17, 'fighter.yaml', 17);
-  prof[17] = e.evaluate(a17, scopeOf(a17, { name: 'X', level: 17, 'features.fighting_style': 'defense', 'features.martial_archetype': 'Champion', 'skills.trained': [] })).proficiency_bonus;
+  levels.none = (() => {
+    const a = fresh();
+    return e.evaluate(a, scopeOf(a, { name: 'X' })).level;
+  })();
+
+  const r = (xp) => run(xp).v;
+  const attacks = { 0: r(0).attacks, 6500: r(6500).attacks, 85000: r(85000).attacks, 355000: r(355000).attacks };
+  const prof = { 0: r(0).proficiency_bonus, 6500: r(6500).proficiency_bonus, 48000: r(48000).proficiency_bonus, 225000: r(225000).proficiency_bonus };
+  const v5 = r(6500);
+  const sw = v5.actions.second_wind.heal();
 
   // Resolve envelope for a satisfied fighter.
   const a5 = fresh();
   e.apply(a5, 'fighter.yaml', 5);
   e.docs.set('fighter5.yaml', a5);
-  const resolved = e.resolve('fighter5.yaml', { name: 'Bram', level: 5, 'features.fighting_style': 'dueling', 'features.martial_archetype': 'Champion', 'skills.trained': [] });
+  const resolved = e.resolve('fighter5.yaml', { ...baseProvided(6500), name: 'Bram' });
 
   console.log(JSON.stringify({
     baseMissing,
     mergedMissing,
-    ac: v3.armor_class,
-    prof3: v3.proficiency_bonus,
-    hp: { value: v3.hit_points.value, max: v3.hit_points.max },
-    surge: v3.resources.action_surge,
-    swMin: sw >= 4,
-    swMax: sw <= 13,
+    ac: v5.armor_class,
+    hp: { value: v5.hit_points.value, max: v5.hit_points.max },
+    trained: v5.skills.trained.value,
+    surge: { value: v5.resources.action_surge.value, max: v5.resources.action_surge.max },
+    swMin: sw >= 6,
+    swMax: sw <= 15,
+    levels,
     attacks,
     prof,
     resolvedKeys: Object.keys(resolved),
     resolvedAttacks: resolved.data.attacks,
+    resolvedLevel: resolved.data.level,
   }));
 `;
 
 describe('5e', () => {
-  it('levels a fighter from 1 to 20', () => {
+  it('levels a fighter from 1 to 20 on XP', () => {
     const out = execFileSync('bun', ['-e', script], { cwd: root, encoding: 'utf8' });
     expect(JSON.parse(out)).toEqual({
-      baseMissing: ['level', 'name'],
-      mergedMissing: ['features.fighting_style', 'features.martial_archetype', 'level', 'name', 'skills.trained'],
+      baseMissing: ['name', 'xp'],
+      mergedMissing: ['features.fighting_style', 'features.martial_archetype', 'name', 'skills.trained', 'xp'],
       ac: 10,
-      prof3: 2,
       hp: { value: 10, max: 10 },
-      surge: { value: 1, max: 1, ':doc': 'Take one additional action on your turn. Restores on a short rest.' },
+      trained: ['athletics', 'perception'],
+      surge: { value: 1, max: 1 },
       swMin: true,
       swMax: true,
-      attacks: { 1: 1, 3: 1, 5: 2, 11: 3, 20: 4 },
-      prof: { 1: 2, 5: 3, 9: 4, 17: 6 },
+      levels: {
+        0: 1,
+        299: 1,
+        300: 2,
+        899: 2,
+        900: 3,
+        2699: 3,
+        2700: 4,
+        6499: 4,
+        6500: 5,
+        354999: 19,
+        355000: 20,
+        999999: 20,
+        none: 1,
+      },
+      attacks: { 0: 1, 6500: 2, 85000: 3, 355000: 4 },
+      prof: { 0: 2, 6500: 3, 48000: 4, 225000: 6 },
       resolvedKeys: ['data'],
       resolvedAttacks: 2,
+      resolvedLevel: 5,
     });
+  });
+
+  it('serves the composed fighter through the root entry', () => {
+    const query = cli('5e/main.yaml') as { query: Array<{ path: string }> };
+    expect(query.query.map((param) => param.path).sort()).toEqual([
+      'features.fighting_style',
+      'name',
+      'skills.trained',
+      'xp',
+    ]);
+
+    const data = cli(
+      '5e/main.yaml',
+      '--param',
+      'name=Aria',
+      '--param',
+      'xp=6500',
+      '--param',
+      'features.fighting_style=dueling',
+      '--param',
+      'features.martial_archetype=Champion',
+      '--param',
+      'skills.trained=["athletics","perception"]',
+    ) as {
+      data: {
+        level: number;
+        attacks: number;
+        armor_class: number;
+        features: Record<string, { value: unknown }>;
+      };
+    };
+    expect(data.data.level).toBe(5);
+    expect(data.data.attacks).toBe(2);
+    expect(data.data.armor_class).toBe(10);
+    expect(data.data.features.fighting_style?.value).toBe('dueling');
   });
 });

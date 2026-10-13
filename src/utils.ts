@@ -145,7 +145,7 @@ export function getChild(node: unknown, seg: string): unknown {
 }
 
 /** Like getChild but also returns the matched key and parent record. */
-function getChildEntry(
+export function getChildEntry(
   node: unknown,
   seg: string,
 ): { parent: Record<string, unknown>; key: string; value: unknown } | null {
@@ -388,10 +388,60 @@ export function materializeParams(raw: unknown, provided: Record<string, unknown
   return wrote;
 }
 
-/** JSON-friendly serializer: Dice → `"d6"`, functions → `"[fn name()]"`. */
+/** Metadata attached to engine-created function closures for printing. */
+export interface GoblinFunctionMeta {
+  name: string;
+  params: string[];
+  /** The raw body string from the document. */
+  source: string;
+  /** Sigil refs the body resolves, in order of first appearance. */
+  deps: string[];
+}
+
+/** Tag a closure with its document metadata. Survives as `$goblin`. */
+export function tagFunction(
+  fn: (...args: unknown[]) => unknown,
+  meta: GoblinFunctionMeta,
+): (...args: unknown[]) => unknown {
+  (fn as unknown as Record<string, unknown>).$goblin = meta;
+  return fn;
+}
+
+/** Read back `$goblin` metadata, if present. */
+export function functionMeta(value: unknown): GoblinFunctionMeta | undefined {
+  if (typeof value !== 'function') return undefined;
+  const meta = (value as unknown as Record<string, unknown>).$goblin;
+  return typeof meta === 'object' && meta !== null ? (meta as GoblinFunctionMeta) : undefined;
+}
+
+const STRING_LITERAL = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g;
+
+/**
+ * Detect a body's reference dependencies: sigil refs outside string
+ * literals, dot-less sigils normalized, deduplicated in order.
+ */
+export function detectDeps(body: string): string[] {
+  const code = body.replace(STRING_LITERAL, '').replace(/([#$@])(?=[A-Za-z_])/g, '$1.');
+  SIGIL_REF.lastIndex = 0;
+  const matches = code.match(SIGIL_REF) ?? [];
+  SIGIL_REF.lastIndex = 0;
+  return [...new Set(matches)];
+}
+/** JSON-friendly serializer: Dice → `"d6"`, functions → `{ source, dependencies }`. */
 export function serialize(value: unknown): unknown {
   if (value instanceof Die) return value.toString();
-  if (typeof value === 'function') return `[fn ${value.name || 'anonymous'}()]`;
+  if (typeof value === 'function') {
+    const meta = functionMeta(value);
+    if (meta)
+      return {
+        $type: 'function',
+        params: meta.params,
+        source: meta.source.trim(),
+        dependencies: meta.deps,
+      };
+    const name = (value as { name?: unknown }).name;
+    return `[fn ${typeof name === 'string' && name ? name : 'anonymous'}()]`;
+  }
   if (Array.isArray(value)) return value.map(serialize);
   if (value && typeof value === 'object') {
     return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, serialize(v)]));

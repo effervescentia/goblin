@@ -1,3 +1,6 @@
+import { execFileSync } from 'node:child_process';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parseArgs, parseParamValue, USAGE } from './cli';
 
@@ -40,6 +43,19 @@ describe('parseArgs', () => {
     });
   });
 
+  it('parses --param array values', () => {
+    expect(parseArgs(['--param', 'skills.trained=["athletics","perception"]'])).toEqual({
+      entry: undefined,
+      compact: false,
+      help: false,
+      params: { 'skills.trained': ['athletics', 'perception'] },
+    });
+  });
+
+  it('splits --param on the first =', () => {
+    expect(parseArgs(['--param', 'a=b=c']).params).toEqual({ a: 'b=c' });
+  });
+
   it('rejects malformed --param', () => {
     expect(() => parseArgs(['--param'])).toThrow('--param expects key=value');
     expect(() => parseArgs(['--param', 'nokey'])).toThrow('--param expects key=value');
@@ -68,5 +84,58 @@ describe('USAGE', () => {
     expect(USAGE).toContain('--compact');
     expect(USAGE).toContain('--param');
     expect(USAGE).toContain('--help, -h');
+  });
+});
+
+// Subprocess tests through the real entry point (Bun-only code paths).
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+function runCli(...args: string[]): { stdout: string; stderr: string; status: number } {
+  try {
+    const stdout = execFileSync('bun', ['src/cli.ts', ...args], {
+      cwd: root,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return { stdout, stderr: '', status: 0 };
+  } catch (err) {
+    const failed = err as { stdout?: unknown; stderr?: unknown; status?: unknown };
+    return {
+      stdout: String(failed.stdout ?? ''),
+      stderr: String(failed.stderr ?? ''),
+      status: typeof failed.status === 'number' ? failed.status : 1,
+    };
+  }
+}
+
+describe('cli', () => {
+  it('--help prints usage and exits 0', () => {
+    const res = runCli('--help');
+    expect(res.status).toBe(0);
+    expect(res.stdout).toContain('goblin [entry.yaml]');
+  });
+
+  it('rejects unknown flags with exit 1', () => {
+    const res = runCli('--bogus');
+    expect(res.status).toBe(1);
+    expect(res.stderr).toContain('unexpected argument: --bogus');
+  });
+
+  it('errors on missing entry files', () => {
+    const res = runCli('nope.yaml');
+    expect(res.status).toBe(1);
+    expect(res.stderr.length).toBeGreaterThan(0);
+  });
+
+  it('--compact emits single-line JSON, default pretty-prints', () => {
+    const compact = runCli('examples/02-expressions.yaml', '--compact');
+    expect(compact.status).toBe(0);
+    expect(JSON.parse(compact.stdout)).toMatchObject({ data: { sum: 29 } });
+    expect(compact.stdout.trimEnd().includes('\n')).toBe(false);
+
+    const pretty = runCli('examples/02-expressions.yaml');
+    expect(pretty.status).toBe(0);
+    expect(pretty.stdout.trimEnd().includes('\n')).toBe(true);
+    expect(JSON.parse(pretty.stdout)).toEqual(JSON.parse(compact.stdout));
   });
 });

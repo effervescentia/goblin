@@ -37,7 +37,7 @@ $: Character
   '@.actions':
     +second_wind:
       :doc: Regain 1d10 + fighter level hit points.
-      'heal()': 1d10 + @.level.value
+      'heal()': 1d10 + @.level
 
 # Level 2 — push past mortal limits.
 2:

@@ -91,34 +91,72 @@ export async function resolveAppState(
   const engine = new GoblinEngine(root);
   await preloadTemplates(engine, root, main);
   await engine.loadFile(main);
+  const raw = engine.docs.get(main);
+  if (raw !== null && typeof raw === 'object' && !Array.isArray(raw) && 'actor' in raw) {
+    return resolveComposed(engine, raw as Record<string, unknown>, provided);
+  }
   return engine.resolve(main, provided);
+}
+
+/**
+ * Entry composition (`actor` + `adopt` keys): resolve the base actor,
+ * derive its level, apply each patch in order at that level, then resolve
+ * the merged result. Patch entries are `$.tmpl('…')` expressions (or inline
+ * objects); provided values flow into every pass.
+ */
+export async function resolveComposed(
+  engine: GoblinEngine,
+  entry: Record<string, unknown>,
+  provided: Record<string, unknown> = {},
+): Promise<ReturnType<GoblinEngine['resolve']>> {
+  const scope = { doc: entry, actor: entry, app: engine.appRoot, current: entry, provided };
+  const actorRaw = typeof entry.actor === 'string' ? engine.evalExpr(entry.actor, scope) : structuredClone(entry.actor);
+  const adopt = Array.isArray(entry.adopt) ? entry.adopt : [entry.adopt];
+  const patches = adopt.map((patch) =>
+    typeof patch === 'string' ? engine.evalExpr(patch, scope) : structuredClone(patch),
+  );
+  const probe = engine.evaluate(actorRaw, {
+    doc: actorRaw,
+    actor: actorRaw,
+    app: engine.appRoot,
+    current: actorRaw,
+    provided,
+  }) as { level?: unknown };
+  const level = typeof probe.level === 'number' ? Math.floor(probe.level) : 1;
+  for (const patch of patches) engine.applyRaw(actorRaw, patch, level);
+  return engine.resolveRaw(actorRaw, provided);
 }
 
 /**
  * `$.tmpl('other.yaml')` resolves synchronously at eval time, so every
  * referenced template must be loaded up front. Scans raw file text for
- * references and loads them recursively.
+ * references and loads them recursively. References resolve relative to the
+ * referring file's directory but are keyed as written, so nested documents
+ * (e.g. `5e/character.yaml` asking for `levels.yaml`) just work.
  */
 async function preloadTemplates(engine: GoblinEngine, root: string, file: string): Promise<void> {
+  const { YAML } = await import('bun');
+  const read = (path: string) => Bun.file(`${root}/${path}`.replace(/\/\//g, '/')).text();
+  const dirOf = (path: string) => (path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '');
   const seen = new Set<string>();
-  const queue = [file];
+  const queue: Array<{ key: string; path: string }> = [{ key: file, path: file }];
   const pattern = /\$\.tmpl\(\s*['"]([^'"]+)['"]\s*\)/g;
   while (queue.length > 0) {
-    const next = queue.pop() as string;
-    if (seen.has(next)) continue;
-    seen.add(next);
-    const text = await Bun.file(`${root}/${next}`.replace(/\/\//g, '/')).text();
+    const { key, path } = queue.pop()!;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const text = await read(path);
     pattern.lastIndex = 0;
     let match: RegExpExecArray | null;
     match = pattern.exec(text);
     while (match !== null) {
-      queue.push(match[1] as string);
+      const name = match[1]!;
+      const dir = dirOf(path);
+      queue.push({ key: name, path: dir ? `${dir}/${name}` : name });
       match = pattern.exec(text);
     }
-  }
-  for (const name of seen) {
-    if (!engine.docs.has(name)) {
-      await engine.loadFile(name);
+    if (!engine.docs.has(key)) {
+      engine.register(key, YAML.parse(text));
     }
   }
 }

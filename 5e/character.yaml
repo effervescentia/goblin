@@ -1,12 +1,12 @@
 # D&D 5e (2014 SRD-ish) character basics.
 #
 # Play it:
-#   goblin 5e/character.yaml --param name=Aria --param level=3
-# Without params the CLI returns { query: [...] } (name, level).
+#   goblin 5e/character.yaml --param name=Aria --param xp=6500
+# Without params the CLI returns { query: [...] } (name, xp).
 #
-# Adopt a class in code (the CLI does not apply patches):
-#   engine.apply(actor, 'fighter.yaml', level)   # then resolve() with params
-# Level is provided rather than derived from XP; XP thresholds are left out.
+# Adopt a class in code (the CLI does not apply patches): evaluate the actor
+# to read its derived level, then engine.apply(actor, 'fighter.yaml', level).
+# XP thresholds follow the standard progression (L2 at 300 … L20 at 355000).
 
 $: Character
 
@@ -16,11 +16,15 @@ name:
   :param: true
   :type: string
 
-# Level 1-20, provided; drives proficiency bonus and class application.
-level:
-  :doc: Character level, 1 through 20.
+# Experience — provided by the table; level derives from it below.
+xp:
+  :doc: Experience points earned in play.
   :param: true
   :type: integer
+
+# Level derives via the 5e/levels.yaml progression function.
+levels: $.tmpl('levels.yaml')
+level: $.levels.level_for(@.xp.value)
 
 abilities:
   strength:
@@ -45,8 +49,7 @@ abilities:
 utils:
   'ability_modifier(x)': $.math.floor((x - 10) / 2)
 
-# Proficiency climbs +1 at levels 5, 9, 13, 17.
-proficiency_bonus: 2 + $.math.floor((@.level.value - 1) / 4)
+proficiency_bonus: $.levels.proficiency_for(@.level)
 
 armor_class: '10 + $.abilities.dexterity.modifier'
 speed: 30
