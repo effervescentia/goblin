@@ -167,6 +167,23 @@ export function setPath(root: unknown, path: string[], value: unknown): void {
   node[path[path.length - 1]!] = value;
 }
 
+/** Join a root dir and file, collapsing `.`/`..` (Bun.file won't). */
+export function joinPath(root: string, file: string): string {
+  const out: string[] = [];
+  for (const seg of `${root}/${file}`.split('/')) {
+    if (seg === '' || seg === '.') {
+      if (seg === '' && out.length === 0) out.push('');
+      continue;
+    }
+    if (seg === '..') {
+      out.pop();
+      continue;
+    }
+    out.push(seg);
+  }
+  return out.join('/') || '.';
+}
+
 export function deepClone<T>(value: T): T {
   if (value instanceof Die) return new Die(value.count, value.sides) as T;
   if (typeof value === 'function') return value;

@@ -22,9 +22,7 @@ xp:
   :param: true
   :type: integer
 
-# Level derives via the 5e/levels.yaml progression function.
-levels: $.tmpl('levels.yaml')
-level: $.levels.level_for(@.xp.value)
+level: '#.levels.level_for(@.xp.value)'
 
 abilities:
   strength:
@@ -49,7 +47,8 @@ abilities:
 utils:
   'ability_modifier(x)': $.math.floor((x - 10) / 2)
 
-proficiency_bonus: $.levels.proficiency_for(@.level)
+# Proficiency climbs with level via the progression binding in 5e/main.yaml.
+proficiency_bonus: '#.levels.proficiency_for(@.level)'
 
 armor_class: '10 + $.abilities.dexterity.modifier'
 speed: 30

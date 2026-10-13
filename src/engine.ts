@@ -32,6 +32,7 @@ import {
   isMetaKey,
   isPathKey,
   isValidateKey,
+  joinPath,
   MATH_LIB,
   type MissingParam,
   materializeParams,
@@ -62,7 +63,7 @@ export class GoblinEngine {
 
   async loadFile(file: string): Promise<unknown> {
     const { YAML } = await import('bun');
-    const text = await Bun.file(`${this.rootDir}/${file}`.replace(/\/\//g, '/')).text();
+    const text = await Bun.file(joinPath(this.rootDir, file)).text();
     return this.register(file, YAML.parse(text));
   }
 

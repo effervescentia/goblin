@@ -24,6 +24,8 @@ const script = `
   await e.loadFile('character.yaml');
   await e.loadFile('levels.yaml');
   await e.loadFile('fighter.yaml');
+  // The progression binding lives in this folder's main (merged into # on load).
+  await e.loadFile('main.yaml');
 
   const baseMissing = e.missingParams('character.yaml').map((m) => m.path).sort();
 

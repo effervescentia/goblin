@@ -232,6 +232,10 @@ root-relative; nested references resolve relative to their own file.
 # Examples (5e/main.yaml)
 $: Character
 
+# Shared binding: merged into the `#` namespace on load, so every document
+# calls #.levels.… without attaching the table itself.
+levels: $.tmpl('levels.yaml')
+
 actor: $.tmpl('character.yaml')
 adopt:
   - $.tmpl('fighter.yaml')

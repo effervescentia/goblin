@@ -12,6 +12,8 @@
 
 $: Character
 
+levels: $.tmpl('levels.yaml')
+
 actor: $.tmpl('character.yaml')
 adopt:
   - $.tmpl('fighter.yaml')
