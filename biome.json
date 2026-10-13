@@ -7,14 +7,7 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": [
-      "**/*.ts",
-      "**/*.tsx",
-      "**/*.mts",
-      "**/*.js",
-      "**/*.json",
-      "!**/.cache/**"
-    ]
+    "includes": ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.js", "**/*.json", "!**/.cache/**"]
   },
   "formatter": {
     "enabled": true,
@@ -36,9 +29,7 @@
         "noLabelWithoutControl": {
           "level": "error",
           "options": {
-            "inputComponents": [
-              "Input"
-            ],
+            "inputComponents": ["Input"],
             "labelAttributes": [],
             "labelComponents": []
           }
