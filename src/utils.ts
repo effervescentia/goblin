@@ -22,6 +22,7 @@ import {
   INLINE_DICE,
   META_PREFIX,
   PARAM_KEY,
+  PARAM_VALUE_KEY,
   PARAMS_KEY,
   SIGIL_REF,
   type Sigil,
@@ -491,6 +492,33 @@ export function serialize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(serialize);
   if (value && typeof value === 'object') {
     return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, serialize(v)]));
+  }
+  return value;
+}
+
+/**
+ * Recursively drop metadata keys (`:…` and `!validate`) from resolved
+ * output. `:param` records collapse to their `:value`; serialized functions
+ * (`{ :type: 'function', :source, … }`) print as their source expression;
+ * other records left empty (e.g. `{ :doc }`) collapse to `null`. Arrays are
+ * mapped item-wise; scalars pass through.
+ */
+export function stripMetadata(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripMetadata);
+  if (value && typeof value === 'object') {
+    const rec = value as Record<string, unknown>;
+    if (isParamRecord(rec)) {
+      return stripMetadata(rec[PARAM_VALUE_KEY] ?? null);
+    }
+    if (rec[TYPE_KEY] === 'function' && typeof rec[SOURCE_KEY] === 'string') {
+      return rec[SOURCE_KEY];
+    }
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(rec)) {
+      if (isMetaKey(k) || isValidateKey(k)) continue;
+      out[k] = stripMetadata(v);
+    }
+    return Object.keys(out).length === 0 ? null : out;
   }
   return value;
 }

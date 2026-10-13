@@ -76,6 +76,9 @@ export const THEN_KEY = '$then';
 /** Slot holding a `:param` node's filled value. */
 export const VALUE_KEY = 'value';
 
+/** Filled value shown on an evaluated `:param` record (display only). */
+export const PARAM_VALUE_KEY = ':value';
+
 /** Printed function descriptor keys (see `serialize`). */
 export const PARAMS_KEY = ':params';
 export const SOURCE_KEY = ':source';

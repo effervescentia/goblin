@@ -364,12 +364,16 @@ describe('parameters', () => {
     });
     const out = engine.evaluate(doc, scope({ hero_name: 'Aria', start_level: 3, attack_die: '1d8' })) as Record<
       string,
-      { value: unknown }
+      Record<string, unknown>
     >;
-    expect(out.hero_name).toBe('Aria');
-    expect(out.level).toBe(3);
-    expect(out.attack_die).toBeInstanceOf(Die);
-    expect((out.details as unknown as Record<string, unknown>).title).toBeNull();
+    expect(out.hero_name).toEqual({ ':doc': 'The hero name.', ':param': true, ':type': 'string', ':value': 'Aria' });
+    expect(out.level).toEqual({ ':doc': 'Starting level.', ':param': 'start_level', ':type': 'integer', ':value': 3 });
+    expect(out.attack_die?.[':value']).toBeInstanceOf(Die);
+    expect(out.attack_die?.[':param']).toBe(true);
+    expect((out.details as unknown as Record<string, Record<string, unknown>>).title).toEqual({
+      ':param': true,
+      ':value': null,
+    });
     expect(out.hit_points).toEqual({ value: 10, max: 10 });
   });
 
@@ -400,13 +404,19 @@ describe('parameters', () => {
       path: [],
       provided,
     });
-    const out = engine.evaluate(doc, scope()) as Record<string, unknown>;
-    expect(out.greeting).toBe('hello');
-    expect(out.retries).toBe(3);
-    expect(out.nick).toBeNull();
-    const over = engine.evaluate(doc, scope({ greeting: 'yo', retries: 5 })) as Record<string, unknown>;
-    expect(over.greeting).toBe('yo');
-    expect(over.retries).toBe(5);
+    const out = engine.evaluate(doc, scope()) as Record<string, Record<string, unknown>>;
+    expect(out.greeting).toEqual({
+      ':doc': 'Hi.',
+      ':param': true,
+      ':type': 'string',
+      ':default': 'hello',
+      ':value': 'hello',
+    });
+    expect(out.retries).toEqual({ ':param': true, ':type': 'integer', ':default': 3, ':value': 3 });
+    expect(out.nick).toEqual({ ':param': true, ':value': null });
+    const over = engine.evaluate(doc, scope({ greeting: 'yo', retries: 5 })) as Record<string, Record<string, unknown>>;
+    expect(over.greeting?.[':value']).toBe('yo');
+    expect(over.retries?.[':value']).toBe(5);
     expect(() => engine.evaluate({ x: { ':param': true, ':type': 'integer', ':default': 'many' } }, scope())).toThrow(
       'param type mismatch: x expected integer, got string',
     );
@@ -457,9 +467,14 @@ describe('parameters', () => {
       { path: 'attack_die', type: 'die' },
       { path: 'details.title' },
     ]);
-    const out = engine.evaluateDoc('params.yaml', { hero_name: 'Aria' }) as Record<string, unknown>;
-    expect(out.hero_name).toBe('Aria');
-    expect(out.level).toBeNull();
+    const out = engine.evaluateDoc('params.yaml', { hero_name: 'Aria' }) as Record<string, Record<string, unknown>>;
+    expect(out.hero_name?.[':value']).toBe('Aria');
+    expect(out.level).toEqual({
+      ':doc': 'Starting level.',
+      ':param': 'start_level',
+      ':type': 'integer',
+      ':value': null,
+    });
   });
 
   it('resolves to data when satisfied, query with only outstanding params when not', () => {
@@ -491,10 +506,23 @@ describe('parameters', () => {
       attack_die: '1d8',
       'details.title': 'Kid',
     }) as { data: Record<string, unknown> };
-    expect(full.data.hero_name).toBe('Aria');
-    expect(full.data.level).toBe(3);
-    expect(full.data.attack_die).toBe('1d8');
-    expect((full.data.details as unknown as Record<string, unknown>).title).toBe('Kid');
+    expect(full.data.hero_name).toEqual({
+      ':doc': 'The hero name.',
+      ':param': true,
+      ':type': 'string',
+      ':value': 'Aria',
+    });
+    expect(full.data.level).toEqual({
+      ':doc': 'Starting level.',
+      ':param': 'start_level',
+      ':type': 'integer',
+      ':value': 3,
+    });
+    expect(full.data.attack_die).toEqual({ ':param': true, ':type': 'die', ':value': '1d8' });
+    expect((full.data.details as unknown as Record<string, unknown>).title).toEqual({
+      ':param': true,
+      ':value': 'Kid',
+    });
   });
 
   it('validates array parameters', () => {
@@ -509,10 +537,10 @@ describe('parameters', () => {
       path: [],
       provided,
     });
-    const filled = engine.evaluate(doc, scope({ tags: ['a', 'b'] })) as Record<string, unknown>;
-    expect(filled.tags).toEqual(['a', 'b']);
-    const empty = engine.evaluate(doc, scope({ tags: [] })) as Record<string, unknown>;
-    expect(empty.tags).toEqual([]);
+    const filled = engine.evaluate(doc, scope({ tags: ['a', 'b'] })) as Record<string, Record<string, unknown>>;
+    expect(filled.tags).toEqual({ ':doc': 'Tags.', ':param': true, ':type': 'array', ':value': ['a', 'b'] });
+    const empty = engine.evaluate(doc, scope({ tags: [] })) as Record<string, Record<string, unknown>>;
+    expect(empty.tags?.[':value']).toEqual([]);
     expect(() => engine.evaluate(doc, scope({ tags: 'nope' }))).toThrow(
       'param type mismatch: tags expected array, got string',
     );

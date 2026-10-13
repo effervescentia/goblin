@@ -1,4 +1,4 @@
-import { DEFAULT_KEY, DOCUMENT, IF_KEY, PARAM_KEY, THEN_KEY, TYPE_KEY } from '../constants';
+import { DEFAULT_KEY, DOCUMENT, IF_KEY, PARAM_KEY, PARAM_VALUE_KEY, THEN_KEY, TYPE_KEY } from '../constants';
 import type { GoblinEngine } from '../engine';
 import type { EvalRoots } from '../utils';
 import { checkParamType, isBareSigil, isMetaKey, isPathKey, isValidateKey, stripPlus } from '../utils';
@@ -43,18 +43,27 @@ export class RecordNode extends Node<Record<string, unknown>> {
 }
 
 /**
- * A `:param` record evaluates straight to its filled value — provided, else
- * `:default`, else `null` — with no wrapper. Metadata stays on the raw node
- * for `missingParams`, never in output.
+ * A `:param` record evaluates to its declaration metadata plus a `:value`
+ * slot holding the filled value — provided, else `:default`, else `null`.
+ * Bare refs still read the filled value directly (see `derefParam`); the
+ * wrapper is display only, and `--strip-metadata` collapses it to `:value`.
  */
 function fillParam(engine: GoblinEngine, record: Record<string, unknown>, scope: EvalRoots, base: string[]): unknown {
   const marker = record[PARAM_KEY];
   const paramKey = typeof marker === 'string' && marker ? marker : base.join('.');
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (isMetaKey(key) || isValidateKey(key)) out[key] = value;
+  }
   const provided = scope.provided?.[paramKey];
   const def = record[DEFAULT_KEY];
-  if (provided === undefined && (def === undefined || def === null)) return null;
+  if (provided === undefined && (def === undefined || def === null)) {
+    out[PARAM_VALUE_KEY] = null;
+    return out;
+  }
   const filled = engine.evaluate(provided !== undefined ? provided : def, scope);
   const type = record[TYPE_KEY];
   if (typeof type === 'string' && type) checkParamType(type, filled, paramKey);
-  return filled;
+  out[PARAM_VALUE_KEY] = filled;
+  return out;
 }

@@ -43,8 +43,18 @@ describe('examples', () => {
       '--param',
       'details.title=Kid',
     ) as { data: Record<string, unknown> };
-    expect(data.data.hero_name).toBe('Aria');
-    expect(data.data.level).toBe(3);
+    expect(data.data.hero_name).toEqual({
+      ':doc': "The hero's name, as sung by bards.",
+      ':param': true,
+      ':type': 'string',
+      ':value': 'Aria',
+    });
+    expect(data.data.level).toEqual({
+      ':doc': 'Starting level, 1 through 20.',
+      ':param': 'starting_level',
+      ':type': 'integer',
+      ':value': 3,
+    });
   });
 
   it('09-stdlib.yaml resolves $lib with no attaching', () => {

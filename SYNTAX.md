@@ -266,10 +266,11 @@ adopt:
 ## Parameters
 
 A record containing `:param` declares a value the user must provide. It
-evaluates straight to the filled value — provided, else `:default`, else
-`null` — with no wrapper. `missingParams()` reports every such node as
-`[{ path, doc?, type? }]` — the dotted path needing a value plus the
-attached `:doc`.
+evaluates to its declaration metadata plus a `:value` slot holding the
+filled value — provided, else `:default`, else `null`:
+`{ ':doc'?, ':param', ':type'?, ':default'?, ':value' }`.
+`missingParams()` reports every such node as `[{ path, doc?, type? }]` —
+the dotted path needing a value plus the attached `:doc`.
 
 - `:param: true` keys the provided value by the node's dotted path.
 - `:param: 'alias'` keys it by the alias string instead.
@@ -288,6 +289,8 @@ attached `:doc`.
   `null` when missing), so `@.xp` just works. Descending into a `:param`
   node's `value` slot does not resolve; data records like `hit_points.value`
   are unaffected.
+- The CLI `--strip-metadata` flag collapses `:param` records to their
+  `:value`, leaving plain values only.
 
 ```yaml
 # Examples (examples/08-parameters.yaml)
@@ -310,7 +313,7 @@ engine.missingParams('08-parameters.yaml');
 //   { path: 'details.title' },
 // ]
 engine.evaluateDoc('08-parameters.yaml', { hero_name: 'Aria' });
-// hero_name → 'Aria'
+// hero_name → { ':doc': '…', ':param': true, ':type': 'string', ':value': 'Aria' }
 engine.evaluateDoc('08-parameters.yaml', { starting_level: 'high' });
 // throws: param type mismatch: starting_level expected integer, got string
 ```

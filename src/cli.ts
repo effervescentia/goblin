@@ -12,8 +12,9 @@
  * with a non-zero exit code.
  */
 import { GoblinEngine } from './engine';
+import { stripMetadata } from './utils';
 
-export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--help]
+export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--strip-metadata] [--help]
 
 Resolves a goblin document and prints the result as JSON: either
 { "data": … } when all :param values are satisfied, or
@@ -28,11 +29,15 @@ Arguments:
   --set         Override any value by path (repeatable, applied after
                 patches): --set level=5. Overridden originals are ignored,
                 even missing paths; :param records keep their :type contract.
+  --strip-metadata  Drop metadata keys (:doc, :type, !validate, …) from the
+                printed data, leaving plain values only. Functions print as
+                their source expression; records left empty collapse to null.
   --help, -h    Show this help.`;
 
 export interface CliArgs {
   entry?: string;
   compact: boolean;
+  stripMetadata: boolean;
   help: boolean;
   params: Record<string, unknown>;
   overrides: Record<string, unknown>;
@@ -56,11 +61,13 @@ function parseKeyValue(flag: string, pair: string | undefined): [string, unknown
 
 /** Pure argv parsing (excludes node/bun binary and script name). */
 export function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { compact: false, help: false, params: {}, overrides: {} };
+  const args: CliArgs = { compact: false, stripMetadata: false, help: false, params: {}, overrides: {} };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     if (arg === '--compact') {
       args.compact = true;
+    } else if (arg === '--strip-metadata') {
+      args.stripMetadata = true;
     } else if (arg === '--help' || arg === '-h') {
       args.help = true;
     } else if (arg === '--param' || arg === '--set') {
@@ -150,7 +157,9 @@ if (import.meta.main) {
       process.exit(0);
     }
     const state = await resolveAppState(process.cwd(), args.entry, args.params, args.overrides);
-    process.stdout.write(`${JSON.stringify(state, null, args.compact ? 0 : 2)}\n`);
+    const out =
+      args.stripMetadata && 'data' in state ? { data: stripMetadata((state as { data: unknown }).data) } : state;
+    process.stdout.write(`${JSON.stringify(out, null, args.compact ? 0 : 2)}\n`);
   } catch (err) {
     console.error(err instanceof Error ? err.message : err);
     process.exit(1);

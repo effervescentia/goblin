@@ -3,16 +3,25 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parseArgs, parseParamValue, USAGE } from './cli';
+import { stripMetadata } from './utils';
 
 describe('parseArgs', () => {
   it('defaults to no entry and pretty output', () => {
-    expect(parseArgs([])).toEqual({ entry: undefined, compact: false, help: false, params: {}, overrides: {} });
+    expect(parseArgs([])).toEqual({
+      entry: undefined,
+      compact: false,
+      stripMetadata: false,
+      help: false,
+      params: {},
+      overrides: {},
+    });
   });
 
   it('accepts a positional entry file', () => {
     expect(parseArgs(['player.yaml'])).toEqual({
       entry: 'player.yaml',
       compact: false,
+      stripMetadata: false,
       help: false,
       params: {},
       overrides: {},
@@ -23,6 +32,7 @@ describe('parseArgs', () => {
     expect(parseArgs(['--compact'])).toEqual({
       entry: undefined,
       compact: true,
+      stripMetadata: false,
       help: false,
       params: {},
       overrides: {},
@@ -30,6 +40,26 @@ describe('parseArgs', () => {
     expect(parseArgs(['main.yaml', '--compact'])).toEqual({
       entry: 'main.yaml',
       compact: true,
+      stripMetadata: false,
+      help: false,
+      params: {},
+      overrides: {},
+    });
+  });
+
+  it('accepts --strip-metadata', () => {
+    expect(parseArgs(['--strip-metadata'])).toEqual({
+      entry: undefined,
+      compact: false,
+      stripMetadata: true,
+      help: false,
+      params: {},
+      overrides: {},
+    });
+    expect(parseArgs(['main.yaml', '--compact', '--strip-metadata'])).toEqual({
+      entry: 'main.yaml',
+      compact: true,
+      stripMetadata: true,
       help: false,
       params: {},
       overrides: {},
@@ -37,14 +67,29 @@ describe('parseArgs', () => {
   });
 
   it('accepts --help and -h', () => {
-    expect(parseArgs(['--help'])).toEqual({ entry: undefined, compact: false, help: true, params: {}, overrides: {} });
-    expect(parseArgs(['-h'])).toEqual({ entry: undefined, compact: false, help: true, params: {}, overrides: {} });
+    expect(parseArgs(['--help'])).toEqual({
+      entry: undefined,
+      compact: false,
+      stripMetadata: false,
+      help: true,
+      params: {},
+      overrides: {},
+    });
+    expect(parseArgs(['-h'])).toEqual({
+      entry: undefined,
+      compact: false,
+      stripMetadata: false,
+      help: true,
+      params: {},
+      overrides: {},
+    });
   });
 
   it('accepts repeatable --param key=value', () => {
     expect(parseArgs(['--param', 'hero_name=Aria'])).toEqual({
       entry: undefined,
       compact: false,
+      stripMetadata: false,
       help: false,
       params: { hero_name: 'Aria' },
       overrides: {},
@@ -52,6 +97,7 @@ describe('parseArgs', () => {
     expect(parseArgs(['--param', 'level=3', '--param', 'name=Aria'])).toEqual({
       entry: undefined,
       compact: false,
+      stripMetadata: false,
       help: false,
       params: { level: 3, name: 'Aria' },
       overrides: {},
@@ -62,6 +108,7 @@ describe('parseArgs', () => {
     expect(parseArgs(['--param', 'skills.trained=["athletics","perception"]'])).toEqual({
       entry: undefined,
       compact: false,
+      stripMetadata: false,
       help: false,
       params: { 'skills.trained': ['athletics', 'perception'] },
       overrides: {},
@@ -82,6 +129,7 @@ describe('parseArgs', () => {
     expect(parseArgs(['--set', 'level=5'])).toEqual({
       entry: undefined,
       compact: false,
+      stripMetadata: false,
       help: false,
       params: {},
       overrides: { level: 5 },
@@ -89,6 +137,7 @@ describe('parseArgs', () => {
     expect(parseArgs(['--param', 'name=Aria', '--set', 'level=5', '--set', 'a.b=1'])).toEqual({
       entry: undefined,
       compact: false,
+      stripMetadata: false,
       help: false,
       params: { name: 'Aria' },
       overrides: { level: 5, 'a.b': 1 },
@@ -107,6 +156,37 @@ describe('parseArgs', () => {
   });
 });
 
+describe('stripMetadata', () => {
+  it('drops :-prefixed and !validate keys recursively, keeping values', () => {
+    expect(
+      stripMetadata({
+        name: 'Aria',
+        hit_points: { '!validate': ['.current >= 0'], current: 10, max: 10 },
+        features: { second_wind: { ':doc': 'Regain.' } },
+        utils: {
+          ability_modifier: { ':type': 'function', ':params': ['x'], ':source': 'x * 2', ':deps': [] },
+          partial: { ':type': 'function' },
+        },
+        tags: [{ ':doc': 't', label: 'a' }, 'b'],
+        level: 5,
+        xp: { ':doc': 'XP.', ':param': true, ':type': 'integer', ':default': 0, ':value': 6500 },
+        nick: { ':param': true, ':value': null },
+      }),
+    ).toEqual({
+      name: 'Aria',
+      hit_points: { current: 10, max: 10 },
+      features: { second_wind: null },
+      utils: { ability_modifier: 'x * 2', partial: null },
+      tags: [{ label: 'a' }, 'b'],
+      level: 5,
+      xp: 6500,
+      nick: null,
+    });
+    expect(stripMetadata('d10')).toBe('d10');
+    expect(stripMetadata(null)).toBeNull();
+  });
+});
+
 describe('parseParamValue', () => {
   it('parses JSON, falling back to strings', () => {
     expect(parseParamValue('3')).toBe(3);
@@ -119,8 +199,11 @@ describe('parseParamValue', () => {
 
 describe('USAGE', () => {
   it('documents the CLI', () => {
-    expect(USAGE).toContain('goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--help]');
+    expect(USAGE).toContain(
+      'goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--strip-metadata] [--help]',
+    );
     expect(USAGE).toContain('--compact');
+    expect(USAGE).toContain('--strip-metadata');
     expect(USAGE).toContain('--param');
     expect(USAGE).toContain('--set');
     expect(USAGE).toContain('--help, -h');
@@ -177,5 +260,61 @@ describe('cli', () => {
     expect(pretty.status).toBe(0);
     expect(pretty.stdout.trimEnd().includes('\n')).toBe(true);
     expect(JSON.parse(pretty.stdout)).toEqual(JSON.parse(compact.stdout));
+  });
+
+  it('--strip-metadata drops metadata keys from data output', () => {
+    const args = [
+      '5e/main.yaml',
+      '--compact',
+      '--param',
+      'name=Aria',
+      '--param',
+      'xp=6500',
+      '--param',
+      'features.fighting_style=dueling',
+      '--param',
+      'features.martial_archetype=Champion',
+      '--param',
+      'skills.trained=["athletics","perception"]',
+    ];
+    const full = runCli(...args);
+    expect(full.status).toBe(0);
+    const fullData = (JSON.parse(full.stdout) as { data: Record<string, unknown> }).data;
+    expect(JSON.stringify(fullData)).toContain(':doc');
+    expect(fullData.name).toEqual({
+      ':doc': "Your hero's name, as sung by bards.",
+      ':param': true,
+      ':type': 'string',
+      ':value': 'Aria',
+    });
+    expect(fullData.xp).toEqual({
+      ':doc': 'Experience points earned in play.',
+      ':param': true,
+      ':type': 'integer',
+      ':default': 0,
+      ':value': 6500,
+    });
+
+    const stripped = runCli(...args, '--strip-metadata');
+    expect(stripped.status).toBe(0);
+    const data = (JSON.parse(stripped.stdout) as { data: Record<string, unknown> }).data;
+    const metaKeys: string[] = [];
+    const visit = (node: unknown) => {
+      if (Array.isArray(node)) return node.forEach(visit);
+      if (node && typeof node === 'object') {
+        for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+          if (k.startsWith(':') || k === '!validate') metaKeys.push(k);
+          visit(v);
+        }
+      }
+    };
+    visit(data);
+    expect(metaKeys).toEqual([]);
+    expect(data.hit_points).toEqual({ current: 10, max: 10 });
+    expect(data.name).toBe('Aria');
+    expect(data.level).toBe(5);
+    expect(data.initiative).toEqual({ base: 0, roll: '1d20 + .base' });
+    expect((data.utils as Record<string, unknown>).ability_modifier).toBe('$lib.math.floor((x - 10) / 2)');
+    expect((data.features as Record<string, unknown>).second_wind).toBeNull();
   });
 });
