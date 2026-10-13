@@ -1,7 +1,7 @@
 classes:
-  monk: $.tmpl('monk2.yaml')
+  monk: $tmpl('monk2.yaml')
 utils:
-  ability_modifier(x): '$.math.floor((x - 10) / 2)'
+  ability_modifier(x): '$lib.math.floor((x - 10) / 2)'
 # game:
 #   players:
 #     :type: $list($type('player.yaml'))
@@ -50,6 +50,6 @@ proficiencies:
 resources: {}
 rest:
   short(): |
-    #.hit_points.value = $.math.min(#.hit_points.value + #.hit_die, #.hit_points.max)
+    #.hit_points.value = $lib.math.min(#.hit_points.value + #.hit_die, #.hit_points.max)
   long(): |
     #.hit_points.value = #.hit_points.max

@@ -1,0 +1,4 @@
+# Goblin standard library, implicitly loaded as `$lib` (see engine.ensureLib).
+# Native math functions (floor, ceil, round, abs, min, max) are bound by the
+# engine. Project helpers belong in documents (e.g. 5e/character.yaml utils),
+# not here — this file stays minimal on purpose.

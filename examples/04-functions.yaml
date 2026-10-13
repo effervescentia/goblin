@@ -1,9 +1,9 @@
 # Functions: `name()` / `name(params)` keys define callables.
 # Bodies evaluate per call; `.` inside a body is the enclosing record.
-# `$.math.*` is the stdlib (also usable dot-less: `$math.floor(…)`).
+# `$lib.math.*` is the stdlib, implicitly loaded by the engine.
 
 utils:
-  'ability_modifier(x)': $.math.floor((x - 10) / 2)
+  'ability_modifier(x)': $lib.math.floor((x - 10) / 2)
   'double(x)': x * 2
 
 strength:
@@ -11,5 +11,5 @@ strength:
   modifier: $.utils.ability_modifier(.base) # → 2
 
 doubled: $.utils.double(21) # → 42
-floored: $math.floor(2.9) # → 2
+floored: $lib.math.floor(2.9) # → 2
 'lucky()': 1d20 # zero-arg callable

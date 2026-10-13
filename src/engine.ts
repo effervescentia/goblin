@@ -23,6 +23,7 @@ import {
   Die,
   deepClone,
   type EvalRoots,
+  getChild,
   getChildEntry,
   getPath,
   isBareSigil,
@@ -46,8 +47,10 @@ import {
 export class GoblinEngine {
   /** Raw (unevaluated) documents by file name. */
   readonly docs = new Map<string, unknown>();
-  /** `#` — shared global namespace (stdlib + cross-doc values). */
-  readonly appRoot: Record<string, unknown> = {
+  /** `#` — shared global namespace (cross-doc values). */
+  readonly appRoot: Record<string, unknown> = {};
+  /** `$lib` — standard library: native math bound in code, yaml helpers merged on load. */
+  readonly library: Record<string, unknown> = {
     math: { ...MATH_LIB },
   };
   /** Resolved-value cache + cycle guard for lazy references. */
@@ -55,10 +58,12 @@ export class GoblinEngine {
   private readonly resolving: string[] = [];
   private readonly objIds = new WeakMap<object, number>();
   private nextId = 1;
+  private libLoaded = false;
 
   constructor(private readonly rootDir = '.') {}
 
   async loadFile(file: string): Promise<unknown> {
+    await this.ensureLib();
     const { YAML } = await import('bun');
     const text = await Bun.file(joinPath(this.rootDir, file)).text();
     const data = YAML.parse(text);
@@ -67,17 +72,42 @@ export class GoblinEngine {
     return data;
   }
 
+  /** Merge a parsed library document over the native defaults. */
+  mergeLib(data: unknown): void {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return;
+    const record = data as Record<string, unknown>;
+    Object.assign(this.library, record);
+    this.library.math = { ...((record.math as Record<string, unknown> | undefined) ?? {}), ...MATH_LIB };
+  }
+
   /**
-   * Follow `$.tmpl('…')` references recursively so templates resolve without
+   * Implicitly load the stdlib document living next to the engine module
+   * (`src/lib.yaml`). Missing files are normal (tests seed documents
+   * directly) — the in-code natives stand alone.
+   */
+  private async ensureLib(): Promise<void> {
+    if (this.libLoaded) return;
+    this.libLoaded = true;
+    try {
+      const { YAML } = await import('bun');
+      const text = await Bun.file(new URL('./lib.yaml', import.meta.url)).text();
+      this.mergeLib(YAML.parse(text));
+    } catch {
+      /* no lib file — natives stand alone */
+    }
+  }
+
+  /**
+   * Follow `$tmpl('…')` references recursively so templates resolve without
    * manual preloading. References resolve relative to the referring file's
    * directory; results are keyed both as written (matching `evalExpr`
    * lookups) and by resolved path (deduping spellings). Each file is read at
    * most once, so cycles terminate. NOTE: the scan is textual — keep
-   * `$.tmpl('…')` shapes out of comments.
+   * `$tmpl('…')` shapes out of comments.
    */
   private async discoverTemplates(file: string, text: string): Promise<void> {
     const dir = file.includes('/') ? file.slice(0, file.lastIndexOf('/')) : '';
-    const pattern = /\$\.tmpl\(\s*['"]([^'"]+)['"]\s*\)/g;
+    const pattern = /\$tmpl\(\s*['"]([^'"]+)['"]\s*\)/g;
     let match: RegExpExecArray | null;
     match = pattern.exec(text);
     while (match !== null) {
@@ -108,7 +138,7 @@ export class GoblinEngine {
     return data;
   }
 
-  /** `$.tmpl('other.yaml')` helper + any registered template loader. */
+  /** `$tmpl('other.yaml')` helper + any registered template loader. */
   async loadTemplate(file: string): Promise<unknown> {
     if (!this.docs.has(file)) await this.loadFile(file);
     return this.docs.get(file);
@@ -142,14 +172,16 @@ export class GoblinEngine {
 
   resolveRef(ref: string, scope: EvalRoots): unknown {
     const { root, path } = parseRef(ref);
-    const base = root === '.' ? scope.current : root === '$' ? scope.doc : root === '@' ? scope.actor : scope.app;
-    if (path.length === 0) return this.evaluate(base, scope);
-
-    // stdlib fallback: `$.math.floor` / `#.math.min` / `$math.min`.
-    if ((root === '$' || root === '#') && path[0] === 'math') {
-      const fn = getPath({ math: MATH_LIB }, path);
-      if (fn !== undefined) return fn;
+    let base = root === '.' ? scope.current : root === '$' ? scope.doc : root === '@' ? scope.actor : scope.app;
+    let segments = path;
+    // `$lib.…` addresses the standard library, unless the base document
+    // defines its own `lib` table (explicit bindings win).
+    if (segments[0] === 'lib' && (base == null || typeof base !== 'object' || getChild(base, 'lib') === undefined)) {
+      base = this.library;
+      segments = segments.slice(1);
     }
+
+    if (segments.length === 0) return this.evaluate(base, scope);
 
     const key = this.cacheKey(ref, scope);
     if (this.cache.has(key)) return this.cache.get(key);
@@ -160,9 +192,9 @@ export class GoblinEngine {
     try {
       // Scope-aware walk with function-key awareness, so `ability_modifier`
       // finds the raw `ability_modifier(x)` entry. Intermediate expression
-      // strings (e.g. a `$.tmpl('…')` table) evaluate on the way down, with
+      // strings (e.g. a `$tmpl('…')` table) evaluate on the way down, with
       // `.` bound to their enclosing record.
-      const found = this.walkScoped(base, path, scope);
+      const found = this.walkScoped(base, segments, scope);
       if (found !== null) {
         const fn = this.entryCallable(found, scope);
         if (fn !== undefined) return fn;
@@ -173,7 +205,7 @@ export class GoblinEngine {
         // to the app root (e.g. `player.yaml` uses `@.utils.…` supplied by
         // the app), `#` falls back to the current document.
         const fallbackRoot = root === '#' ? scope.doc : scope.app;
-        const fallbackFound = this.walkScoped(fallbackRoot, path, scope);
+        const fallbackFound = this.walkScoped(fallbackRoot, segments, scope);
         if (fallbackFound !== null) {
           const fn = this.entryCallable(fallbackFound, scope);
           if (fn !== undefined) return fn;
@@ -183,7 +215,7 @@ export class GoblinEngine {
       }
       const value = this.evaluate(rawTarget, {
         ...scope,
-        current: parentOf(base, path) ?? scope.current,
+        current: parentOf(base, segments) ?? scope.current,
       });
       this.cache.set(key, value);
       return value;
@@ -195,7 +227,7 @@ export class GoblinEngine {
   /**
    * Like walkRaw, but expression strings met along the path evaluate first
    * so refs can descend through them (e.g. `$.thresholds.l2` where
-   * `thresholds` is `$.tmpl('levels.yaml')`). Terminates: re-entering the
+   * `thresholds` is `$tmpl('levels.yaml')`). Terminates: re-entering the
    * same ref hits the resolving guard with a stabilized scope.
    */
   private walkScoped(
@@ -243,8 +275,8 @@ export class GoblinEngine {
       if (trimmed === die.toString() || trimmed === `1d${die.sides}`.replace(/^1d/, 'd')) return die;
       return die;
     }
-    // `$.tmpl('file.yaml')` — synchronous template lookup (must be loaded).
-    const tmpl = trimmed.match(/^\$\.tmpl\(\s*['"]([^'"]+)['"]\s*\)$/);
+    // `$tmpl('file.yaml')` — synchronous template lookup (must be loaded).
+    const tmpl = trimmed.match(/^\$tmpl\(\s*['"]([^'"]+)['"]\s*\)$/);
     if (tmpl) {
       const doc = this.docs.get(tmpl[1]!);
       if (doc === undefined) throw new Error(`template not loaded: ${tmpl[1]}`);
@@ -334,7 +366,7 @@ export class GoblinEngine {
     return this.applyRaw(actorRaw, patch);
   }
 
-  /** Apply an in-memory patch (e.g. a `$.tmpl('…')` clone) onto an actor. */
+  /** Apply an in-memory patch (e.g. a `$tmpl('…')` clone) onto an actor. */
   applyRaw(actorRaw: unknown, patch: unknown): unknown {
     const scope: EvalRoots = {
       doc: patch,

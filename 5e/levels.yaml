@@ -1,6 +1,6 @@
 # D&D 5e level progression: XP thresholds plus the derivation function.
-# Inlined by 5e/character.yaml (`levels: $.tmpl('levels.yaml')`) and called
-# as $.levels.level_for(@.xp.value). Inside the body, `.` is this document's
+# Bound in 5e/main.yaml (`levels: $tmpl('levels.yaml')`) and called un-attached
+# as #.levels.level_for(@.xp.value). Inside the body, `.` is this document's
 # root and `xp` is the call argument.
 
 thresholds:
@@ -38,4 +38,4 @@ level_for(xp): >-
   (xp >= .thresholds.l20)
 
 # Proficiency climbs +1 at levels 5, 9, 13, 17.
-'proficiency_for(level)': 2 + $.math.floor((level - 1) / 4)
+'proficiency_for(level)': 2 + $lib.math.floor((level - 1) / 4)

@@ -40,6 +40,6 @@ proficiencies:
 resources: {}
 rest:
   short(): |
-    $.hit_points.value = $math.min($.hit_points.value + $.hit_die, $.hit_points.max)
+    $.hit_points.value = $lib.math.min($.hit_points.value + $.hit_die, $.hit_points.max)
   long(): |
     $.hit_points.value = $.hit_points.max

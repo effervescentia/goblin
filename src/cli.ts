@@ -7,7 +7,7 @@
  *
  * With no entry file, the main document from `.goblin.yaml` is used.
  * An entry containing a directory (`examples/foo.yaml`) is resolved with
- * that directory as the root, so `$.tmpl('…')` paths are relative to it.
+ * that directory as the root, so `$tmpl('…')` paths are relative to it.
  * Resolved state goes to stdout (always valid JSON); errors go to stderr
  * with a non-zero exit code.
  */
@@ -21,7 +21,7 @@ Resolves a goblin document and prints the result as JSON: either
 
 Arguments:
   entry.yaml    Entry document (default: main from .goblin.yaml).
-                If it contains a directory, $.tmpl('…') resolves relative to it.
+                If it contains a directory, $tmpl('…') resolves relative to it.
   --compact     Single-line JSON output (default: pretty-printed).
   --param       Provide a :param value (repeatable). Values parse as JSON,
                 falling back to strings: --param level=3 --param name=Aria
@@ -82,7 +82,7 @@ export async function resolveAppState(
     root = `${cwd}/${opts.root}`;
     main = opts.main;
   } else if (main.includes('/')) {
-    // Resolve relative to the entry's own directory so `$.tmpl('…')`
+    // Resolve relative to the entry's own directory so `$tmpl('…')`
     // references stay local to it.
     const slash = main.lastIndexOf('/');
     root = main.startsWith('/') ? main.slice(0, slash) : `${cwd}/${main.slice(0, slash)}`;
@@ -100,7 +100,7 @@ export async function resolveAppState(
 /**
  * Entry composition (`actor` + `adopt` keys): resolve the base actor,
  * derive its level, apply each patch in order at that level, then resolve
- * the merged result. Patch entries are `$.tmpl('…')` expressions (or inline
+ * the merged result. Patch entries are `$tmpl('…')` expressions (or inline
  * objects); provided values flow into every pass.
  */
 export async function resolveComposed(

@@ -47,6 +47,13 @@ describe('examples', () => {
     expect(data.data.level?.value).toBe(3);
   });
 
+  it('09-stdlib.yaml resolves $lib with no attaching', () => {
+    const state = cli('examples/09-stdlib.yaml') as {
+      data: { floored: number; smallest: number };
+    };
+    expect(state.data).toEqual({ floored: 2, smallest: 3 });
+  });
+
   it('applies 07-class.yaml to 07-actor.yaml with $if gating', () => {
     const script = `
       import { GoblinEngine } from './src/engine.ts';

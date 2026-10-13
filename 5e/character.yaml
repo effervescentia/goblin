@@ -45,9 +45,8 @@ abilities:
     modifier: $.utils.ability_modifier(.base)
 
 utils:
-  'ability_modifier(x)': $.math.floor((x - 10) / 2)
+  'ability_modifier(x)': $lib.math.floor((x - 10) / 2)
 
-# Proficiency climbs with level via the progression binding in 5e/main.yaml.
 proficiency_bonus: '#.levels.proficiency_for(@.level)'
 
 armor_class: '10 + $.abilities.dexterity.modifier'
@@ -79,6 +78,6 @@ resources: {}
 
 rest:
   'short()': |
-    @.hit_points.value = $.math.min(@.hit_points.value + @.hit_die, @.hit_points.max)
+    @.hit_points.value = $lib.math.min(@.hit_points.value + @.hit_die, @.hit_points.max)
   'long()': |
     @.hit_points.value = @.hit_points.max

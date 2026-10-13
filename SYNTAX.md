@@ -16,7 +16,7 @@ Nodes are referenced by path using a leading sigil that determines the root of t
 | `#`   | App root | Global application namespace (stdlib, shared templates) |
 
 Segments are separated by `.`. A bare sigil with no segments refers to the root itself.
-The dot after a sigil is optional: `$math.min` and `$.math.min` are equivalent.
+The dot after a sigil is optional: `$foo.bar` and `$.foo.bar` are equivalent.
 
 ```yaml
 # Examples (examples/01-addressability.yaml)
@@ -30,8 +30,7 @@ In a document where the document itself defines the actor (e.g. `player.yaml`), 
 
 Cross-namespace fallback: when a path is missing under `$` or `@`, the app
 root is tried next (so `@.utils.…` works when the app supplies `utils`); a
-missing `#` path falls back to the current document. `$.math.*` / `#.math.*`
-always resolve to the stdlib (see Functions).
+missing `#` path falls back to the current document.
 
 ## Values: plain strings, expressions, dice
 
@@ -91,13 +90,21 @@ callable. Lookup matches `name` to the `name(params)` entry; calling evaluates
 the body per call with the arguments bound. Inside a body, `.` is the record
 holding the definition.
 
-The stdlib `math` (`floor`, `ceil`, `round`, `abs`, `min`, `max`) is available
-as `$.math.*` / `#.math.*` (or dot-less: `$math.min(…)`).
+The stdlib lives under `$lib`, implicitly loaded by the engine (native
+`math`: `floor`, `ceil`, `round`, `abs`, `min`, `max`, merged with
+`src/lib.yaml` when present). A document defining its own top-level `lib`
+table takes precedence for `$lib.…` refs.
+
+```yaml
+# Examples (examples/09-stdlib.yaml)
+floored: $lib.math.floor(2.9)      # → 2
+smallest: $lib.math.min(3, 9)      # → 3
+```
 
 ```yaml
 # Examples (examples/04-functions.yaml)
 utils:
-  'ability_modifier(x)': $.math.floor((x - 10) / 2)
+  'ability_modifier(x)': $lib.math.floor((x - 10) / 2)
   'double(x)': x * 2
 
 strength:
@@ -116,29 +123,29 @@ whitespace-trimmed (block scalars leave trailing newlines):
 {
   $type: 'function',
   params: ['x'],
-  source: '$.math.floor((x - 10) / 2)',
-  dependencies: ['$.math.floor'],
+  source: '$lib.math.floor((x - 10) / 2)',
+  dependencies: ['$.lib.math.floor'],
 }
 ```
 
 ## Templates
 
-`$.tmpl('file.yaml')` inlines a deep clone of another loaded document.
-References are discovered on load — the engine follows `$.tmpl('…')` shapes
+`$tmpl('file.yaml')` inlines a deep clone of another loaded document.
+References are discovered on load — the engine follows `$tmpl('…')` shapes
 recursively (relative to the referring file), so no manual preloading is
-needed. Keep `$.tmpl('…')` shapes out of comments: the scan is textual.
+needed. Keep `$tmpl('…')` shapes out of comments: the scan is textual.
 
 A tmpl'd document's functions stay callable through the inlined table, with
 `.` bound to the template root:
 
 ```yaml
-levels: $.tmpl('levels.yaml')
+levels: $tmpl('levels.yaml')
 level: $.levels.level_for(@.xp.value)
 ```
 
 ```yaml
 # Examples (examples/05-templates.yaml, examples/05-greeting.yaml)
-weapon: $.tmpl('05-greeting.yaml')
+weapon: $tmpl('05-greeting.yaml')
 ```
 
 ## Metadata
@@ -217,13 +224,13 @@ value is its last non-assignment statement.
 ```yaml
 rest:
   short(): |
-    #.hit_points.value = $.math.min(#.hit_points.value + #.hit_die, #.hit_points.max)
+    #.hit_points.value = $lib.math.min(#.hit_points.value + #.hit_die, #.hit_points.max)
 ```
 
 ## Composition
 
 A root entry may compose an actor from an `actor` base plus an `adopt` list
-of patches (each a `$.tmpl('…')` expression or an inline object). The runner
+of patches (each a `$tmpl('…')` expression or an inline object). The runner
 resolves the base, applies each patch in order, then resolves the merged
 result — gate per-level content with `$if` on actor state so choices declared
 by adopted patches surface in the `{ query }` envelope. Template paths are
@@ -235,11 +242,11 @@ $: Character
 
 # Shared binding: merged into the `#` namespace on load, so every document
 # calls #.levels.… without attaching the table itself.
-levels: $.tmpl('levels.yaml')
+levels: $tmpl('levels.yaml')
 
-actor: $.tmpl('character.yaml')
+actor: $tmpl('character.yaml')
 adopt:
-  - $.tmpl('fighter.yaml')
+  - $tmpl('fighter.yaml')
 ```
 
 ## Parameters
@@ -316,7 +323,7 @@ engine.resolve('08-parameters.yaml', { hero_name: 'Aria', starting_level: 3, 'de
 
 - **Lazy and on-demand**: refs resolve when reached; forward references work.
   Resolved values are cached per (document, actor, node, ref).
-- Intermediate expression strings (e.g. a `$.tmpl('…')` table) evaluate on
+- Intermediate expression strings (e.g. a `$tmpl('…')` table) evaluate on
   the way down, so refs can descend through them (`$.thresholds.l2`).
 - **Circular references** throw (`circular reference: a -> b -> a`).
 - **Unresolvable references** throw (`unresolvable reference: …`).

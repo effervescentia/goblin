@@ -1,0 +1,5 @@
+# Standard library: `$lib` is implicitly loaded by the engine — native math
+# plus anything in src/lib.yaml. No attaching needed.
+
+floored: $lib.math.floor(2.9) # → 2
+smallest: $lib.math.min(3, 9) # → 3

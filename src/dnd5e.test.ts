@@ -21,7 +21,7 @@ const script = `
   import { GoblinEngine } from './src/engine.ts';
   import { collectParams } from './src/utils.ts';
   const e = new GoblinEngine('5e');
-  // Single load: engine discovery follows $.tmpl refs (main → character,
+  // Single load: engine discovery follows $tmpl refs (main → character,
   // fighter, levels) automatically.
   await e.loadFile('main.yaml');
 

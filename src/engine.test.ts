@@ -18,7 +18,7 @@ function testEngine() {
   const engine = new GoblinEngine('.');
   const doc = {
     utils: {
-      'ability_modifier(x)': '$.math.floor((x - 10) / 2)',
+      'ability_modifier(x)': '$lib.math.floor((x - 10) / 2)',
     },
     abilities: {
       strength: { base: 15, modifier: '#.utils.ability_modifier(.base)' },
@@ -37,7 +37,7 @@ function testEngine() {
       max: 5,
     },
     rest: {
-      'short()': '#.hit_points.value = $.math.min(#.hit_points.value + #.hit_die, #.hit_points.max)',
+      'short()': '#.hit_points.value = $lib.math.min(#.hit_points.value + #.hit_die, #.hit_points.max)',
     },
   };
   engine.docs.set('main.yaml', doc);
@@ -114,11 +114,19 @@ describe('expressions', () => {
     expect(engine.evalExpr('.base', { ...scope, current: strength })).toBe(15);
   });
 
-  it('supports the math stdlib with and without a dot', () => {
+  it('resolves the $lib standard library', () => {
     const { engine, scope } = testEngine();
-    expect(engine.evalExpr('$.math.min(3, 5)', scope)).toBe(3);
-    expect(engine.evalExpr('$math.max(3, 5)', scope)).toBe(5);
-    expect(engine.evalExpr('#.math.floor(2.9)', scope)).toBe(2);
+    expect(engine.evalExpr('$lib.math.min(3, 5)', scope)).toBe(3);
+    expect(engine.evalExpr('$lib.math.max(3, 5)', scope)).toBe(5);
+    expect(engine.evalExpr('$lib.math.floor(2.9)', scope)).toBe(2);
+  });
+
+  it('merges yaml helpers into $lib over the natives', () => {
+    const engine = new GoblinEngine('.');
+    engine.mergeLib({ 'double(x)': 'x * 2' });
+    const scope = { doc: {}, actor: {}, app: engine.appRoot, current: {}, path: [] };
+    expect(engine.evalExpr('$lib.double(21)', scope)).toBe(42);
+    expect(engine.evalExpr('$lib.math.floor(2.9)', scope)).toBe(2);
   });
 
   it('throws on unresolvable references', () => {
@@ -283,8 +291,8 @@ describe('serialize', () => {
     expect(serialize(out.utils.ability_modifier)).toEqual({
       $type: 'function',
       params: ['x'],
-      source: '$.math.floor((x - 10) / 2)',
-      dependencies: ['$.math.floor'],
+      source: '$lib.math.floor((x - 10) / 2)',
+      dependencies: ['$.lib.math.floor'],
     });
     expect(serialize((out.initiative as { roll: unknown }).roll)).toEqual({
       $type: 'function',
@@ -295,8 +303,8 @@ describe('serialize', () => {
     expect(serialize((out.rest as { short: unknown }).short)).toEqual({
       $type: 'function',
       params: [],
-      source: '#.hit_points.value = $.math.min(#.hit_points.value + #.hit_die, #.hit_points.max)',
-      dependencies: ['#.hit_points.value', '$.math.min', '#.hit_die', '#.hit_points.max'],
+      source: '#.hit_points.value = $lib.math.min(#.hit_points.value + #.hit_die, #.hit_points.max)',
+      dependencies: ['#.hit_points.value', '$.lib.math.min', '#.hit_die', '#.hit_points.max'],
     });
   });
 });
@@ -308,7 +316,7 @@ describe('detectDeps', () => {
   });
 
   it('ignores string literals, dice, and dot-less sigils normalized', () => {
-    expect(detectDeps("$.tmpl('a.yaml')")).toEqual(['$.tmpl']);
+    expect(detectDeps("$tmpl('a.yaml')")).toEqual(['$.tmpl']);
     expect(detectDeps('$math.max(3, 5)')).toEqual(['$.math.max']);
     expect(detectDeps('1d20 + 2')).toEqual([]);
   });
