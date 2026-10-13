@@ -19,22 +19,13 @@ const goblinOpts = await Bun.file('.goblin.yaml')
 const engine = new GoblinEngine(goblinOpts.root);
 await engine.loadFile(goblinOpts.main);
 
-// Load any templates referenced via `$.tmpl('…')` so patch docs exist.
-for (const tmpl of ['monk2.yaml', 'monk.yaml', 'player.yaml']) {
-  try {
-    await engine.loadFile(tmpl);
-  } catch {
-    /* optional */
-  }
-}
-
 const evaluated = engine.evaluateDoc(goblinOpts.main);
 log.info({ doc: serialize(evaluated) }, 'evaluated main.yaml');
 
 // Apply the monk class (level 1) onto a fresh actor built from main.yaml.
 const actorRaw = structuredClone(engine.docs.get(goblinOpts.main));
 if (engine.docs.has('monk2.yaml')) {
-  engine.apply(actorRaw, 'monk2.yaml', 1);
+  engine.apply(actorRaw, 'monk2.yaml');
   const scope = { doc: actorRaw, actor: actorRaw, app: engine.appRoot, current: actorRaw };
   const withMonk = engine.evaluate(actorRaw, scope);
   log.info({ actor: serialize(withMonk) }, 'actor + monk level 1');

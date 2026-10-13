@@ -21,10 +21,8 @@ const script = `
   import { GoblinEngine } from './src/engine.ts';
   import { collectParams } from './src/utils.ts';
   const e = new GoblinEngine('5e');
-  await e.loadFile('character.yaml');
-  await e.loadFile('levels.yaml');
-  await e.loadFile('fighter.yaml');
-  // The progression binding lives in this folder's main (merged into # on load).
+  // Single load: engine discovery follows $.tmpl refs (main → character,
+  // fighter, levels) automatically.
   await e.loadFile('main.yaml');
 
   const baseMissing = e.missingParams('character.yaml').map((m) => m.path).sort();
@@ -39,16 +37,19 @@ const script = `
     'skills.trained': ['athletics', 'perception'],
   });
 
-  // Derive the level from XP, then adopt the fighter at that level.
+  // Derive the level from XP, then adopt the fighter: omitted maxLevel
+  // applies exactly the earned levels automatically.
   const run = (xp) => {
     const a = fresh();
-    const lv = e.evaluate(a, scopeOf(a, baseProvided(xp))).level;
-    e.apply(a, 'fighter.yaml', lv);
-    return { lv, v: e.evaluate(a, scopeOf(a, baseProvided(xp))) };
+    const provided = baseProvided(xp);
+    const lv = e.evaluate(a, scopeOf(a, provided)).level;
+    e.apply(a, 'fighter.yaml');
+    return { lv, v: e.evaluate(a, scopeOf(a, provided)) };
   };
 
   const a3 = fresh();
-  e.apply(a3, 'fighter.yaml', 3);
+  e.evaluate(a3, scopeOf(a3, { name: 'X', xp: 900 }));
+  e.apply(a3, 'fighter.yaml');
   const mergedMissing = collectParams(a3).map((m) => m.path).sort();
 
   const levels = {};
@@ -68,9 +69,11 @@ const script = `
 
   // Resolve envelope for a satisfied fighter.
   const a5 = fresh();
-  e.apply(a5, 'fighter.yaml', 5);
+  const provided5 = { ...baseProvided(6500), name: 'Bram' };
+  e.evaluate(a5, scopeOf(a5, provided5));
+  e.apply(a5, 'fighter.yaml');
   e.docs.set('fighter5.yaml', a5);
-  const resolved = e.resolve('fighter5.yaml', { ...baseProvided(6500), name: 'Bram' });
+  const resolved = e.resolve('fighter5.yaml', provided5);
 
   console.log(JSON.stringify({
     baseMissing,

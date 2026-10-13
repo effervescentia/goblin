@@ -47,7 +47,7 @@ describe('examples', () => {
     expect(data.data.level?.value).toBe(3);
   });
 
-  it('applies 07-class.yaml to 07-actor.yaml with level gating', () => {
+  it('applies 07-class.yaml to 07-actor.yaml with $if gating', () => {
     const script = `
       import { GoblinEngine } from './src/engine.ts';
       const e = new GoblinEngine('examples');
@@ -55,7 +55,8 @@ describe('examples', () => {
       await e.loadFile('07-class.yaml');
       const run = (level) => {
         const actor = structuredClone(e.docs.get('07-actor.yaml'));
-        e.apply(actor, '07-class.yaml', level);
+        actor.level = level;
+        e.apply(actor, '07-class.yaml');
         const scope = { doc: actor, actor, app: e.appRoot, current: actor };
         return e.evaluate(actor, scope);
       };
@@ -65,16 +66,20 @@ describe('examples', () => {
         l1ac: l1.armor_class,
         l1die: String(l1.actions.unarmed_strike.die),
         l1focus: 'monks_focus' in l1.features,
+        l1martial: 'martial_arts' in l1.features,
         l2die: String(l2.actions.unarmed_strike.die),
+        l2type: l2.actions.unarmed_strike.type,
         l2focus: 'monks_focus' in l2.features,
       }));
     `;
     const out = execFileSync('bun', ['-e', script], { cwd: root, encoding: 'utf8' });
     expect(JSON.parse(out)).toEqual({
-      l1ac: 13,
+      l1ac: 12,
       l1die: 'd4',
       l1focus: false,
+      l1martial: true,
       l2die: '1d8',
+      l2type: 'bonus_action',
       l2focus: true,
     });
   });

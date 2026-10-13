@@ -64,7 +64,38 @@ export class GoblinEngine {
   async loadFile(file: string): Promise<unknown> {
     const { YAML } = await import('bun');
     const text = await Bun.file(joinPath(this.rootDir, file)).text();
-    return this.register(file, YAML.parse(text));
+    const data = YAML.parse(text);
+    this.register(file, data);
+    await this.discoverTemplates(file, text);
+    return data;
+  }
+
+  /**
+   * Follow `$.tmpl('…')` references recursively so templates resolve without
+   * manual preloading. References resolve relative to the referring file's
+   * directory; results are keyed both as written (matching `evalExpr`
+   * lookups) and by resolved path (deduping spellings). Each file is read at
+   * most once, so cycles terminate. NOTE: the scan is textual — keep
+   * `$.tmpl('…')` shapes out of comments.
+   */
+  private async discoverTemplates(file: string, text: string): Promise<void> {
+    const dir = file.includes('/') ? file.slice(0, file.lastIndexOf('/')) : '';
+    const pattern = /\$\.tmpl\(\s*['"]([^'"]+)['"]\s*\)/g;
+    let match: RegExpExecArray | null;
+    match = pattern.exec(text);
+    while (match !== null) {
+      const name = match[1]!;
+      const path = dir ? `${dir}/${name}` : name;
+      if (!this.docs.has(name) && !this.docs.has(path)) {
+        const { YAML } = await import('bun');
+        const depText = await Bun.file(joinPath(this.rootDir, path)).text();
+        const depData = YAML.parse(depText);
+        this.register(path, depData);
+        this.register(name, depData);
+        await this.discoverTemplates(path, depText);
+      }
+      match = pattern.exec(text);
+    }
   }
 
   /** Store a document under `file`, merging top-level tables into `#`. */
@@ -365,28 +396,41 @@ export class GoblinEngine {
   // -- patches (class files, levels, conditions) ----------------------------
 
   /**
-   * Apply an applied-document (e.g. `monk2.yaml`) onto an actor's raw tree.
-   * `maxLevel` applies numeric level blocks `1…maxLevel` in order.
+   * Apply an applied-document (e.g. a class file) onto an actor's raw tree.
+   * Leveling lives in the files: gate per-level content with `$if` on actor
+   * state (e.g. `@.level >= 5`). Evaluate with provided values first so
+   * conditions read materialized params.
    */
-  apply(actorRaw: unknown, patchFile: string, maxLevel = Number.MAX_SAFE_INTEGER): unknown {
+  apply(actorRaw: unknown, patchFile: string): unknown {
     const patch = this.docs.get(patchFile);
     if (patch === undefined) throw new Error(`patch document not loaded: ${patchFile}`);
-    return this.applyRaw(actorRaw, patch, maxLevel);
+    return this.applyRaw(actorRaw, patch);
   }
 
   /** Apply an in-memory patch (e.g. a `$.tmpl('…')` clone) onto an actor. */
-  applyRaw(actorRaw: unknown, patch: unknown, maxLevel = Number.MAX_SAFE_INTEGER): unknown {
+  applyRaw(actorRaw: unknown, patch: unknown): unknown {
     const scope: EvalRoots = {
       doc: patch,
       actor: actorRaw,
       app: this.appRoot,
       current: actorRaw,
     };
-    this.applyNode(actorRaw, patch, scope, maxLevel);
+    this.applyNode(actorRaw, patch, scope);
     return actorRaw;
   }
 
-  private applyNode(actorRaw: unknown, patch: unknown, scope: EvalRoots, maxLevel: number): void {
+  /**
+   * A `$if` wrapper gates its whole node: false applies nothing (not even
+   * `:meta`), so gated-out content leaves no residue. Missing or empty
+   * `$if` (comment-only `null`) counts as unconditional.
+   */
+  private condPasses(value: Record<string, unknown>, scope: EvalRoots): boolean {
+    if (!('$if' in value)) return true;
+    const rawCond = value.$if;
+    return rawCond == null || rawCond === '' ? true : Boolean(this.evaluate(rawCond, scope));
+  }
+
+  private applyNode(actorRaw: unknown, patch: unknown, scope: EvalRoots): void {
     if (Array.isArray(patch)) {
       this.applyArray(actorRaw as unknown[], patch);
       return;
@@ -399,26 +443,22 @@ export class GoblinEngine {
         target[key] = deepClone(value);
         continue;
       }
-      // Numeric level blocks.
-      if (/^\d+$/.test(key)) {
-        if (Number(key) <= maxLevel) this.applyNode(actorRaw, value, scope, maxLevel);
-        continue;
-      }
       if (key === '$if' || key === '$then') continue; // handled by mergeInto
-      this.mergeEntry(target, key, value, scope, maxLevel);
+      this.mergeEntry(target, key, value, scope);
     }
   }
 
-  private applyAtPath(pathKey: string, value: unknown, scope: EvalRoots, maxLevel: number): void {
+  private applyAtPath(pathKey: string, value: unknown, scope: EvalRoots): void {
     const { root, path } = parseRef(pathKey);
     const base = root === '@' ? scope.actor : root === '$' ? scope.doc : root === '#' ? scope.app : scope.current;
     if (value && typeof value === 'object' && !Array.isArray(value)) {
+      if (!this.condPasses(value as Record<string, unknown>, scope)) return;
       let target = getPath(base, path);
       if (typeof target !== 'object' || target === null) {
         setPath(base, path, {});
         target = getPath(base, path);
       }
-      this.mergeInto(target, value, { ...scope, current: target }, maxLevel);
+      this.mergeInto(target, value, { ...scope, current: target });
       return;
     }
     if (Array.isArray(value)) {
@@ -436,10 +476,9 @@ export class GoblinEngine {
   /**
    * Merge a patch object into an existing target record, honoring
    * `+` additions, nested path keys, `:meta`, `!validate` and the
-   * `$if` / `$then` condition wrapper. An empty `$if` (comment-only
-   * `null`) counts as unconditional.
+   * `$if` / `$then` condition wrapper.
    */
-  private mergeInto(target: unknown, value: unknown, scope: EvalRoots, maxLevel: number): void {
+  private mergeInto(target: unknown, value: unknown, scope: EvalRoots): void {
     if (Array.isArray(value)) {
       if (Array.isArray(target)) this.applyArray(target, value);
       return;
@@ -448,62 +487,52 @@ export class GoblinEngine {
     const rec = value as Record<string, unknown>;
     const tgt = target as Record<string, unknown>;
     if ('$if' in rec || '$then' in rec) {
-      const rawCond = rec.$if;
-      const cond = rawCond == null || rawCond === '' ? true : Boolean(this.evaluate(rawCond, scope));
-      if (cond && '$then' in rec) this.applyPatchObject(rec.$then, scope, maxLevel);
+      if (!this.condPasses(rec, scope)) return;
+      if ('$then' in rec) this.applyPatchObject(rec.$then, scope);
       for (const [k, v] of Object.entries(rec)) {
         if (k === '$if' || k === '$then') continue;
-        this.mergeEntry(tgt, k, v, scope, maxLevel);
+        this.mergeEntry(tgt, k, v, scope);
       }
       return;
     }
     for (const [k, v] of Object.entries(rec)) {
-      this.mergeEntry(tgt, k, v, scope, maxLevel);
+      this.mergeEntry(tgt, k, v, scope);
     }
   }
 
   /** A `$then` block is itself a patch: path keys are absolute. */
-  private applyPatchObject(patch: unknown, scope: EvalRoots, maxLevel: number): void {
+  private applyPatchObject(patch: unknown, scope: EvalRoots): void {
     if (Array.isArray(patch)) return;
     if (!patch || typeof patch !== 'object') return;
     for (const [k, v] of Object.entries(patch as Record<string, unknown>)) {
       if (isBareSigil(k) || k === '$' || k === '$if' || k === '$then') continue;
       if (isMetaKey(k) || isValidateKey(k)) continue;
-      if (/^\d+$/.test(k)) {
-        if (Number(k) <= maxLevel) this.applyPatchObject(v, scope, maxLevel);
-        continue;
-      }
       if (isPathKey(k)) {
-        this.applyAtPath(k, v, scope, maxLevel);
+        this.applyAtPath(k, v, scope);
         continue;
       }
-      this.mergeEntry(scope.actor as Record<string, unknown>, k, v, scope, maxLevel);
+      this.mergeEntry(scope.actor as Record<string, unknown>, k, v, scope);
     }
   }
 
-  private mergeEntry(
-    target: Record<string, unknown>,
-    key: string,
-    value: unknown,
-    scope: EvalRoots,
-    maxLevel: number,
-  ): void {
+  private mergeEntry(target: Record<string, unknown>, key: string, value: unknown, scope: EvalRoots): void {
     if (isMetaKey(key) || isValidateKey(key)) {
       target[key] = deepClone(value);
       return;
     }
     if (isPathKey(key)) {
-      this.applyAtPath(key, value, scope, maxLevel);
+      this.applyAtPath(key, value, scope);
       return;
     }
     const k = stripPlus(key);
     if (value && typeof value === 'object' && !Array.isArray(value)) {
+      if (!this.condPasses(value as Record<string, unknown>, scope)) return;
       // Always merge through mergeInto so nested `+`, path keys and
       // `$if`/`$then` wrappers are consumed rather than stored raw.
       if (typeof target[k] !== 'object' || target[k] === null || Array.isArray(target[k])) {
         target[k] = {};
       }
-      this.mergeInto(target[k], value, { ...scope, current: target[k] }, maxLevel);
+      this.mergeInto(target[k], value, { ...scope, current: target[k] });
       return;
     }
     if (Array.isArray(value)) {

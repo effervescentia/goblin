@@ -1,156 +1,101 @@
-# D&D 5e Fighter (levels 1-20). Applied onto a 5e/character.yaml actor:
-#   engine.apply(actor, 'fighter.yaml', level)
-# Every numeric block is a level: all levels ≤ the chosen one apply in order,
-# so each level adds its features (level blocks are the conditionals).
-# Choice points (fighting style, archetype, skills) are :params filled by
-# provided values; see 5e/character.yaml for the play flow.
+# D&D 5e Fighter. Applied onto a 5e/character.yaml actor:
+#   engine.apply(actor, 'fighter.yaml')
+# The engine knows nothing of levels: each gated node carries its own `$if`
+# on the actor's derived `@.level` (false applies nothing, leaving no
+# residue), and anything that is a pure function of level is an
+# unconditional expression that stays correct as XP grows.
 
 $: Character
 
 '@.fighter': {}
 
-# Level 1 — martial training, gear, and grit.
-1:
-  '@.hit_die': d10
-  '@.hit_points.max': 10 + @.abilities.constitution.modifier
-  '@.hit_points.value': '@.hit_points.max'
-  '@.proficiencies.armor':
-    - all_armor
-    - shields
-  '@.proficiencies.weapon':
-    - simple_weapons
-    - martial_weapons
-  '@.proficiencies.saving_throws':
-    - +strength
-    - +constitution
-  '@.skills.trained':
-    :doc: 'Choose two: acrobatics, animal_handling, athletics, history, insight, intimidation, perception, survival.'
+# Martial training, gear, and grit — every fighter starts here.
+'@.hit_die': d10
+'@.hit_points.max': 10 + @.abilities.constitution.modifier
+'@.hit_points.value': '@.hit_points.max'
+'@.proficiencies.armor':
+  - all_armor
+  - shields
+'@.proficiencies.weapon':
+  - simple_weapons
+  - martial_weapons
+'@.proficiencies.saving_throws':
+  - +strength
+  - +constitution
+'@.skills.trained':
+  :doc: 'Choose two: acrobatics, animal_handling, athletics, history, insight, intimidation, perception, survival.'
+  :param: true
+  :type: array
+'@.features':
+  +fighting_style:
+    :doc: 'Choose one: archery, defense, dueling, great-weapon fighting, protection, two-weapon fighting.'
     :param: true
-    :type: array
-  '@.features':
-    +fighting_style:
-      :doc: 'Choose one: archery, defense, dueling, great-weapon fighting, protection, two-weapon fighting.'
-      :param: true
-      :type: string
-    +second_wind:
-      :doc: Regain hit points in a pinch, once per rest.
-  '@.actions':
-    +second_wind:
-      :doc: Regain 1d10 + fighter level hit points.
-      'heal()': 1d10 + @.level
-
-# Level 2 — push past mortal limits.
-2:
-  '@.resources':
-    +action_surge:
-      :doc: Take one additional action on your turn. Restores on a short rest.
-      value: 1
-      max: 1
-
-# Level 3 — swear to a martial archetype.
-3:
-  '@.features':
-    +martial_archetype:
-      :doc: 'Choose a subclass: Champion, Battle Master, or Eldritch Knight.'
-      :param: true
-      :type: string
-
-# Level 4 — sharper body or mind.
-4:
-  '@.features':
-    +ability_score_improvement_1:
-      :doc: Add +2 to one ability score or +1 to two (or take a feat).
-
-# Level 5 — strike twice when you attack.
-5:
-  '@.attacks': 2
-
-# Level 6 — sharper still.
-6:
-  '@.features':
-    +ability_score_improvement_2:
-      :doc: Add +2 to one ability score or +1 to two (or take a feat).
-
-# Level 7 — archetype training bears fruit.
-7:
-  '@.features':
-    +subclass_feature_1:
-      :doc: Martial archetype feature (see your subclass).
-
-# Level 8 — sharper still.
-8:
-  '@.features':
-    +ability_score_improvement_3:
-      :doc: Add +2 to one ability score or +1 to two (or take a feat).
-
-# Level 9 — refuse to fall.
-9:
-  '@.features':
-    +indomitable:
-      :doc: Reroll a failed saving throw, once per long rest.
-  '@.resources':
-    +indomitable_points:
-      value: 1
-      max: 1
-
-# Level 10 — archetype mastery deepens.
-10:
-  '@.features':
-    +subclass_feature_2:
-      :doc: Martial archetype feature (see your subclass).
-
-# Level 11 — strike three times when you attack.
-11:
-  '@.attacks': 3
-
-# Level 12 — nearing mortal perfection.
-12:
-  '@.features':
-    +ability_score_improvement_4:
-      :doc: Add +2 to one ability score or +1 to two (or take a feat).
-
-# Level 13 — refuse to fall, twice.
-13:
-  '@.resources.indomitable_points.max': 2
-  '@.resources.indomitable_points.value': 2
-
-# Level 14 — mortal perfection.
-14:
-  '@.features':
-    +ability_score_improvement_5:
-      :doc: Add +2 to one ability score or +1 to two (or take a feat).
-
-# Level 15 — archetype capstone approaches.
-15:
-  '@.features':
-    +subclass_feature_3:
-      :doc: Martial archetype feature (see your subclass).
-
-# Level 16 — beyond mortal perfection.
-16:
-  '@.features':
-    +ability_score_improvement_6:
-      :doc: Add +2 to one ability score or +1 to two (or take a feat).
-
-# Level 17 — surge twice, endure thrice.
-17:
-  '@.resources.action_surge.max': 2
-  '@.resources.action_surge.value': 2
-  '@.resources.indomitable_points.max': 3
-  '@.resources.indomitable_points.value': 3
-
-# Level 18 — archetype capstone.
-18:
-  '@.features':
-    +subclass_feature_4:
-      :doc: Martial archetype feature (see your subclass).
-
-# Level 19 — legend (epic boon or ability scores).
-19:
-  '@.features':
-    +ability_score_improvement_7:
-      :doc: Add +2 to one ability score or +1 to two, or take an epic boon feat.
-
-# Level 20 — strike four times when you attack.
-20:
-  '@.attacks': 4
+    :type: string
+  +second_wind:
+    :doc: Regain hit points in a pinch, once per rest.
+  +action_surge:
+    :doc: Take one additional action on your turn. Restores on a short rest.
+    $if: '@.level >= 2'
+  +martial_archetype:
+    :doc: 'Choose a subclass: Champion, Battle Master, or Eldritch Knight.'
+    :param: true
+    :type: string
+    $if: '@.level >= 3'
+  +ability_score_improvement_1:
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    $if: '@.level >= 4'
+  +extra_attack:
+    :doc: Strike twice whenever you take the Attack action.
+    $if: '@.level >= 5'
+  +ability_score_improvement_2:
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    $if: '@.level >= 6'
+  +subclass_feature_1:
+    :doc: Martial archetype feature (see your subclass).
+    $if: '@.level >= 7'
+  +ability_score_improvement_3:
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    $if: '@.level >= 8'
+  +indomitable:
+    :doc: Reroll a failed saving throw, once per long rest.
+    $if: '@.level >= 9'
+  +subclass_feature_2:
+    :doc: Martial archetype feature (see your subclass).
+    $if: '@.level >= 10'
+  +ability_score_improvement_4:
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    $if: '@.level >= 12'
+  +ability_score_improvement_5:
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    $if: '@.level >= 14'
+  +subclass_feature_3:
+    :doc: Martial archetype feature (see your subclass).
+    $if: '@.level >= 15'
+  +ability_score_improvement_6:
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    $if: '@.level >= 16'
+  +subclass_feature_4:
+    :doc: Martial archetype feature (see your subclass).
+    $if: '@.level >= 18'
+  +ability_score_improvement_7:
+    :doc: Add +2 to one ability score or +1 to two, or take an epic boon feat.
+    $if: '@.level >= 19'
+'@.actions':
+  +second_wind:
+    :doc: Regain 1d10 + fighter level hit points.
+    'heal()': 1d10 + @.level
+  +extra_attack:
+    :doc: Make two attacks instead of one (three at 11, four at 20).
+    $if: '@.level >= 5'
+'@.attacks': 1 + (@.level >= 5) + (@.level >= 11) + (@.level >= 20)
+'@.resources':
+  +action_surge:
+    :doc: Expend to gain an additional action.
+    $if: '@.level >= 2'
+    value: 1
+    max: 1 + (@.level >= 17)
+  +indomitable_points:
+    :doc: Expend to reroll a failed save.
+    $if: '@.level >= 9'
+    value: 1
+    max: 1 + (@.level >= 13) + (@.level >= 17)

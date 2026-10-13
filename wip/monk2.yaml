@@ -1,31 +1,30 @@
 $: Player
 '@.monk': {}
-1:
-  '@.monk.martial_arts_die': 1d6
-  '@.features':
-    +martial_arts:
-      :doc: |
-        Your practice of martial arts gives you mastery of combat styles.
-        (this accepts markdown)
-        **Bonus Unarmed Strike.** You can make an [Unarmed Strike](@.actions.unarmed_strike) as a Bonus Action.
-        (links can be used to reference other nodes)
-      '@.proficiencies.weapon': # TODO: make proficiency references better
-        - +simple_melee
-        - +light_martial_melee
-      $if: # <only monk weapons, no armour or shield equipped>
-      $then:
-        '@.actions.unarmed_strike':
-          +die: '@.monk.martial_arts_die'
-          +type: bonus_action
-    
-    +unarmored_defense:
-      :doc: |
-        While you aren't wearing armor or wielding a Shield
-        your base [Armor Class](@.armor_class) equals 10
-        plus your [Dexterity](@.abilities.dexterity) and [Wisdom](@.abilities.wisdom) modifiers.
-      $if: # <no armour or shield equipped>
-      $then:
-        '@.armor_class': 10 + @.abilities.dexterity.modifier + @.abilities.wisdom.modifier
+'@.monk.martial_arts_die': 1d6
+'@.features':
+  +martial_arts:
+    :doc: |
+      Your practice of martial arts gives you mastery of combat styles.
+      (this accepts markdown)
+      **Bonus Unarmed Strike.** You can make an [Unarmed Strike](@.actions.unarmed_strike) as a Bonus Action.
+      (links can be used to reference other nodes)
+    '@.proficiencies.weapon': # TODO: make proficiency references better
+      - +simple_melee
+      - +light_martial_melee
+    $if: # <only monk weapons, no armour or shield equipped>
+    $then:
+      '@.actions.unarmed_strike':
+        +die: '@.monk.martial_arts_die'
+        +type: bonus_action
+  
+  +unarmored_defense:
+    :doc: |
+      While you aren't wearing armor or wielding a Shield
+      your base [Armor Class](@.armor_class) equals 10
+      plus your [Dexterity](@.abilities.dexterity) and [Wisdom](@.abilities.wisdom) modifiers.
+    $if: # <no armour or shield equipped>
+    $then:
+      '@.armor_class': 10 + @.abilities.dexterity.modifier + @.abilities.wisdom.modifier
 
 # 2:
 #   $.features:

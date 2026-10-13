@@ -123,9 +123,10 @@ whitespace-trimmed (block scalars leave trailing newlines):
 
 ## Templates
 
-`$.tmpl('file.yaml')` inlines a deep clone of another loaded document. The
-referenced file must already be loaded — the CLI preloads `$.tmpl('…')`
-references recursively before evaluating.
+`$.tmpl('file.yaml')` inlines a deep clone of another loaded document.
+References are discovered on load — the engine follows `$.tmpl('…')` shapes
+recursively (relative to the referring file), so no manual preloading is
+needed. Keep `$.tmpl('…')` shapes out of comments: the scan is textual.
 
 A tmpl'd document's functions stay callable through the inlined table, with
 `.` bound to the template root:
@@ -166,43 +167,43 @@ hit_points:
   max: 12
 ```
 
-## Applied documents: patches, effects, conditions, levels
+## Applied documents: patches, effects, conditions
 
-A document can be *applied* onto an actor (`engine.apply(actor, file, level)`),
-as class files are. Patch syntax:
+A document can be *applied* onto an actor (`engine.apply(actor, file)`),
+as class files are. The engine knows nothing of levels: gate per-level
+content with `$if` on actor state (e.g. `@.level >= 5`), and derive anything
+that is a pure function of level as an unconditional expression. Evaluate
+with provided values first so conditions read materialized params. Patch
+syntax:
 
 - **Path keys** (`'@.features'`, `'#.hit_points.value'`) target a node by
   absolute ref. In plain evaluation they are skipped, never serialized.
 - **`+` additions**: `+name:` sets/adds `name` (merging into objects,
   stripping the prefix). In arrays, `+item` entries append deduplicated;
   other items append raw.
-- **`$if` / `$then` conditions** gate a node: when `$if` is absent, null, or
-  `""` the block is unconditional; otherwise `$if` must evaluate truthy.
-  `$then` is itself a patch whose path keys are absolute. Non-control sibling
-  keys still apply; `$if`/`$then` are never serialized.
-- **Numeric keys** (`1:`, `2:`, …) are level blocks: every level `≤ maxLevel`
-  applies in document order.
+- **`$if` / `$then` conditions** gate a whole node: when `$if` is absent,
+  null, or `""` the block is unconditional; otherwise `$if` must evaluate
+  truthy. A false condition applies nothing — not even `:meta` — so gated-out
+  content leaves no residue. `$then` is itself a patch whose path keys are
+  absolute. `$if`/`$then` are never serialized.
 - **Type tags**: a bare `$` key (e.g. `$: Player`) declares the expected actor
   type and is ignored by the engine, as are all bare sigils.
 
 ```yaml
 # Examples (examples/07-actor.yaml, examples/07-class.yaml)
-'@.boon': {}
-
-1:
-  '@.boon.die': 1d8
-  '@.features':
-    +unarmored_defense:
-      :doc: Base AC becomes 10 + Dex + Wis while unarmored.
-      $if: # empty (comment-only) $if counts as unconditional
-      $then:
-        '@.armor_class': 10 + @.abilities.dexterity.modifier + @.abilities.wisdom.modifier
-
-2:
-  '@.features':
-    +monks_focus: {}
-  '@.actions.unarmed_strike':
-    +die: '@.boon.die'
+'@.monk': {}
+'@.monk.martial_arts_die': 1d6
+'@.features':
+  +martial_arts:
+    :doc: Your practice of martial arts gives you mastery of combat styles.
+  +monks_focus:
+    :doc: Spend focus points to fuel monastic techniques.
+    $if: '@.level >= 2'
+'@.actions.unarmed_strike':
+  $if: '@.level >= 2'
+  $then:
+    '@.actions.unarmed_strike.die': 1d8
+    '@.actions.unarmed_strike.type': bonus_action
 ```
 
 ## Statements and assignment
@@ -223,8 +224,8 @@ rest:
 
 A root entry may compose an actor from an `actor` base plus an `adopt` list
 of patches (each a `$.tmpl('…')` expression or an inline object). The runner
-resolves the base, reads the actor's derived `level`, applies each patch in
-order at that level, then resolves the merged result — so choices declared
+resolves the base, applies each patch in order, then resolves the merged
+result — gate per-level content with `$if` on actor state so choices declared
 by adopted patches surface in the `{ query }` envelope. Template paths are
 root-relative; nested references resolve relative to their own file.
 

@@ -178,37 +178,40 @@ describe('evaluate', () => {
 });
 
 describe('apply', () => {
-  function appliedEngine(maxLevel = 1) {
+  function appliedEngine(level = 1) {
     const { engine, doc } = testEngine();
-    const actorRaw = structuredClone(doc);
+    const actorRaw = structuredClone(doc) as Record<string, unknown>;
     engine.docs.set('monk.yaml', {
       $: 'Player',
       '@.monk': {},
-      1: {
-        '@.monk.martial_arts_die': '1d6',
-        '@.features': {
-          '+martial_arts': {
-            ':doc': 'martial arts mastery',
-            '@.proficiencies.weapon': ['+simple_melee', '+light_martial_melee'],
-            $if: null,
-            $then: {
-              '@.actions.unarmed_strike': { '+die': '@.monk.martial_arts_die', '+type': 'bonus_action' },
-            },
-          },
-          '+unarmored_defense': {
-            $if: null,
-            $then: { '@.armor_class': '10 + @.abilities.dexterity.modifier + @.abilities.wisdom.modifier' },
-          },
+      '@.monk.martial_arts_die': '1d6',
+      '@.features': {
+        '+martial_arts': {
+          ':doc': 'martial arts mastery',
+          '@.proficiencies.weapon': ['+simple_melee', '+light_martial_melee'],
+          $if: null,
+        },
+        '+unarmored_defense': {
+          ':doc': 'tough without armor',
+        },
+        '+monks_focus': {
+          ':doc': 'focus points at level 2',
+          $if: '@.level >= 2',
         },
       },
-      2: {
-        '@.features': { '+monks_focus': {} },
+      '@.actions.unarmed_strike': {
+        $if: '@.level >= 2',
+        $then: {
+          '@.actions.unarmed_strike.die': '1d8',
+          '@.actions.unarmed_strike.type': 'bonus_action',
+        },
       },
     });
-    (actorRaw as Record<string, unknown>).proficiencies = { weapon: [] as string[] };
-    (actorRaw as Record<string, unknown>).actions = { unarmed_strike: { die: 'd4', type: 'action' } };
-    (actorRaw as Record<string, unknown>).features = {};
-    engine.apply(actorRaw, 'monk.yaml', maxLevel);
+    actorRaw.proficiencies = { weapon: [] as string[] };
+    actorRaw.actions = { unarmed_strike: { die: 'd4', type: 'action' } };
+    actorRaw.features = {};
+    actorRaw.level = level;
+    engine.apply(actorRaw, 'monk.yaml');
     const scope: EvalRoots = { doc: actorRaw, actor: actorRaw, app: engine.appRoot, current: actorRaw };
     return { engine, out: engine.evaluate(actorRaw, scope) as Record<string, any> };
   }
@@ -219,13 +222,20 @@ describe('apply', () => {
     expect(out.features).toHaveProperty('martial_arts');
     expect(out.features).toHaveProperty('unarmored_defense');
     expect((out.features as Record<string, { ':doc': string }>)['martial_arts']?.[':doc']).toBe('martial arts mastery');
-    expect(out.armor_class).toBe(13);
+    expect(out.armor_class).toBe(12);
     expect((out.proficiencies as { weapon: string[] }).weapon).toEqual(['simple_melee', 'light_martial_melee']);
+    expect(String((out.actions as { unarmed_strike: { die: unknown } }).unarmed_strike.die)).toBe('d4');
   });
 
-  it('gates numeric level blocks by maxLevel', () => {
-    expect(appliedEngine(1).out.features).not.toHaveProperty('monks_focus');
-    expect(appliedEngine(2).out.features).toHaveProperty('monks_focus');
+  it('gates content on $if conditions with no residue', () => {
+    const l1 = appliedEngine(1).out;
+    expect(l1.features).not.toHaveProperty('monks_focus');
+    expect(String((l1.actions as { unarmed_strike: { die: unknown } }).unarmed_strike.die)).toBe('d4');
+    const l2 = appliedEngine(2).out;
+    expect(l2.features).toHaveProperty('monks_focus');
+    const strike = (l2.actions as { unarmed_strike: { die: unknown; type: unknown } }).unarmed_strike;
+    expect(String(strike.die)).toBe('1d8');
+    expect(strike.type).toBe('bonus_action');
   });
 
   it('respects a false $if condition', () => {
@@ -242,8 +252,9 @@ describe('apply', () => {
     });
     engine.apply(actorRaw, 'gated.yaml');
     const scope: EvalRoots = { doc: actorRaw, actor: actorRaw, app: engine.appRoot, current: actorRaw };
-    const out = engine.evaluate(actorRaw, scope) as Record<string, { never?: unknown }>;
-    // The wrapper itself merges, but the $then content must not apply.
+    const out = engine.evaluate(actorRaw, scope) as Record<string, { never?: unknown; sneak_attack?: unknown }>;
+    // A false $if merges nothing at all — neither wrapper nor $then content.
+    expect(out.features).not.toHaveProperty('sneak_attack');
     expect(out.features).not.toHaveProperty('never');
   });
 });
