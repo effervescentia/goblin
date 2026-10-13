@@ -47,9 +47,11 @@ apart. Treat a missing spec update as an incomplete change.
 ## Project notes
 
 - `bun src/main.ts` (or `bun run dev`) runs the demo CLI, which loads
-  `.goblin.yaml` → `main.yaml` and logs evaluated output via pino.
+  `.goblin.yaml` → `wip/main.yaml` and logs evaluated output via pino.
+  The final evaluated state always logs; diagnostics need `--debug`
+  (validation failures always log as errors).
 - `bun run build` compiles `src/cli.ts` to a `build/goblin` binary
-  (`goblin [entry.yaml] [--compact]`) that prints the resolved application
+  (`goblin [entry.yaml] [--compact] [--help]`) that prints the resolved application
   state as JSON to stdout. `src/cli.ts` is Bun-only; keep `parseArgs` pure
   so `src/cli.test.ts` stays runtime-agnostic.
 - `src/engine.ts` transpiles goblin expressions with `new Function` — every
@@ -58,6 +60,11 @@ apart. Treat a missing spec update as an incomplete change.
 - `src/main.ts` is Bun-only (`Bun.file`, top-level await). Keep test fixtures
   in `src/engine.test.ts` runtime-agnostic by seeding `engine.docs` directly
   instead of using `loadFile`.
+
+## Dependencies
+
+- Pin **exact** versions in `package.json` — no `^`, `~`, or other ranges.
+  Use `bun add --exact` (or `bun add -E`) so new dependencies are pinned too.
 
 ## Self-maintenance
 

@@ -3,7 +3,7 @@
  * Goblin CLI — resolves the application state and prints it as JSON.
  *
  * Usage:
- *   goblin [entry.yaml] [--compact]
+ *   goblin [entry.yaml] [--compact] [--help]
  *
  * With no entry file, the main document from `.goblin.yaml` is used.
  * An entry containing a directory (`examples/foo.yaml`) is resolved with
@@ -13,17 +13,30 @@
  */
 import { GoblinEngine, serialize } from './engine';
 
+export const USAGE = `goblin [entry.yaml] [--compact] [--help]
+
+Resolves a goblin document and prints the application state as JSON.
+
+Arguments:
+  entry.yaml    Entry document (default: main from .goblin.yaml).
+                If it contains a directory, $.tmpl('…') resolves relative to it.
+  --compact     Single-line JSON output (default: pretty-printed).
+  --help, -h    Show this help.`;
+
 export interface CliArgs {
   entry?: string;
   compact: boolean;
+  help: boolean;
 }
 
 /** Pure argv parsing (excludes node/bun binary and script name). */
 export function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { compact: false };
+  const args: CliArgs = { compact: false, help: false };
   for (const arg of argv) {
     if (arg === '--compact') {
       args.compact = true;
+    } else if (arg === '--help' || arg === '-h') {
+      args.help = true;
     } else if (!arg.startsWith('-') && args.entry === undefined) {
       args.entry = arg;
     } else {
@@ -90,6 +103,10 @@ async function preloadTemplates(engine: GoblinEngine, root: string, file: string
 if (import.meta.main) {
   try {
     const args = parseArgs(process.argv.slice(2));
+    if (args.help) {
+      process.stdout.write(`${USAGE}\n`);
+      process.exit(0);
+    }
     const state = await resolveAppState(process.cwd(), args.entry);
     process.stdout.write(`${JSON.stringify(state, null, args.compact ? 0 : 2)}\n`);
   } catch (err) {
