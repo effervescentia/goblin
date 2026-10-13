@@ -16,11 +16,12 @@ name:
   :param: true
   :type: string
 
-# Experience — provided by the table; level derives from it below.
+# Experience — provided by the table, 0 if omitted.
 xp:
   :doc: Experience points earned in play.
   :param: true
   :type: integer
+  :default: 0
 
 level: '#.levels.level_for(@.xp.value)'
 

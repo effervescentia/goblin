@@ -1,3 +1,4 @@
+import { DEFAULT_KEY, DOCUMENT, IF_KEY, PARAM_KEY, THEN_KEY, TYPE_KEY, VALUE_KEY } from '../constants';
 import type { GoblinEngine } from '../engine';
 import type { EvalRoots } from '../utils';
 import { checkParamType, isBareSigil, isMetaKey, isPathKey, isValidateKey, stripPlus } from '../utils';
@@ -10,7 +11,7 @@ export class RecordNode extends Node<Record<string, unknown>> {
     const base = scope.path ?? [];
     const out: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(record)) {
-      if (isBareSigil(key) || key === '$') continue; // `$: Player` type tag
+      if (isBareSigil(key) || key === DOCUMENT) continue; // `$: Player` type tag
       if (isMetaKey(key)) {
         out[key] = value;
         continue;
@@ -19,7 +20,7 @@ export class RecordNode extends Node<Record<string, unknown>> {
         out[key] = value;
         continue;
       }
-      if (key === '$if' || key === '$then') {
+      if (key === IF_KEY || key === THEN_KEY) {
         continue; // control flow — consumed by apply(), never serialized
       }
       const fn = FunctionNode.match(key, value, record);
@@ -34,17 +35,19 @@ export class RecordNode extends Node<Record<string, unknown>> {
       if (isPathKey(key)) continue; // patch instruction — handled by apply()
       out[key] = engine.evaluate(value, { ...scope, current: record, path: [...base, key] });
     }
-    if (record[':param']) {
-      const marker = record[':param'];
+    if (record[PARAM_KEY]) {
+      const marker = record[PARAM_KEY];
       const paramKey = typeof marker === 'string' && marker ? marker : base.join('.');
       const provided = scope.provided?.[paramKey];
-      if (provided === undefined) {
-        out['value'] = null;
+      const def = record[DEFAULT_KEY];
+      const hasDefault = def !== undefined && def !== null;
+      if (provided === undefined && !hasDefault) {
+        out[VALUE_KEY] = null;
       } else {
-        const filled = engine.evaluate(provided, scope);
-        const type = record[':type'];
+        const filled = engine.evaluate(provided !== undefined ? provided : def, scope);
+        const type = record[TYPE_KEY];
         if (typeof type === 'string' && type) checkParamType(type, filled, paramKey);
-        out['value'] = filled;
+        out[VALUE_KEY] = filled;
       }
     }
     return out;

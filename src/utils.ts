@@ -6,6 +6,33 @@
  * JSON-friendly serializer. Nothing here may import from `engine.ts`.
  */
 
+import {
+  ACTOR,
+  APP,
+  ASSIGN_OP,
+  CURRENT,
+  DEFAULT_KEY,
+  DEPS_KEY,
+  DIE_LITERAL,
+  DOC_KEY,
+  DOCUMENT,
+  DOTLESS_SIGIL,
+  FUNCTION_KEY,
+  IF_KEY,
+  INLINE_DICE,
+  META_PREFIX,
+  PARAM_KEY,
+  PARAMS_KEY,
+  SIGIL_REF,
+  type Sigil,
+  SOURCE_KEY,
+  STRING_LITERAL,
+  THEN_KEY,
+  TYPE_KEY,
+  VALIDATE_KEY,
+  VALUE_KEY,
+} from './constants';
+
 export interface EvalRoots {
   /** `$` — top of the current document. */
   doc: unknown;
@@ -52,12 +79,6 @@ export class Die {
   }
 }
 
-export const DIE_LITERAL = /^(\d*)d(\d+)$/;
-const SIGIL_REF = /([#$@]\.[A-Za-z_][\w.]*|[#$@](?![\w.]|\.\w)|\.[A-Za-z_][\w.]*|\.(?![\w.]))/g;
-const INLINE_DICE = /\b(\d*)d(\d+)\b/g;
-export const FUNCTION_KEY = /^([A-Za-z_]\w*)\(([^)]*)\)$/;
-const ASSIGN_OP = /(?<![<>=!])=(?![>=])/;
-
 export const MATH_LIB: Record<string, (...args: number[]) => number> = {
   floor: (n: number) => Math.floor(n),
   ceil: (n: number) => Math.ceil(n),
@@ -80,12 +101,12 @@ export function parseDie(s: string): Die | null {
 
 /** Any `:`-prefixed key (`:doc`, …) is metadata: never evaluated. */
 export function isMetaKey(key: string): boolean {
-  return key.startsWith(':');
+  return key.startsWith(META_PREFIX);
 }
 
 /** `!validate` / `'!validate'` predicate list. */
 export function isValidateKey(key: string): boolean {
-  return key === '!validate';
+  return key === VALIDATE_KEY;
 }
 
 export function isFunctionKey(key: string): boolean {
@@ -94,12 +115,13 @@ export function isFunctionKey(key: string): boolean {
 
 /** Quoted or bare path patch, e.g. `@.features`, `#.hit_points.value`. */
 export function isPathKey(key: string): boolean {
-  return /^[.@#$]/.test(key);
+  const head = key[0];
+  return head === CURRENT || head === DOCUMENT || head === ACTOR || head === APP;
 }
 
 /** Bare sigil (`$`, `@`, `#`, `.`) — a type annotation, not data. */
 export function isBareSigil(key: string): boolean {
-  return /^[.@#$]$/.test(key);
+  return key.length === 1 && (key === CURRENT || key === DOCUMENT || key === ACTOR || key === APP);
 }
 
 export function isExpressionString(s: string): boolean {
@@ -109,7 +131,7 @@ export function isExpressionString(s: string): boolean {
 }
 
 export interface ParsedRef {
-  root: '.' | '$' | '@' | '#';
+  root: Sigil;
   path: string[];
 }
 
@@ -117,8 +139,8 @@ export interface ParsedRef {
 export function parseRef(ref: string): ParsedRef {
   const sigil = ref[0] as ParsedRef['root'];
   let rest = ref.slice(1);
-  if (rest.length && !rest.startsWith('.')) rest = `.${rest}`;
-  if (rest.startsWith('.')) rest = rest.slice(1);
+  if (rest.length && !rest.startsWith(CURRENT)) rest = CURRENT + rest;
+  if (rest.startsWith(CURRENT)) rest = rest.slice(1);
   const path = rest ? rest.split('.').filter(Boolean) : [];
   return { root: sigil, path };
 }
@@ -206,12 +228,12 @@ function transpileStatement(stmt: string): { code: string; isAssign: boolean } {
   // Protect string literals from ref/dice rewriting.
   const literals: string[] = [];
   const protected_ = stmt
-    .replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g, (m) => {
+    .replace(STRING_LITERAL, (m) => {
       literals.push(m);
       return `__STR${literals.length - 1}__`;
     })
     // Normalize dot-less sigils (`$math.min` → `$.math.min`).
-    .replace(/([#$@])(?=[A-Za-z_])/g, '$1.');
+    .replace(DOTLESS_SIGIL, '$1.');
 
   const assignIdx = protected_.search(ASSIGN_OP);
   if (assignIdx >= 0) {
@@ -356,19 +378,19 @@ function eachParamRecord(raw: unknown, visit: (record: Record<string, unknown>, 
     }
     if (!node || typeof node !== 'object') return;
     const record = node as Record<string, unknown>;
-    const marker = record[':param'];
+    const marker = record[PARAM_KEY];
     if (marker) visit(record, typeof marker === 'string' && marker ? marker : path.join('.'));
     for (const [key, value] of Object.entries(record)) {
       if (
-        key === ':param' ||
-        key === ':doc' ||
-        key === ':type' ||
-        key === '!validate' ||
-        key === '$if' ||
-        key === '$then'
+        key === PARAM_KEY ||
+        key === DOC_KEY ||
+        key === TYPE_KEY ||
+        key === VALIDATE_KEY ||
+        key === IF_KEY ||
+        key === THEN_KEY
       )
         continue;
-      if (isBareSigil(key) || key === '$' || isPathKey(key)) continue;
+      if (isBareSigil(key) || key === DOCUMENT || isPathKey(key)) continue;
       const fnMatch = key.match(FUNCTION_KEY);
       visitNode(value, [...path, fnMatch ? fnMatch[1]! : stripPlus(key)]);
     }
@@ -379,9 +401,11 @@ function eachParamRecord(raw: unknown, visit: (record: Record<string, unknown>, 
 export function collectParams(raw: unknown): MissingParam[] {
   const missing: MissingParam[] = [];
   eachParamRecord(raw, (record, key) => {
-    const doc = record[':doc'];
+    const def = record[DEFAULT_KEY];
+    if (def !== undefined && def !== null) return; // satisfied by default
+    const doc = record[DOC_KEY];
     const entry: MissingParam = typeof doc === 'string' && doc ? { path: key, doc } : { path: key };
-    const type = record[':type'];
+    const type = record[TYPE_KEY];
     if (typeof type === 'string' && type) {
       assertKnownParamType(type, key);
       entry.type = type;
@@ -392,14 +416,16 @@ export function collectParams(raw: unknown): MissingParam[] {
 }
 
 /**
- * Fill raw `:param` records with `value` slots (`provided[key] ?? null`) so
- * `<path>.value` references resolve like any other node. Returns true when
- * anything was written. Idempotent — rerun whenever `provided` changes.
+ * Fill raw `:param` records with `value` slots (provided, else `:default`,
+ * else `null`) so `<path>.value` references resolve like any other node.
+ * Returns true when anything was written. Idempotent.
  */
 export function materializeParams(raw: unknown, provided: Record<string, unknown> = {}): boolean {
   let wrote = false;
   eachParamRecord(raw, (record, key) => {
-    record['value'] = provided[key] ?? null;
+    const def = record[DEFAULT_KEY];
+    const hasDefault = def !== undefined && def !== null;
+    record[VALUE_KEY] = provided[key] !== undefined ? provided[key] : hasDefault ? def : null;
     wrote = true;
   });
   return wrote;
@@ -431,30 +457,28 @@ export function functionMeta(value: unknown): GoblinFunctionMeta | undefined {
   return typeof meta === 'object' && meta !== null ? (meta as GoblinFunctionMeta) : undefined;
 }
 
-const STRING_LITERAL = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g;
-
 /**
  * Detect a body's reference dependencies: sigil refs outside string
  * literals, dot-less sigils normalized, deduplicated in order.
  */
 export function detectDeps(body: string): string[] {
-  const code = body.replace(STRING_LITERAL, '').replace(/([#$@])(?=[A-Za-z_])/g, '$1.');
+  const code = body.replace(STRING_LITERAL, '').replace(DOTLESS_SIGIL, '$1.');
   SIGIL_REF.lastIndex = 0;
   const matches = code.match(SIGIL_REF) ?? [];
   SIGIL_REF.lastIndex = 0;
   return [...new Set(matches)];
 }
-/** JSON-friendly serializer: Dice → `"d6"`, functions → `{ source, dependencies }`. */
+/** JSON-friendly serializer: Dice → `"d6"`, functions → `{ :type, :params, :source, :deps }`. */
 export function serialize(value: unknown): unknown {
   if (value instanceof Die) return value.toString();
   if (typeof value === 'function') {
     const meta = functionMeta(value);
     if (meta)
       return {
-        $type: 'function',
-        params: meta.params,
-        source: meta.source.trim(),
-        dependencies: meta.deps,
+        [TYPE_KEY]: 'function',
+        [PARAMS_KEY]: meta.params,
+        [SOURCE_KEY]: meta.source.trim(),
+        [DEPS_KEY]: meta.deps,
       };
     const name = (value as { name?: unknown }).name;
     return `[fn ${typeof name === 'string' && name ? name : 'anonymous'}()]`;

@@ -285,26 +285,26 @@ describe('serialize', () => {
     expect(serialize({ a: [new Die(1, 4, 'd4')] })).toEqual({ a: ['d4'] });
   });
 
-  it('prints tagged functions as source/dependencies objects', () => {
+  it('prints tagged functions as :type/:source/:params/:deps objects', () => {
     const { engine } = testEngine();
     const out = engine.evaluateDoc('main.yaml') as Record<string, any>;
     expect(serialize(out.utils.ability_modifier)).toEqual({
-      $type: 'function',
-      params: ['x'],
-      source: '$lib.math.floor((x - 10) / 2)',
-      dependencies: ['$.lib.math.floor'],
+      ':type': 'function',
+      ':params': ['x'],
+      ':source': '$lib.math.floor((x - 10) / 2)',
+      ':deps': ['$.lib.math.floor'],
     });
     expect(serialize((out.initiative as { roll: unknown }).roll)).toEqual({
-      $type: 'function',
-      params: [],
-      source: '1d20 + .base',
-      dependencies: ['.base'],
+      ':type': 'function',
+      ':params': [],
+      ':source': '1d20 + .base',
+      ':deps': ['.base'],
     });
     expect(serialize((out.rest as { short: unknown }).short)).toEqual({
-      $type: 'function',
-      params: [],
-      source: '#.hit_points.value = $lib.math.min(#.hit_points.value + #.hit_die, #.hit_points.max)',
-      dependencies: ['#.hit_points.value', '$.lib.math.min', '#.hit_die', '#.hit_points.max'],
+      ':type': 'function',
+      ':params': [],
+      ':source': '#.hit_points.value = $lib.math.min(#.hit_points.value + #.hit_die, #.hit_points.max)',
+      ':deps': ['#.hit_points.value', '$.lib.math.min', '#.hit_die', '#.hit_points.max'],
     });
   });
 });
@@ -323,7 +323,7 @@ describe('detectDeps', () => {
 
   it('trims whitespace from printed source', () => {
     const fn = tagFunction(() => 1, { name: 'f', params: [], source: '  1d20 + 2\n', deps: [] });
-    expect(serialize(fn)).toEqual({ $type: 'function', params: [], source: '1d20 + 2', dependencies: [] });
+    expect(serialize(fn)).toEqual({ ':type': 'function', ':params': [], ':source': '1d20 + 2', ':deps': [] });
   });
 });
 
@@ -381,6 +381,34 @@ describe('parameters', () => {
     );
     expect(() => engine.evaluateDoc('params.yaml', { hero_name: 42 })).toThrow(
       'param type mismatch: hero_name expected string, got number',
+    );
+  });
+
+  it('uses defaults when unprovided, provided wins, mistyped defaults throw', () => {
+    const engine = new GoblinEngine('.');
+    const doc = {
+      greeting: { ':doc': 'Hi.', ':param': true, ':type': 'string', ':default': 'hello' },
+      retries: { ':param': true, ':type': 'integer', ':default': 3 },
+      nick: { ':param': true },
+    };
+    expect(collectParams(doc)).toEqual([{ path: 'nick' }]);
+    const scope = (provided?: Record<string, unknown>): EvalRoots => ({
+      doc,
+      actor: doc,
+      app: engine.appRoot,
+      current: doc,
+      path: [],
+      provided,
+    });
+    const out = engine.evaluate(doc, scope()) as Record<string, { value: unknown }>;
+    expect(out.greeting?.value).toBe('hello');
+    expect(out.retries?.value).toBe(3);
+    expect(out.nick?.value).toBeNull();
+    const over = engine.evaluate(doc, scope({ greeting: 'yo', retries: 5 })) as Record<string, { value: unknown }>;
+    expect(over.greeting?.value).toBe('yo');
+    expect(over.retries?.value).toBe(5);
+    expect(() => engine.evaluate({ x: { ':param': true, ':type': 'integer', ':default': 'many' } }, scope())).toThrow(
+      'param type mismatch: x expected integer, got string',
     );
   });
 
@@ -458,5 +486,31 @@ describe('parameters', () => {
     const { engine } = testEngine();
     const resolved = engine.resolve('main.yaml', {}) as { data: Record<string, unknown> };
     expect((resolved.data.abilities as Record<string, { modifier: number }>).strength?.modifier).toBe(2);
+  });
+
+  it('resolve honors overrides over derived and missing values', () => {
+    const engine = new GoblinEngine('.');
+    engine.docs.set('ov.yaml', {
+      computed: '1 + 1',
+      name: { ':doc': 'Your name.', ':param': true },
+    });
+    const resolved = engine.resolve('ov.yaml', {}, { computed: 99, 'brand.new': 1, name: 'Aria' }) as {
+      data: Record<string, unknown>;
+    };
+    expect(resolved.data).toEqual({
+      computed: 99,
+      brand: { new: 1 },
+      name: 'Aria',
+    });
+  });
+
+  it('resolve keeps :type contracts on overridden params', () => {
+    const engine = new GoblinEngine('.');
+    engine.docs.set('ov.yaml', {
+      level: { ':doc': 'Level.', ':param': true, ':type': 'integer' },
+    });
+    expect(() => engine.resolve('ov.yaml', {}, { level: 'high' })).toThrow(
+      'param type mismatch: level expected integer, got string',
+    );
   });
 });

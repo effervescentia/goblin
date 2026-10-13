@@ -115,16 +115,16 @@ doubled: $.utils.double(21)  # → 42
 'lucky()': 1d20              # zero-arg callable
 ```
 
-Serialized functions print as `{ $type, params, source, dependencies }`, with
-the body's reference dependencies in order of first appearance. `source` is
+Serialized functions print as `{ :type, :params, :source, :deps }`, with
+the body's reference dependencies in order of first appearance. `:source` is
 whitespace-trimmed (block scalars leave trailing newlines):
 
 ```ts
 {
-  $type: 'function',
-  params: ['x'],
-  source: '$lib.math.floor((x - 10) / 2)',
-  dependencies: ['$.lib.math.floor'],
+  ':type': 'function',
+  ':params': ['x'],
+  ':source': '$lib.math.floor((x - 10) / 2)',
+  ':deps': ['$.lib.math.floor'],
 }
 ```
 
@@ -259,6 +259,9 @@ value plus the attached `:doc`.
 
 - `:param: true` keys the provided value by the node's dotted path.
 - `:param: 'alias'` keys it by the alias string instead.
+- `:default` supplies the value when nothing is provided — defaulted nodes
+  leave the `{ query }` report. Provided values win; defaults type-check
+  like provided values. Missing or nullish defaults behave as no default.
 - `:type` declares the expected type: `string`, `number`, `integer`,
   `boolean`, `die`, `array`, or `record`. Filling a value of the wrong type
   throws (`param type mismatch: …`); unknown names throw (`unknown param
@@ -305,6 +308,16 @@ envelope that is either satisfied or asking:
 - Otherwise → `{ query }` with **only** the outstanding params
   (satisfied ones are filtered out).
 - Provided values of the wrong `:type` still throw instead of resolving.
+- `resolve(file, provided, overrides)` writes override values into the tree
+  first (`.`/`$`/`@` target the actor, `#` the app; bare paths default to the
+  actor). Overridden originals are ignored — derivations never run and
+  missing paths are created — but `:param` records keep their `:type`
+  contract. CLI flag: `--set path=value` (separate from `--param`).
+
+```ts
+engine.resolve('08-parameters.yaml', {}, { hero_name: 'Aria' });
+// { data: { hero_name: 'Aria', … } }  (overridden params are not queried)
+```
 
 ```ts
 engine.resolve('08-parameters.yaml', {});
@@ -324,7 +337,7 @@ engine.resolve('08-parameters.yaml', { hero_name: 'Aria', starting_level: 3, 'de
 - **Lazy and on-demand**: refs resolve when reached; forward references work.
   Resolved values are cached per (document, actor, node, ref).
 - Intermediate expression strings (e.g. a `$tmpl('…')` table) evaluate on
-  the way down, so refs can descend through them (`$.thresholds.l2`).
+  the way down, so refs can descend through them.
 - **Circular references** throw (`circular reference: a -> b -> a`).
 - **Unresolvable references** throw (`unresolvable reference: …`).
 - Loading a file merges its top-level tables into the app namespace

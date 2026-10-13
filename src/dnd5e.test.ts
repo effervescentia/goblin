@@ -97,8 +97,8 @@ describe('5e', () => {
   it('levels a fighter from 1 to 20 on XP', () => {
     const out = execFileSync('bun', ['-e', script], { cwd: root, encoding: 'utf8' });
     expect(JSON.parse(out)).toEqual({
-      baseMissing: ['name', 'xp'],
-      mergedMissing: ['features.fighting_style', 'features.martial_archetype', 'name', 'skills.trained', 'xp'],
+      baseMissing: ['name'],
+      mergedMissing: ['features.fighting_style', 'features.martial_archetype', 'name', 'skills.trained'],
       ac: 10,
       hp: { value: 10, max: 10 },
       trained: ['athletics', 'perception'],
@@ -134,7 +134,6 @@ describe('5e', () => {
       'features.fighting_style',
       'name',
       'skills.trained',
-      'xp',
     ]);
 
     const data = cli(
@@ -161,5 +160,36 @@ describe('5e', () => {
     expect(data.data.attacks).toBe(2);
     expect(data.data.armor_class).toBe(10);
     expect(data.data.features.fighting_style?.value).toBe('dueling');
+  });
+
+  it('overrides level explicitly without XP', () => {
+    const query = cli('5e/main.yaml', '--set', 'level=5', '--param', 'name=Aria') as {
+      query: Array<{ path: string }>;
+    };
+    // Adoption follows the overridden level (L5 features apply); xp has a
+    // default so it is not asked.
+    expect(query.query.map((param) => param.path).sort()).toEqual([
+      'features.fighting_style',
+      'features.martial_archetype',
+      'skills.trained',
+    ]);
+
+    const data = cli(
+      '5e/main.yaml',
+      '--set',
+      'level=5',
+      '--param',
+      'name=Aria',
+      '--param',
+      'xp=0',
+      '--param',
+      'features.fighting_style=dueling',
+      '--param',
+      'features.martial_archetype=Champion',
+      '--param',
+      'skills.trained=[]',
+    ) as { data: { level: number; attacks: number } };
+    expect(data.data.level).toBe(5);
+    expect(data.data.attacks).toBe(2);
   });
 });

@@ -1,6 +1,7 @@
+import { FUNCTION_KEY } from '../constants';
 import type { GoblinEngine } from '../engine';
 import type { EvalRoots } from '../utils';
-import { detectDeps, FUNCTION_KEY, isFunctionKey, tagFunction } from '../utils';
+import { detectDeps, isFunctionKey, tagFunction } from '../utils';
 import { Node } from './node';
 
 /**

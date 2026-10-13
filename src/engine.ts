@@ -14,12 +14,26 @@
  *   blocks (`1:`, `2:` …) applied in order.
  */
 
+import {
+  ACTOR,
+  APP,
+  CURRENT,
+  DIE_LITERAL,
+  DOCUMENT,
+  IF_KEY,
+  PARAM_KEY,
+  TEMPLATE_CALL,
+  TEMPLATE_SCAN,
+  THEN_KEY,
+  TYPE_KEY,
+  VALIDATE_KEY,
+} from './constants';
 import { FunctionNode } from './nodes/function';
 import { parse } from './nodes/parse';
 import {
+  checkParamType,
   collectParams,
   compileBody,
-  DIE_LITERAL,
   Die,
   deepClone,
   type EvalRoots,
@@ -107,7 +121,7 @@ export class GoblinEngine {
    */
   private async discoverTemplates(file: string, text: string): Promise<void> {
     const dir = file.includes('/') ? file.slice(0, file.lastIndexOf('/')) : '';
-    const pattern = /\$tmpl\(\s*['"]([^'"]+)['"]\s*\)/g;
+    const pattern = TEMPLATE_SCAN;
     let match: RegExpExecArray | null;
     match = pattern.exec(text);
     while (match !== null) {
@@ -172,7 +186,8 @@ export class GoblinEngine {
 
   resolveRef(ref: string, scope: EvalRoots): unknown {
     const { root, path } = parseRef(ref);
-    let base = root === '.' ? scope.current : root === '$' ? scope.doc : root === '@' ? scope.actor : scope.app;
+    let base =
+      root === CURRENT ? scope.current : root === DOCUMENT ? scope.doc : root === ACTOR ? scope.actor : scope.app;
     let segments = path;
     // `$lib.…` addresses the standard library, unless the base document
     // defines its own `lib` table (explicit bindings win).
@@ -204,7 +219,7 @@ export class GoblinEngine {
         // Cross-namespace fallback into shared globals: `$`/`@` fall back
         // to the app root (e.g. `player.yaml` uses `@.utils.…` supplied by
         // the app), `#` falls back to the current document.
-        const fallbackRoot = root === '#' ? scope.doc : scope.app;
+        const fallbackRoot = root === APP ? scope.doc : scope.app;
         const fallbackFound = this.walkScoped(fallbackRoot, segments, scope);
         if (fallbackFound !== null) {
           const fn = this.entryCallable(fallbackFound, scope);
@@ -226,9 +241,9 @@ export class GoblinEngine {
 
   /**
    * Like walkRaw, but expression strings met along the path evaluate first
-   * so refs can descend through them (e.g. `$.thresholds.l2` where
-   * `thresholds` is `$tmpl('levels.yaml')`). Terminates: re-entering the
-   * same ref hits the resolving guard with a stabilized scope.
+   * so refs can descend through them (e.g. into a `$tmpl('…')` table).
+   * Terminates: re-entering the same ref hits the resolving guard with a
+   * stabilized scope.
    */
   private walkScoped(
     base: unknown,
@@ -259,7 +274,8 @@ export class GoblinEngine {
       },
       assign: (ref: string, value: unknown) => {
         const { root, path } = parseRef(ref);
-        const base = root === '.' ? scope.current : root === '$' ? scope.doc : root === '@' ? scope.actor : scope.app;
+        const base =
+          root === CURRENT ? scope.current : root === DOCUMENT ? scope.doc : root === ACTOR ? scope.actor : scope.app;
         setPath(base, path, value);
         this.cache.clear();
         return value;
@@ -276,7 +292,7 @@ export class GoblinEngine {
       return die;
     }
     // `$tmpl('file.yaml')` — synchronous template lookup (must be loaded).
-    const tmpl = trimmed.match(/^\$tmpl\(\s*['"]([^'"]+)['"]\s*\)$/);
+    const tmpl = trimmed.match(TEMPLATE_CALL);
     if (tmpl) {
       const doc = this.docs.get(tmpl[1]!);
       if (doc === undefined) throw new Error(`template not loaded: ${tmpl[1]}`);
@@ -329,23 +345,55 @@ export class GoblinEngine {
   }
 
   /**
+   * Write override values into the raw tree (`.`/`$`/`@` target the actor,
+   * `#` targets the app; bare paths default to the actor). Overridden paths
+   * are replaced wholesale — derivations never run and missing paths are
+   * created — but a `:param` record keeps its `:type` contract. Mutates like
+   * `apply`; re-load or re-resolve for a pristine tree.
+   */
+  applyOverrides(actorRaw: unknown, overrides: Record<string, unknown>): void {
+    for (const [key, value] of Object.entries(overrides)) {
+      const normalized = /^[.@#$]/.test(key) ? key : `@.${key}`;
+      const { root, path } = parseRef(normalized);
+      if (path.length === 0) continue;
+      const base = root === APP ? this.appRoot : actorRaw;
+      if (base === null || typeof base !== 'object') continue;
+      const existing = getPath(base, path);
+      if (existing !== null && typeof existing === 'object' && PARAM_KEY in (existing as Record<string, unknown>)) {
+        const type = (existing as Record<string, unknown>)[TYPE_KEY];
+        if (typeof type === 'string' && type) checkParamType(type, value, path.join('.'));
+      }
+      setPath(base as Record<string, unknown>, path, deepClone(value));
+    }
+  }
+
+  /**
    * Resolve a document against user-provided values (keyed by dotted path
    * or `:param` alias). Satisfied documents return `{ data }` with the
    * serialized result; otherwise `{ query }` holds only the outstanding
    * params. Provided values of the wrong `:type` still throw.
    */
-  resolve(file: string, provided: Record<string, unknown> = {}): { data: unknown } | { query: MissingParam[] } {
+  resolve(
+    file: string,
+    provided: Record<string, unknown> = {},
+    overrides: Record<string, unknown> = {},
+  ): { data: unknown } | { query: MissingParam[] } {
     const raw = this.docs.get(file);
     if (raw === undefined) throw new Error(`document not loaded: ${file}`);
-    return this.resolveRaw(raw, provided);
+    return this.resolveRaw(raw, provided, overrides);
   }
 
   /**
    * Resolve an in-memory actor tree (e.g. composed from `actor`/`adopt`
    * entry keys): `{ data }` when `provided` satisfies all params, else
-   * `{ query }` with only the outstanding ones.
+   * `{ query }` with only the outstanding ones. Overrides apply first.
    */
-  resolveRaw(actorRaw: unknown, provided: Record<string, unknown> = {}): { data: unknown } | { query: MissingParam[] } {
+  resolveRaw(
+    actorRaw: unknown,
+    provided: Record<string, unknown> = {},
+    overrides: Record<string, unknown> = {},
+  ): { data: unknown } | { query: MissingParam[] } {
+    this.applyOverrides(actorRaw, overrides);
     const outstanding = collectParams(actorRaw).filter((param) => provided[param.path] === undefined);
     if (outstanding.length > 0) return { query: outstanding };
     const scope: EvalRoots = { doc: actorRaw, actor: actorRaw, app: this.appRoot, current: actorRaw, provided };
@@ -384,8 +432,8 @@ export class GoblinEngine {
    * `$if` (comment-only `null`) counts as unconditional.
    */
   private condPasses(value: Record<string, unknown>, scope: EvalRoots): boolean {
-    if (!('$if' in value)) return true;
-    const rawCond = value.$if;
+    if (!(IF_KEY in value)) return true;
+    const rawCond = value[IF_KEY];
     return rawCond == null || rawCond === '' ? true : Boolean(this.evaluate(rawCond, scope));
   }
 
@@ -397,19 +445,20 @@ export class GoblinEngine {
     if (typeof patch !== 'object' || patch === null) return;
     const target = actorRaw as Record<string, unknown>;
     for (const [key, value] of Object.entries(patch as Record<string, unknown>)) {
-      if (isBareSigil(key) || key === '$') continue;
+      if (isBareSigil(key) || key === DOCUMENT) continue;
       if (isMetaKey(key) || isValidateKey(key)) {
         target[key] = deepClone(value);
         continue;
       }
-      if (key === '$if' || key === '$then') continue; // handled by mergeInto
+      if (key === IF_KEY || key === THEN_KEY) continue; // handled by mergeInto
       this.mergeEntry(target, key, value, scope);
     }
   }
 
   private applyAtPath(pathKey: string, value: unknown, scope: EvalRoots): void {
     const { root, path } = parseRef(pathKey);
-    const base = root === '@' ? scope.actor : root === '$' ? scope.doc : root === '#' ? scope.app : scope.current;
+    const base =
+      root === ACTOR ? scope.actor : root === DOCUMENT ? scope.doc : root === APP ? scope.app : scope.current;
     if (value && typeof value === 'object' && !Array.isArray(value)) {
       if (!this.condPasses(value as Record<string, unknown>, scope)) return;
       let target = getPath(base, path);
@@ -445,11 +494,11 @@ export class GoblinEngine {
     if (!value || typeof value !== 'object' || typeof target !== 'object' || target === null) return;
     const rec = value as Record<string, unknown>;
     const tgt = target as Record<string, unknown>;
-    if ('$if' in rec || '$then' in rec) {
+    if (IF_KEY in rec || THEN_KEY in rec) {
       if (!this.condPasses(rec, scope)) return;
-      if ('$then' in rec) this.applyPatchObject(rec.$then, scope);
+      if (THEN_KEY in rec) this.applyPatchObject(rec[THEN_KEY], scope);
       for (const [k, v] of Object.entries(rec)) {
-        if (k === '$if' || k === '$then') continue;
+        if (k === IF_KEY || k === THEN_KEY) continue;
         this.mergeEntry(tgt, k, v, scope);
       }
       return;
@@ -464,7 +513,7 @@ export class GoblinEngine {
     if (Array.isArray(patch)) return;
     if (!patch || typeof patch !== 'object') return;
     for (const [k, v] of Object.entries(patch as Record<string, unknown>)) {
-      if (isBareSigil(k) || k === '$' || k === '$if' || k === '$then') continue;
+      if (isBareSigil(k) || k === DOCUMENT || k === IF_KEY || k === THEN_KEY) continue;
       if (isMetaKey(k) || isValidateKey(k)) continue;
       if (isPathKey(k)) {
         this.applyAtPath(k, v, scope);
@@ -528,10 +577,10 @@ export class GoblinEngine {
         const rec = node as Record<string, unknown>;
         // Functions serialize as callables — skip.
         for (const [k, v] of Object.entries(rec)) {
-          if (typeof v === 'function' || k === '!validate') continue;
+          if (typeof v === 'function' || k === VALIDATE_KEY) continue;
           visit(v, rawScope);
         }
-        const rules = rec['!validate'];
+        const rules = rec[VALIDATE_KEY];
         if (Array.isArray(rules)) {
           for (const rule of rules) {
             if (typeof rule !== 'string') continue;
