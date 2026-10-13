@@ -42,9 +42,9 @@ describe('examples', () => {
       'starting_level=3',
       '--param',
       'details.title=Kid',
-    ) as { data: Record<string, { value: unknown }> };
-    expect(data.data.hero_name?.value).toBe('Aria');
-    expect(data.data.level?.value).toBe(3);
+    ) as { data: Record<string, unknown> };
+    expect(data.data.hero_name).toBe('Aria');
+    expect(data.data.level).toBe(3);
   });
 
   it('09-stdlib.yaml resolves $lib with no attaching', () => {

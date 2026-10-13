@@ -13,7 +13,7 @@ Nodes are referenced by path using a leading sigil that determines the root of t
 | `.`   | Current node | Relative path from the node being evaluated |
 | `$`   | Document root | Top of the current document (the `.yaml` file) |
 | `@`   | Actor root | The actor instance this document is applied to |
-| `#`   | App root | Global application namespace (stdlib, shared templates) |
+| `#`   | App root | Global application namespace (shared tables, cross-doc values) |
 
 Segments are separated by `.`. A bare sigil with no segments refers to the root itself.
 The dot after a sigil is optional: `$foo.bar` and `$.foo.bar` are equivalent.
@@ -26,7 +26,7 @@ $.abilities.dexterity          # 'abilities.dexterity' from document root
 #.utils.ability_modifier       # 'ability_modifier' in the global utils namespace
 ```
 
-In a document where the document itself defines the actor (e.g. `player.yaml`), `$` and `@` resolve to the same root. The distinction matters in applied documents (e.g. class files like `monk.yaml`) where `$` is the class document's own namespace and `@` is the character being modified.
+In a document where the document itself defines the actor (e.g. `wip/player.yaml`), `$` and `@` resolve to the same root. The distinction matters in applied documents (e.g. class files like `wip/monk.yaml`) where `$` is the class document's own namespace and `@` is the character being modified.
 
 Cross-namespace fallback: when a path is missing under `$` or `@`, the app
 root is tried next (so `@.utils.…` works when the app supplies `utils`); a
@@ -136,11 +136,18 @@ recursively (relative to the referring file), so no manual preloading is
 needed. Keep `$tmpl('…')` shapes out of comments: the scan is textual.
 
 A tmpl'd document's functions stay callable through the inlined table, with
-`.` bound to the template root:
+`.` bound to the template root. Either attach the table under a key…
 
 ```yaml
 levels: $tmpl('levels.yaml')
 level: $.levels.level_for(@.xp.value)
+```
+
+…or leave it un-attached and call through the app binding (see Composition),
+which keeps the calling document free of the table:
+
+```yaml
+level: '#.levels.level_for(@.xp.value)'
 ```
 
 ```yaml
@@ -168,11 +175,19 @@ evaluate with `.` bound to the containing node; use `.`-relative refs, since
 # Examples (examples/06-metadata-validation.yaml)
 hit_points:
   '!validate':
-    - .value >= 0
-    - .value <= .max
-  value: 7
+    - . >= 0
+    - . <= .max
+  :value: 7
   max: 12
 ```
+
+## Value slots (`:value`)
+
+A record carrying `:value` is a value node with siblings: bare refs
+derefence to the slot (`@.hit_points` reads `7`), longer paths read
+siblings (`@.hit_points.max`), and validation predicates use `.` for the
+value under test. Assigning the node writes the slot, preserving siblings.
+Plain `value` keys (e.g. resource counters) keep working as ordinary data.
 
 ## Applied documents: patches, effects, conditions
 
@@ -192,9 +207,12 @@ syntax:
   null, or `""` the block is unconditional; otherwise `$if` must evaluate
   truthy. A false condition applies nothing — not even `:meta` — so gated-out
   content leaves no residue. `$then` is itself a patch whose path keys are
-  absolute. `$if`/`$then` are never serialized.
+  absolute; a bare `$then` without `$if` applies unconditionally.
+  `$if`/`$then` are never serialized.
 - **Type tags**: a bare `$` key (e.g. `$: Player`) declares the expected actor
-  type and is ignored by the engine, as are all bare sigils.
+  type and is ignored by the engine, as are all bare sigils. `$type: X` (as
+  in `wip/player.yaml`) is the legacy spelling: skipped on evaluation, never
+  rely on it.
 
 ```yaml
 # Examples (examples/07-actor.yaml, examples/07-class.yaml)
@@ -219,18 +237,22 @@ Bodies spanning multiple lines (or `;`-separated) are statement blocks. A
 statement of the form `<ref> = <expr>` — where the left side is exactly one
 reference — assigns through the sigil (`#.` writes app state, `@.` actor
 state, `.` the current node) and clears the resolution cache. The block's
-value is its last non-assignment statement.
+value is its last non-assignment statement (all-assignment blocks evaluate
+to `undefined`). Watch the single `=`: `$if: '@.level = 5'` does not compare —
+it assigns 5 and passes truthy. Comparisons always use `==`.
 
 ```yaml
 rest:
   short(): |
-    #.hit_points.value = $lib.math.min(#.hit_points.value + #.hit_die, #.hit_points.max)
+    @.hit_points = $lib.math.min(@.hit_points + @.hit_die, @.hit_points.max)
 ```
 
 ## Composition
 
 A root entry may compose an actor from an `actor` base plus an `adopt` list
-of patches (each a `$tmpl('…')` expression or an inline object). The runner
+of patches (each a `$tmpl('…')` expression or an inline object). A top-level
+`actor` key is reserved: any document carrying one is treated as a
+composition entry, so never use `actor` as ordinary data. The runner
 resolves the base, applies each patch in order, then resolves the merged
 result — gate per-level content with `$if` on actor state so choices declared
 by adopted patches surface in the `{ query }` envelope. Template paths are
@@ -252,10 +274,10 @@ adopt:
 ## Parameters
 
 A record containing `:param` declares a value the user must provide. It
-evaluates to `{ ':doc'?, ':param', value }`, where `value` comes from the
-provided values (or `null` when missing). `missingParams()` reports every
-such node as `[{ path, doc?, type? }]` — the dotted path needing a
-value plus the attached `:doc`.
+evaluates straight to the filled value — provided, else `:default`, else
+`null` — with no wrapper. `missingParams()` reports every such node as
+`[{ path, doc?, type? }]` — the dotted path needing a value plus the
+attached `:doc`.
 
 - `:param: true` keys the provided value by the node's dotted path.
 - `:param: 'alias'` keys it by the alias string instead.
@@ -269,8 +291,11 @@ value plus the attached `:doc`.
   `missingParams` report.
 - `:param` records survive `apply()` (markers copy with other `:meta`), so
   patch files can declare params reported against the merged actor.
-- Filled values are readable as `<path>.value` from other expressions
-  (missing params read `null`), e.g. `@.level.value` in derived stats.
+- Filled values are readable as `<path>` from other expressions — a bare ref
+  to a `:param` node dereferences its filled value (provided, default, or
+  `null` when missing), so `@.xp` just works. Descending into a `:param`
+  node's `value` slot does not resolve; data records like `hit_points.value`
+  are unaffected.
 
 ```yaml
 # Examples (examples/08-parameters.yaml)
@@ -293,7 +318,7 @@ engine.missingParams('08-parameters.yaml');
 //   { path: 'details.title' },
 // ]
 engine.evaluateDoc('08-parameters.yaml', { hero_name: 'Aria' });
-// hero_name → { ':doc': '…', ':param': true, ':type': 'string', value: 'Aria' }
+// hero_name → 'Aria'
 engine.evaluateDoc('08-parameters.yaml', { starting_level: 'high' });
 // throws: param type mismatch: starting_level expected integer, got string
 ```
@@ -329,7 +354,7 @@ engine.resolve('08-parameters.yaml', {});
 engine.resolve('08-parameters.yaml', { hero_name: 'Aria' });
 // { query: [ …starting_level…, …details.title… ] }  (hero_name filtered)
 engine.resolve('08-parameters.yaml', { hero_name: 'Aria', starting_level: 3, 'details.title': 'Kid' });
-// { data: { hero_name: { …, value: 'Aria' }, … } }
+// { data: { hero_name: 'Aria', … } }
 ```
 
 ## Evaluation model
@@ -352,4 +377,6 @@ engine.resolve('08-parameters.yaml', { hero_name: 'Aria', starting_level: 3, 'de
   bare. (`@` and `$` need no quoting; `@.x` as a *key* does, for clarity.)
 - Sentences with periods (e.g. `end. Start`) look like `.`-refs to the
   expression detector — keep prose in `:doc`, which is never evaluated.
+  Numeric literals are safe: no digit follows the `.` in a ref, so `2.5`
+  never parses as one.
 - `!validate` must be quoted (`'!validate'`) so YAML does not parse `!` as a tag.

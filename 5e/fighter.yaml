@@ -11,8 +11,9 @@ $: Character
 
 # Martial training, gear, and grit — every fighter starts here.
 '@.hit_die': d10
-'@.hit_points.max': 10 + @.abilities.constitution.modifier
-'@.hit_points.value': '@.hit_points.max'
+'@.hit_points':
+  max: 10 + @.abilities.constitution.modifier
+  :value: '@.hit_points.max'
 '@.proficiencies.armor':
   - all_armor
   - shields

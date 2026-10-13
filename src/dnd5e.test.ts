@@ -79,8 +79,8 @@ const script = `
     baseMissing,
     mergedMissing,
     ac: v5.armor_class,
-    hp: { value: v5.hit_points.value, max: v5.hit_points.max },
-    trained: v5.skills.trained.value,
+    hp: { value: v5.hit_points[':value'], max: v5.hit_points.max },
+    trained: v5.skills.trained,
     surge: { value: v5.resources.action_surge.value, max: v5.resources.action_surge.max },
     swMin: sw >= 6,
     swMax: sw <= 15,
@@ -153,13 +153,13 @@ describe('5e', () => {
         level: number;
         attacks: number;
         armor_class: number;
-        features: Record<string, { value: unknown }>;
+        features: Record<string, unknown>;
       };
     };
     expect(data.data.level).toBe(5);
     expect(data.data.attacks).toBe(2);
     expect(data.data.armor_class).toBe(10);
-    expect(data.data.features.fighting_style?.value).toBe('dueling');
+    expect(data.data.features.fighting_style).toBe('dueling');
   });
 
   it('overrides level explicitly without XP', () => {

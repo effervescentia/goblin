@@ -32,12 +32,12 @@ function testEngine() {
     },
     hit_die: 'd6',
     hit_points: {
-      '!validate': ['.value >= 0', '.value <= .max'],
-      value: 3,
+      '!validate': ['. >= 0', '. <= .max'],
+      ':value': 3,
       max: 5,
     },
     rest: {
-      'short()': '#.hit_points.value = $lib.math.min(#.hit_points.value + #.hit_die, #.hit_points.max)',
+      'short()': '#.hit_points = $lib.math.min(#.hit_points + #.hit_die, #.hit_points.max)',
     },
   };
   engine.docs.set('main.yaml', doc);
@@ -180,8 +180,8 @@ describe('evaluate', () => {
       app: engine.appRoot,
       current: engine.appRoot,
     }) as Record<string, any>;
-    expect((appView.hit_points as { value: number }).value).toBeGreaterThanOrEqual(3);
-    expect((appView.hit_points as { value: number }).value).toBeLessThanOrEqual(5);
+    expect((appView.hit_points as Record<string, unknown>)[':value']).toBeGreaterThanOrEqual(3);
+    expect((appView.hit_points as Record<string, unknown>)[':value']).toBeLessThanOrEqual(5);
   });
 });
 
@@ -253,7 +253,7 @@ describe('apply', () => {
     engine.docs.set('gated.yaml', {
       '@.features': {
         '+sneak_attack': {
-          $if: '#.hit_points.value > #.hit_points.max',
+          $if: '#.hit_points > #.hit_points.max',
           $then: { '@.features': { '+never': {} } },
         },
       },
@@ -273,8 +273,8 @@ describe('validate', () => {
     const out = engine.evaluateDoc('main.yaml');
     expect(engine.validate(out)).toEqual([]);
 
-    const bad = { hit_points: { '!validate': ['.value >= 0'], value: -2 } };
-    expect(engine.validate(bad)).toEqual(['.value >= 0']);
+    const bad = { hit_points: { '!validate': ['. >= 0'], ':value': -2 } };
+    expect(engine.validate(bad)).toEqual(['. >= 0']);
   });
 });
 
@@ -303,8 +303,8 @@ describe('serialize', () => {
     expect(serialize((out.rest as { short: unknown }).short)).toEqual({
       ':type': 'function',
       ':params': [],
-      ':source': '#.hit_points.value = $lib.math.min(#.hit_points.value + #.hit_die, #.hit_points.max)',
-      ':deps': ['#.hit_points.value', '$.lib.math.min', '#.hit_die', '#.hit_points.max'],
+      ':source': '#.hit_points = $lib.math.min(#.hit_points + #.hit_die, #.hit_points.max)',
+      ':deps': ['#.hit_points', '$.lib.math.min', '#.hit_die', '#.hit_points.max'],
     });
   });
 });
@@ -366,10 +366,10 @@ describe('parameters', () => {
       string,
       { value: unknown }
     >;
-    expect(out.hero_name?.value).toBe('Aria');
-    expect(out.level?.value).toBe(3);
-    expect(out.attack_die?.value).toBeInstanceOf(Die);
-    expect((out.details as unknown as Record<string, { value: unknown }>).title?.value).toBeNull();
+    expect(out.hero_name).toBe('Aria');
+    expect(out.level).toBe(3);
+    expect(out.attack_die).toBeInstanceOf(Die);
+    expect((out.details as unknown as Record<string, unknown>).title).toBeNull();
     expect(out.hit_points).toEqual({ value: 10, max: 10 });
   });
 
@@ -400,16 +400,52 @@ describe('parameters', () => {
       path: [],
       provided,
     });
-    const out = engine.evaluate(doc, scope()) as Record<string, { value: unknown }>;
-    expect(out.greeting?.value).toBe('hello');
-    expect(out.retries?.value).toBe(3);
-    expect(out.nick?.value).toBeNull();
-    const over = engine.evaluate(doc, scope({ greeting: 'yo', retries: 5 })) as Record<string, { value: unknown }>;
-    expect(over.greeting?.value).toBe('yo');
-    expect(over.retries?.value).toBe(5);
+    const out = engine.evaluate(doc, scope()) as Record<string, unknown>;
+    expect(out.greeting).toBe('hello');
+    expect(out.retries).toBe(3);
+    expect(out.nick).toBeNull();
+    const over = engine.evaluate(doc, scope({ greeting: 'yo', retries: 5 })) as Record<string, unknown>;
+    expect(over.greeting).toBe('yo');
+    expect(over.retries).toBe(5);
     expect(() => engine.evaluate({ x: { ':param': true, ':type': 'integer', ':default': 'many' } }, scope())).toThrow(
       'param type mismatch: x expected integer, got string',
     );
+  });
+
+  it('dereferences :param records to their filled value', () => {
+    const engine = new GoblinEngine('.');
+    const doc = {
+      xp: { ':doc': 'XP.', ':param': true, ':type': 'integer' },
+      double: '@.xp + @.xp',
+    };
+    engine.docs.set('p.yaml', doc);
+    const out = engine.evaluateDoc('p.yaml', { xp: 6500 }) as { double?: unknown };
+    expect(out.double).toBe(13000);
+    const missing = engine.evaluateDoc('p.yaml', {}) as { double?: unknown };
+    expect(missing.double).toBe(0);
+  });
+
+  it('dereferences defaults without provided values', () => {
+    const engine = new GoblinEngine('.');
+    const doc = {
+      xp: { ':param': true, ':type': 'integer', ':default': 0 },
+      level: '@.xp',
+    };
+    engine.docs.set('p.yaml', doc);
+    const out = engine.evaluateDoc('p.yaml', {}) as { level?: unknown };
+    expect(out.level).toBe(0);
+  });
+
+  it('refuses .value reads on :param records but keeps data slots', () => {
+    const engine = new GoblinEngine('.');
+    engine.docs.set('param.yaml', {
+      xp: { ':param': true, ':type': 'integer' },
+      alias: '@.xp.value',
+    });
+    expect(() => engine.evaluateDoc('param.yaml', { xp: 1 })).toThrow('unresolvable reference: @.xp.value');
+    engine.docs.set('data.yaml', { hp: { value: 3, max: 5 }, alias: '@.hp.value' });
+    const out = engine.evaluateDoc('data.yaml', {}) as { alias?: unknown };
+    expect(out.alias).toBe(3);
   });
 
   it('exposes missing params for loaded documents', () => {
@@ -421,9 +457,9 @@ describe('parameters', () => {
       { path: 'attack_die', type: 'die' },
       { path: 'details.title' },
     ]);
-    const out = engine.evaluateDoc('params.yaml', { hero_name: 'Aria' }) as Record<string, { value: unknown }>;
-    expect(out.hero_name?.value).toBe('Aria');
-    expect(out.level?.value).toBeNull();
+    const out = engine.evaluateDoc('params.yaml', { hero_name: 'Aria' }) as Record<string, unknown>;
+    expect(out.hero_name).toBe('Aria');
+    expect(out.level).toBeNull();
   });
 
   it('resolves to data when satisfied, query with only outstanding params when not', () => {
@@ -454,11 +490,11 @@ describe('parameters', () => {
       start_level: 3,
       attack_die: '1d8',
       'details.title': 'Kid',
-    }) as { data: Record<string, { value: unknown }> };
-    expect(full.data.hero_name?.value).toBe('Aria');
-    expect(full.data.level?.value).toBe(3);
-    expect(full.data.attack_die?.value).toBe('1d8');
-    expect((full.data.details as unknown as Record<string, { value: unknown }>).title?.value).toBe('Kid');
+    }) as { data: Record<string, unknown> };
+    expect(full.data.hero_name).toBe('Aria');
+    expect(full.data.level).toBe(3);
+    expect(full.data.attack_die).toBe('1d8');
+    expect((full.data.details as unknown as Record<string, unknown>).title).toBe('Kid');
   });
 
   it('validates array parameters', () => {
@@ -473,10 +509,10 @@ describe('parameters', () => {
       path: [],
       provided,
     });
-    const filled = engine.evaluate(doc, scope({ tags: ['a', 'b'] })) as Record<string, { value: unknown }>;
-    expect(filled.tags?.value).toEqual(['a', 'b']);
-    const empty = engine.evaluate(doc, scope({ tags: [] })) as Record<string, { value: unknown }>;
-    expect(empty.tags?.value).toEqual([]);
+    const filled = engine.evaluate(doc, scope({ tags: ['a', 'b'] })) as Record<string, unknown>;
+    expect(filled.tags).toEqual(['a', 'b']);
+    const empty = engine.evaluate(doc, scope({ tags: [] })) as Record<string, unknown>;
+    expect(empty.tags).toEqual([]);
     expect(() => engine.evaluate(doc, scope({ tags: 'nope' }))).toThrow(
       'param type mismatch: tags expected array, got string',
     );

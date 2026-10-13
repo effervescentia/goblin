@@ -27,6 +27,8 @@ import {
   THEN_KEY,
   TYPE_KEY,
   VALIDATE_KEY,
+  VALUE_KEY,
+  VALUE_SLOT,
 } from './constants';
 import { FunctionNode } from './nodes/function';
 import { parse } from './nodes/parse';
@@ -43,8 +45,10 @@ import {
   isBareSigil,
   isExpressionString,
   isMetaKey,
+  isParamRecord,
   isPathKey,
   isValidateKey,
+  isValueRecord,
   joinPath,
   MATH_LIB,
   type MissingParam,
@@ -196,7 +200,14 @@ export class GoblinEngine {
       segments = segments.slice(1);
     }
 
-    if (segments.length === 0) return this.evaluate(base, scope);
+    if (segments.length === 0) {
+      // A bare read of a value node yields its slot (`.` in `!validate`
+      // rules reads the value under test); everything else evaluates as-is.
+      if (isValueRecord(base)) {
+        return this.evaluate((base as Record<string, unknown>)[VALUE_SLOT], { ...scope, current: base });
+      }
+      return this.evaluate(base, scope);
+    }
 
     const key = this.cacheKey(ref, scope);
     if (this.cache.has(key)) return this.cache.get(key);
@@ -214,7 +225,7 @@ export class GoblinEngine {
         const fn = this.entryCallable(found, scope);
         if (fn !== undefined) return fn;
       }
-      const rawTarget = found?.value;
+      const rawTarget = this.derefParam(found?.value, scope);
       if (rawTarget === undefined) {
         // Cross-namespace fallback into shared globals: `$`/`@` fall back
         // to the app root (e.g. `player.yaml` uses `@.utils.…` supplied by
@@ -224,7 +235,7 @@ export class GoblinEngine {
         if (fallbackFound !== null) {
           const fn = this.entryCallable(fallbackFound, scope);
           if (fn !== undefined) return fn;
-          return this.evaluate(fallbackFound.value, scope);
+          return this.evaluate(this.derefParam(fallbackFound.value, scope), scope);
         }
         return undefined;
       }
@@ -240,10 +251,29 @@ export class GoblinEngine {
   }
 
   /**
+   * Value nodes dereference to their slot, so a bare `@.hit_points` reads
+   * the filled value: `:param` records read their materialized `value` slot
+   * (provided, default, or `null`), `:value` records evaluate their slot in
+   * place. Anything else passes through untouched.
+   */
+  private derefParam(rawTarget: unknown, scope: EvalRoots): unknown {
+    if (isParamRecord(rawTarget)) {
+      const slot = rawTarget[VALUE_KEY];
+      return slot !== undefined ? slot : null;
+    }
+    if (isValueRecord(rawTarget)) {
+      const node = rawTarget as Record<string, unknown>;
+      return this.evaluate(node[VALUE_SLOT], { ...scope, current: node });
+    }
+    return rawTarget;
+  }
+
+  /**
    * Like walkRaw, but expression strings met along the path evaluate first
    * so refs can descend through them (e.g. into a `$tmpl('…')` table).
-   * Terminates: re-entering the same ref hits the resolving guard with a
-   * stabilized scope.
+   * Descending into a `:param` record's `value` slot is refused — read the
+   * node bare instead. Terminates: re-entering the same ref hits the
+   * resolving guard with a stabilized scope.
    */
   private walkScoped(
     base: unknown,
@@ -257,6 +287,7 @@ export class GoblinEngine {
       if (typeof node === 'string' && node !== scope.current && isExpressionString(node)) {
         node = this.evaluate(node, { ...scope, current: parent });
       }
+      if (seg === VALUE_KEY && isParamRecord(node)) return null;
       entry = getChildEntry(node, seg);
       if (entry === null) return null;
       parent = node;
@@ -276,7 +307,13 @@ export class GoblinEngine {
         const { root, path } = parseRef(ref);
         const base =
           root === CURRENT ? scope.current : root === DOCUMENT ? scope.doc : root === ACTOR ? scope.actor : scope.app;
-        setPath(base, path, value);
+        // Assigning a value node writes its slot, preserving siblings.
+        const target = path.length > 0 ? getPath(base, path) : undefined;
+        if (isValueRecord(target)) {
+          setPath(base as Record<string, unknown>, [...path, VALUE_SLOT], value);
+        } else {
+          setPath(base as Record<string, unknown>, path, value);
+        }
         this.cache.clear();
         return value;
       },

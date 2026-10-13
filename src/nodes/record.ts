@@ -1,4 +1,4 @@
-import { DEFAULT_KEY, DOCUMENT, IF_KEY, PARAM_KEY, THEN_KEY, TYPE_KEY, VALUE_KEY } from '../constants';
+import { DEFAULT_KEY, DOCUMENT, IF_KEY, PARAM_KEY, THEN_KEY, TYPE_KEY, VALUE_SLOT } from '../constants';
 import type { GoblinEngine } from '../engine';
 import type { EvalRoots } from '../utils';
 import { checkParamType, isBareSigil, isMetaKey, isPathKey, isValidateKey, stripPlus } from '../utils';
@@ -8,10 +8,17 @@ import { Node } from './node';
 export class RecordNode extends Node<Record<string, unknown>> {
   override evaluate(engine: GoblinEngine, scope: EvalRoots): unknown {
     const record = this.raw;
+    if (record[PARAM_KEY]) {
+      return fillParam(engine, record, scope, scope.path ?? []);
+    }
     const base = scope.path ?? [];
     const out: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(record)) {
       if (isBareSigil(key) || key === DOCUMENT) continue; // `$: Player` type tag
+      if (key === VALUE_SLOT) {
+        out[key] = engine.evaluate(value, { ...scope, current: record, path: [...base, key] });
+        continue;
+      }
       if (isMetaKey(key)) {
         out[key] = value;
         continue;
@@ -35,21 +42,23 @@ export class RecordNode extends Node<Record<string, unknown>> {
       if (isPathKey(key)) continue; // patch instruction — handled by apply()
       out[key] = engine.evaluate(value, { ...scope, current: record, path: [...base, key] });
     }
-    if (record[PARAM_KEY]) {
-      const marker = record[PARAM_KEY];
-      const paramKey = typeof marker === 'string' && marker ? marker : base.join('.');
-      const provided = scope.provided?.[paramKey];
-      const def = record[DEFAULT_KEY];
-      const hasDefault = def !== undefined && def !== null;
-      if (provided === undefined && !hasDefault) {
-        out[VALUE_KEY] = null;
-      } else {
-        const filled = engine.evaluate(provided !== undefined ? provided : def, scope);
-        const type = record[TYPE_KEY];
-        if (typeof type === 'string' && type) checkParamType(type, filled, paramKey);
-        out[VALUE_KEY] = filled;
-      }
-    }
     return out;
   }
+}
+
+/**
+ * A `:param` record evaluates straight to its filled value — provided, else
+ * `:default`, else `null` — with no wrapper. Metadata stays on the raw node
+ * for `missingParams`, never in output.
+ */
+function fillParam(engine: GoblinEngine, record: Record<string, unknown>, scope: EvalRoots, base: string[]): unknown {
+  const marker = record[PARAM_KEY];
+  const paramKey = typeof marker === 'string' && marker ? marker : base.join('.');
+  const provided = scope.provided?.[paramKey];
+  const def = record[DEFAULT_KEY];
+  if (provided === undefined && (def === undefined || def === null)) return null;
+  const filled = engine.evaluate(provided !== undefined ? provided : def, scope);
+  const type = record[TYPE_KEY];
+  if (typeof type === 'string' && type) checkParamType(type, filled, paramKey);
+  return filled;
 }

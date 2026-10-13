@@ -31,6 +31,7 @@ import {
   TYPE_KEY,
   VALIDATE_KEY,
   VALUE_KEY,
+  VALUE_SLOT,
 } from './constants';
 
 export interface EvalRoots {
@@ -327,6 +328,16 @@ export interface MissingParam {
   doc?: string;
   /** The node's declared `:type`, when given. */
   type?: string;
+}
+
+/** A record declaring a user-provided value (`:param` marker present). */
+export function isParamRecord(node: unknown): node is Record<string, unknown> {
+  return typeof node === 'object' && node !== null && PARAM_KEY in node;
+}
+
+/** A record carrying a `:value` slot (but not a `:param` declaration). */
+export function isValueRecord(node: unknown): node is Record<string, unknown> {
+  return typeof node === 'object' && node !== null && VALUE_SLOT in node && !(PARAM_KEY in node);
 }
 
 const PARAM_TYPES = ['string', 'number', 'integer', 'boolean', 'die', 'array', 'record'] as const;

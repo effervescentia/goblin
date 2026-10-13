@@ -23,7 +23,7 @@ xp:
   :type: integer
   :default: 0
 
-level: '#.levels.level_for(@.xp.value)'
+level: '#.levels.level_for(@.xp)'
 
 abilities:
   strength:
@@ -61,9 +61,9 @@ initiative:
 hit_die: d8
 hit_points:
   '!validate':
-    - .value >= 0
-    - .value <= .max
-  value: 8
+    - . >= 0
+    - . <= .max
+  :value: 8
   max: 8
 
 features: {}
@@ -79,6 +79,6 @@ resources: {}
 
 rest:
   'short()': |
-    @.hit_points.value = $lib.math.min(@.hit_points.value + @.hit_die, @.hit_points.max)
+    @.hit_points = $lib.math.min(@.hit_points + @.hit_die, @.hit_points.max)
   'long()': |
-    @.hit_points.value = @.hit_points.max
+    @.hit_points = @.hit_points.max
