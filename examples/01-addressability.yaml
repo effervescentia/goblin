@@ -1,4 +1,4 @@
-# Addressibility (`.`, `$`, `@`, `#`) — see SYNTAX.md.
+# Addressability (`.`, `$`, `@`, `#`) — see SYNTAX.md.
 #
 # `.`  current node (here: the `demo` record, so `.base` is its sibling)
 # `$`  this document's root

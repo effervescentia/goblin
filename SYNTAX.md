@@ -4,7 +4,7 @@ Goblin documents are `.yaml` files evaluated by `src/engine.ts`. Each
 `examples/NN-*.yaml` file demonstrates one section of this spec and is kept
 runnable by `src/examples.test.ts`.
 
-## Addressibility
+## Addressability
 
 Nodes are referenced by path using a leading sigil that determines the root of the lookup.
 
@@ -19,7 +19,7 @@ Segments are separated by `.`. A bare sigil with no segments refers to the root 
 The dot after a sigil is optional: `$math.min` and `$.math.min` are equivalent.
 
 ```yaml
-# Examples (examples/01-addressibility.yaml)
+# Examples (examples/01-addressability.yaml)
 .base                          # sibling field 'base' on the current node
 $.abilities.dexterity          # 'abilities.dexterity' from document root
 @.features                     # 'features' on the actor this document is applied to

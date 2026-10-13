@@ -1,7 +1,7 @@
 /**
  * Goblin — minimal TypeScript engine for `.yaml` documents.
  *
- * Implements SYNTAX.md addressibility plus the expression / patch
+ * Implements SYNTAX.md addressability plus the expression / patch
  * conventions observed in `main.yaml`, `player.yaml` and `monk*.yaml`:
  *
  * - Sigils: `.` current node, `$` document root, `@` actor root, `#` app root.
