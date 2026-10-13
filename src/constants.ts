@@ -64,6 +64,15 @@ export const TYPE_KEY = ':type';
 /** Default filled when a `:param` has no provided value. */
 export const DEFAULT_KEY = ':default';
 
+/** Allowed values for a `:param` (scalar must equal one; array items each must). */
+export const OPTIONS_KEY = ':options';
+
+/** Exact item count required of an array `:param` value. */
+export const COUNT_KEY = ':count';
+
+/** When `true`, array `:param` items must be distinct. */
+export const UNIQUE_KEY = ':unique';
+
 /** Predicate list applied to the containing node. */
 export const VALIDATE_KEY = '!validate';
 

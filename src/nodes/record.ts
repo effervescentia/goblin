@@ -1,7 +1,15 @@
 import { DEFAULT_KEY, DOCUMENT, IF_KEY, PARAM_KEY, PARAM_VALUE_KEY, THEN_KEY, TYPE_KEY } from '../constants';
 import type { GoblinEngine } from '../engine';
 import type { EvalRoots } from '../utils';
-import { checkParamType, isBareSigil, isMetaKey, isPathKey, isValidateKey, stripPlus } from '../utils';
+import {
+  checkParamConstraints,
+  checkParamType,
+  isBareSigil,
+  isMetaKey,
+  isPathKey,
+  isValidateKey,
+  stripPlus,
+} from '../utils';
 import { FunctionNode } from './function';
 import { Node } from './node';
 
@@ -64,6 +72,7 @@ function fillParam(engine: GoblinEngine, record: Record<string, unknown>, scope:
   const filled = engine.evaluate(provided !== undefined ? provided : def, scope);
   const type = record[TYPE_KEY];
   if (typeof type === 'string' && type) checkParamType(type, filled, paramKey);
+  checkParamConstraints(record, filled, paramKey);
   out[PARAM_VALUE_KEY] = filled;
   return out;
 }

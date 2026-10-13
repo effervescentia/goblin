@@ -1,0 +1,19 @@
+# Constrained choices (`:options`, `:count`, `:unique`).
+# `:options` lists the allowed values: a scalar must equal one entry, every
+# array item must equal one. `:count` requires an exact array length;
+# `:unique: true` requires distinct array items. Violations throw instead of
+# resolving; the `{ query }` report carries the constraints.
+
+style:
+  :doc: Pick a fighting style.
+  :param: true
+  :type: string
+  :options: [archery, dueling]
+
+trained:
+  :doc: Pick two skills.
+  :param: true
+  :type: array
+  :options: [arcana, history, stealth]
+  :count: 2
+  :unique: true

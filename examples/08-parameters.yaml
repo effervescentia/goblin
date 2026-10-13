@@ -2,7 +2,7 @@
 # `engine.missingParams()` reports `[{ path, doc }]` for each one — the
 # dotted path needing a value plus the attached `:doc`.
 # Provided values (keyed by path, or by alias when `:param` holds a string)
-# fill `value` at evaluate time; missing params evaluate `value: null`.
+# fill `:value` at evaluate time; missing params evaluate `:value: null`.
 
 hero_name:
   :doc: The hero's name, as sung by bards.

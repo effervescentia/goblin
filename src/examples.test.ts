@@ -57,6 +57,37 @@ describe('examples', () => {
     });
   });
 
+  it('10-choice-params.yaml reports constraints in query, enforces them in data', () => {
+    const query = cli('examples/10-choice-params.yaml') as { query: Array<Record<string, unknown>> };
+    expect(query.query).toEqual([
+      { path: 'style', doc: 'Pick a fighting style.', type: 'string', options: ['archery', 'dueling'] },
+      {
+        path: 'trained',
+        doc: 'Pick two skills.',
+        type: 'array',
+        options: ['arcana', 'history', 'stealth'],
+        count: 2,
+        unique: true,
+      },
+    ]);
+
+    const data = cli(
+      'examples/10-choice-params.yaml',
+      '--param',
+      'style=dueling',
+      '--param',
+      'trained=["arcana","stealth"]',
+    ) as { data: Record<string, Record<string, unknown>> };
+    expect(data.data.style).toEqual({
+      ':doc': 'Pick a fighting style.',
+      ':param': true,
+      ':type': 'string',
+      ':options': ['archery', 'dueling'],
+      ':value': 'dueling',
+    });
+    expect(data.data.trained?.[':value']).toEqual(['arcana', 'stealth']);
+  });
+
   it('09-stdlib.yaml resolves $lib with no attaching', () => {
     const state = cli('examples/09-stdlib.yaml') as {
       data: { floored: number; smallest: number };

@@ -32,6 +32,7 @@ import {
 import { FunctionNode } from './nodes/function';
 import { parse } from './nodes/parse';
 import {
+  checkParamConstraints,
   checkParamType,
   collectParams,
   compileBody,
@@ -379,8 +380,10 @@ export class GoblinEngine {
       if (base === null || typeof base !== 'object') continue;
       const existing = getPath(base, path);
       if (existing !== null && typeof existing === 'object' && PARAM_KEY in (existing as Record<string, unknown>)) {
-        const type = (existing as Record<string, unknown>)[TYPE_KEY];
+        const record = existing as Record<string, unknown>;
+        const type = record[TYPE_KEY];
         if (typeof type === 'string' && type) checkParamType(type, value, path.join('.'));
+        checkParamConstraints(record, value, path.join('.'));
       }
       setPath(base as Record<string, unknown>, path, deepClone(value));
     }

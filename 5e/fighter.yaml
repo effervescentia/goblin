@@ -27,6 +27,9 @@ $: Character
   :doc: 'Choose two: acrobatics, animal_handling, athletics, history, insight, intimidation, perception, survival.'
   :param: true
   :type: array
+  :options: [acrobatics, animal_handling, athletics, history, insight, intimidation, perception, survival]
+  :count: 2
+  :unique: true
 '@.features':
   +fighting_style:
     :doc: 'Choose one: archery, defense, dueling, great-weapon fighting, protection, two-weapon fighting.'

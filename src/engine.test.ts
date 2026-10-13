@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GoblinEngine } from './engine';
 import {
+  checkParamConstraints,
   checkParamType,
   collectParams,
   Die,
@@ -576,5 +577,84 @@ describe('parameters', () => {
     expect(() => engine.resolve('ov.yaml', {}, { level: 'high' })).toThrow(
       'param type mismatch: level expected integer, got string',
     );
+  });
+
+  it('enforces :options membership for scalar and array values', () => {
+    const engine = new GoblinEngine('.');
+    engine.docs.set('choice.yaml', {
+      style: { ':param': true, ':type': 'string', ':options': ['archery', 'dueling'] },
+      skills: { ':param': true, ':type': 'array', ':options': ['arcana', 'history'] },
+    });
+    const good = engine.evaluateDoc('choice.yaml', { style: 'dueling', skills: ['arcana'] }) as Record<
+      string,
+      Record<string, unknown>
+    >;
+    expect(good.style?.[':value']).toBe('dueling');
+    expect(good.skills?.[':value']).toEqual(['arcana']);
+    expect(() => engine.evaluateDoc('choice.yaml', { style: 'sneaky', skills: ['arcana'] })).toThrow(
+      'param options mismatch: style expected one of ["archery", "dueling"], got "sneaky"',
+    );
+    expect(() => engine.evaluateDoc('choice.yaml', { style: 'dueling', skills: ['arcana', 'sneak'] })).toThrow(
+      'param options mismatch: skills[1] expected one of ["arcana", "history"], got "sneak"',
+    );
+  });
+
+  it('enforces :unique distinctness and :count length on arrays', () => {
+    const engine = new GoblinEngine('.');
+    engine.docs.set('skills.yaml', {
+      trained: { ':param': true, ':type': 'array', ':options': ['a', 'b', 'c'], ':count': 2, ':unique': true },
+    });
+    const good = engine.evaluateDoc('skills.yaml', { trained: ['a', 'b'] }) as Record<string, Record<string, unknown>>;
+    expect(good.trained?.[':value']).toEqual(['a', 'b']);
+    expect(() => engine.evaluateDoc('skills.yaml', { trained: ['a', 'a'] })).toThrow(
+      'param uniqueness mismatch: trained has duplicate item "a"',
+    );
+    expect(() => engine.evaluateDoc('skills.yaml', { trained: ['a'] })).toThrow(
+      'param count mismatch: trained expected 2 items, got 1',
+    );
+    expect(() => engine.evaluateDoc('skills.yaml', { trained: ['a', 'b', 'c'] })).toThrow(
+      'param count mismatch: trained expected 2 items, got 3',
+    );
+  });
+
+  it('validates constraint declarations and default values', () => {
+    expect(() => checkParamConstraints({ ':options': 'nope' }, 'x', 'x')).toThrow(
+      'invalid :options for x: expected array, got string',
+    );
+    expect(() => checkParamConstraints({ ':count': 'two' }, ['a'], 'x')).toThrow(
+      'invalid :count for x: expected non-negative integer, got string',
+    );
+    expect(() => checkParamConstraints({ ':count': -1 }, ['a'], 'x')).toThrow(
+      'invalid :count for x: expected non-negative integer, got number',
+    );
+    const engine = new GoblinEngine('.');
+    engine.docs.set('def.yaml', {
+      bad_default: { ':param': true, ':type': 'array', ':options': ['a'], ':count': 1, ':default': ['b'] },
+    });
+    expect(() => engine.evaluateDoc('def.yaml', {})).toThrow(
+      'param options mismatch: bad_default[0] expected one of ["a"], got "b"',
+    );
+  });
+
+  it('reports choice constraints in missing params', () => {
+    expect(
+      collectParams({
+        trained: { ':param': true, ':type': 'array', ':options': ['a', 'b'], ':count': 2, ':unique': true },
+      }),
+    ).toEqual([{ path: 'trained', type: 'array', options: ['a', 'b'], count: 2, unique: true }]);
+  });
+
+  it('keeps choice contracts on overridden params', () => {
+    const engine = new GoblinEngine('.');
+    engine.docs.set('ov.yaml', {
+      trained: { ':param': true, ':type': 'array', ':options': ['a', 'b'], ':count': 1 },
+    });
+    expect(() => engine.resolve('ov.yaml', {}, { trained: ['z'] })).toThrow(
+      'param options mismatch: trained[0] expected one of ["a", "b"], got "z"',
+    );
+    expect(() => engine.resolve('ov.yaml', {}, { trained: ['a', 'b'] })).toThrow(
+      'param count mismatch: trained expected 1 items, got 2',
+    );
+    expect(engine.resolve('ov.yaml', {}, { trained: ['a'] })).toEqual({ data: { trained: ['a'] } });
   });
 });

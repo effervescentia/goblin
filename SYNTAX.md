@@ -269,8 +269,9 @@ A record containing `:param` declares a value the user must provide. It
 evaluates to its declaration metadata plus a `:value` slot holding the
 filled value — provided, else `:default`, else `null`:
 `{ ':doc'?, ':param', ':type'?, ':default'?, ':value' }`.
-`missingParams()` reports every such node as `[{ path, doc?, type? }]` —
-the dotted path needing a value plus the attached `:doc`.
+`missingParams()` reports every such node as
+`[{ path, doc?, type?, options?, count?, unique? }]` — the dotted path
+needing a value plus the attached `:doc` and any choice constraints.
 
 - `:param: true` keys the provided value by the node's dotted path.
 - `:param: 'alias'` keys it by the alias string instead.
@@ -282,6 +283,18 @@ the dotted path needing a value plus the attached `:doc`.
   throws (`param type mismatch: …`); unknown names throw (`unknown param
   type: …`). Untyped params accept anything. The type is included in the
   `missingParams` report.
+- `:options` lists the allowed values: a scalar must equal one entry, every
+  array item must equal one (`param options mismatch: …`). Anything but an
+  array throws (`invalid :options for …`).
+- `:count` requires an exact array length (`param count mismatch: …`);
+  anything but a non-negative integer throws (`invalid :count for …`).
+- `:unique: true` requires distinct array items
+  (`param uniqueness mismatch: …`); any other value disables it.
+  `:unique` and `:count` ignore non-array values.
+- Constraints check provided values and `:default`s alike, apply to `--set`
+  overrides, and ride along in the `missingParams` report — e.g. the
+  fighter's `skills.trained` declares `:options` (the eight class skills),
+  `:count: 2`, `:unique: true` (see `examples/10-choice-params.yaml`).
 - `:param` records survive `apply()` (markers copy with other `:meta`), so
   patch files can declare params reported against the merged actor.
 - Filled values are readable as `<path>` from other expressions — a bare ref
@@ -327,7 +340,8 @@ envelope that is either satisfied or asking:
   evaluated document.
 - Otherwise → `{ query }` with **only** the outstanding params
   (satisfied ones are filtered out).
-- Provided values of the wrong `:type` still throw instead of resolving.
+- Provided values of the wrong `:type` — or violating `:options` / `:count`
+  / `:unique` — still throw instead of resolving.
 - `resolve(file, provided, overrides)` writes override values into the tree
   first (`.`/`$`/`@` target the actor, `#` the app; bare paths default to the
   actor). Overridden originals are ignored — derivations never run and

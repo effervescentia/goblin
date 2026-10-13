@@ -10,6 +10,7 @@ import {
   ACTOR,
   APP,
   ASSIGN_OP,
+  COUNT_KEY,
   CURRENT,
   DEFAULT_KEY,
   DEPS_KEY,
@@ -21,6 +22,7 @@ import {
   IF_KEY,
   INLINE_DICE,
   META_PREFIX,
+  OPTIONS_KEY,
   PARAM_KEY,
   PARAM_VALUE_KEY,
   PARAMS_KEY,
@@ -30,6 +32,7 @@ import {
   STRING_LITERAL,
   THEN_KEY,
   TYPE_KEY,
+  UNIQUE_KEY,
   VALIDATE_KEY,
   VALUE_KEY,
 } from './constants';
@@ -328,6 +331,12 @@ export interface MissingParam {
   doc?: string;
   /** The node's declared `:type`, when given. */
   type?: string;
+  /** The node's allowed values (`:options`), when declared. */
+  options?: unknown[];
+  /** The node's required item count (`:count`), when declared. */
+  count?: number;
+  /** Present when the node requires distinct array items (`:unique: true`). */
+  unique?: boolean;
 }
 
 /** A record declaring a user-provided value (`:param` marker present). */
@@ -369,6 +378,60 @@ export function checkParamType(type: string, value: unknown, path: string): void
                 ? Array.isArray(value)
                 : typeof value === 'object' && value !== null && !Array.isArray(value);
   if (!ok) throw new Error(`param type mismatch: ${path} expected ${type}, got ${describeValue(value)}`);
+}
+
+/** Render a value for `param options mismatch` messages (JSON, falling back to String). */
+function formatOption(value: unknown): string {
+  try {
+    const rendered = JSON.stringify(value);
+    return typeof rendered === 'string' ? rendered : String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+/**
+ * Enforce a `:param` record's choice constraints against a filled value.
+ * `:options` restricts membership (scalar must equal one entry; every array
+ * item must equal one); `:unique: true` requires distinct array items;
+ * `:count` requires an exact array length. Malformed declarations throw
+ * even when the value is absent; `:unique`/`:count` ignore non-array values.
+ */
+export function checkParamConstraints(record: Record<string, unknown>, value: unknown, path: string): void {
+  const options = record[OPTIONS_KEY];
+  if (options !== undefined && !Array.isArray(options)) {
+    throw new Error(`invalid :options for ${path}: expected array, got ${describeValue(options)}`);
+  }
+  const count = record[COUNT_KEY];
+  if (count !== undefined && (typeof count !== 'number' || !Number.isInteger(count) || count < 0)) {
+    throw new Error(`invalid :count for ${path}: expected non-negative integer, got ${describeValue(count)}`);
+  }
+  if (Array.isArray(options)) {
+    const list = `[${options.map(formatOption).join(', ')}]`;
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => {
+        if (!options.includes(item)) {
+          throw new Error(
+            `param options mismatch: ${path}[${index}] expected one of ${list}, got ${formatOption(item)}`,
+          );
+        }
+      });
+    } else if (!options.includes(value)) {
+      throw new Error(`param options mismatch: ${path} expected one of ${list}, got ${formatOption(value)}`);
+    }
+  }
+  if (Array.isArray(value) && record[UNIQUE_KEY] === true) {
+    const seen = new Set<unknown>();
+    for (const item of value) {
+      if (seen.has(item)) {
+        throw new Error(`param uniqueness mismatch: ${path} has duplicate item ${formatOption(item)}`);
+      }
+      seen.add(item);
+    }
+  }
+  if (typeof count === 'number' && Array.isArray(value) && value.length !== count) {
+    throw new Error(`param count mismatch: ${path} expected ${count} items, got ${value.length}`);
+  }
 }
 
 /**
@@ -416,6 +479,11 @@ export function collectParams(raw: unknown): MissingParam[] {
       assertKnownParamType(type, key);
       entry.type = type;
     }
+    const options = record[OPTIONS_KEY];
+    if (Array.isArray(options)) entry.options = [...options];
+    const count = record[COUNT_KEY];
+    if (typeof count === 'number') entry.count = count;
+    if (record[UNIQUE_KEY] === true) entry.unique = true;
     missing.push(entry);
   });
   return missing;

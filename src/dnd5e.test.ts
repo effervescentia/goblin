@@ -17,6 +17,16 @@ function cli(entry: string, ...extra: string[]): unknown {
   return JSON.parse(out);
 }
 
+/** Run the CLI expecting failure; returns stderr for message assertions. */
+function cliFails(entry: string, ...extra: string[]): string {
+  try {
+    cli(entry, ...extra);
+  } catch (err) {
+    return String((err as { stderr?: unknown }).stderr ?? err);
+  }
+  throw new Error(`expected CLI to fail: ${entry} ${extra.join(' ')}`);
+}
+
 const script = `
   import { GoblinEngine } from './src/engine.ts';
   import { collectParams } from './src/utils.ts';
@@ -167,6 +177,29 @@ describe('5e', () => {
     });
   });
 
+  it('rejects skill choices outside the options, duplicates, or wrong count', () => {
+    const base: [string, ...string[]] = [
+      '5e/main.yaml',
+      '--param',
+      'name=Aria',
+      '--param',
+      'xp=6500',
+      '--param',
+      'features.fighting_style=dueling',
+      '--param',
+      'features.martial_archetype=Champion',
+    ];
+    expect(cliFails(...base, '--param', 'skills.trained=["athletics","sneak"]')).toContain(
+      'param options mismatch: skills.trained[1] expected one of ["acrobatics", "animal_handling", "athletics", "history", "insight", "intimidation", "perception", "survival"], got "sneak"',
+    );
+    expect(cliFails(...base, '--param', 'skills.trained=["athletics","athletics"]')).toContain(
+      'param uniqueness mismatch: skills.trained has duplicate item "athletics"',
+    );
+    expect(cliFails(...base, '--param', 'skills.trained=["athletics"]')).toContain(
+      'param count mismatch: skills.trained expected 2 items, got 1',
+    );
+  });
+
   it('overrides level explicitly without XP', () => {
     const query = cli('5e/main.yaml', '--set', 'level=5', '--param', 'name=Aria') as {
       query: Array<{ path: string }>;
@@ -192,7 +225,7 @@ describe('5e', () => {
       '--param',
       'features.martial_archetype=Champion',
       '--param',
-      'skills.trained=[]',
+      'skills.trained=["athletics","perception"]',
     ) as { data: { level: number; attacks: number } };
     expect(data.data.level).toBe(5);
     expect(data.data.attacks).toBe(2);
