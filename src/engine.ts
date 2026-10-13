@@ -32,6 +32,7 @@ import {
   isValidateKey,
   MATH_LIB,
   type MissingParam,
+  materializeParams,
   parentOf,
   parseDie,
   parseRef,
@@ -207,6 +208,10 @@ export class GoblinEngine {
    * its dotted path so `:param` nodes can look up user-provided values.
    */
   evaluate(raw: unknown, scope: EvalRoots): unknown {
+    if (scope.path === undefined) {
+      if (materializeParams(raw, scope.provided)) this.cache.clear();
+      return this.evaluate(raw, { ...scope, path: [] });
+    }
     if (typeof raw === 'string') {
       return isExpressionString(raw) ? this.evalExpr(raw, scope) : raw;
     }
@@ -273,6 +278,7 @@ export class GoblinEngine {
   evaluateDoc(file: string, provided?: Record<string, unknown>): unknown {
     const raw = this.docs.get(file);
     if (raw === undefined) throw new Error(`document not loaded: ${file}`);
+    if (materializeParams(raw, provided)) this.cache.clear();
     const scope: EvalRoots = {
       doc: raw,
       actor: raw,

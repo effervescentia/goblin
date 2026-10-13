@@ -331,36 +331,61 @@ export function checkParamType(type: string, value: unknown, path: string): void
  * per node needing a user-provided value. Patch instructions (`@.…` keys) are
  * not descended — params belong in actor-defining (or merged) trees.
  */
-export function collectParams(raw: unknown): MissingParam[] {
-  const missing: MissingParam[] = [];
-  const visit = (node: unknown, path: string[]) => {
+function eachParamRecord(raw: unknown, visit: (record: Record<string, unknown>, key: string) => void): void {
+  const visitNode = (node: unknown, path: string[]) => {
     if (Array.isArray(node)) {
-      node.forEach((item, index) => visit(item, [...path, String(index)]));
+      node.forEach((item, index) => visitNode(item, [...path, String(index)]));
       return;
     }
     if (!node || typeof node !== 'object') return;
     const record = node as Record<string, unknown>;
     const marker = record[':param'];
-    if (marker) {
-      const key = typeof marker === 'string' && marker ? marker : path.join('.');
-      const doc = record[':doc'];
-      const entry: MissingParam = typeof doc === 'string' && doc ? { path: key, doc } : { path: key };
-      const type = record[':type'];
-      if (typeof type === 'string' && type) {
-        assertKnownParamType(type, key);
-        entry.type = type;
-      }
-      missing.push(entry);
-    }
+    if (marker) visit(record, typeof marker === 'string' && marker ? marker : path.join('.'));
     for (const [key, value] of Object.entries(record)) {
-      if (key === ':param' || key === ':doc' || key === '!validate' || key === '$if' || key === '$then') continue;
+      if (
+        key === ':param' ||
+        key === ':doc' ||
+        key === ':type' ||
+        key === '!validate' ||
+        key === '$if' ||
+        key === '$then'
+      )
+        continue;
       if (isBareSigil(key) || key === '$' || isPathKey(key)) continue;
       const fnMatch = key.match(FUNCTION_KEY);
-      visit(value, [...path, fnMatch ? fnMatch[1]! : stripPlus(key)]);
+      visitNode(value, [...path, fnMatch ? fnMatch[1]! : stripPlus(key)]);
     }
   };
-  visit(raw, []);
+  visitNode(raw, []);
+}
+
+export function collectParams(raw: unknown): MissingParam[] {
+  const missing: MissingParam[] = [];
+  eachParamRecord(raw, (record, key) => {
+    const doc = record[':doc'];
+    const entry: MissingParam = typeof doc === 'string' && doc ? { path: key, doc } : { path: key };
+    const type = record[':type'];
+    if (typeof type === 'string' && type) {
+      assertKnownParamType(type, key);
+      entry.type = type;
+    }
+    missing.push(entry);
+  });
   return missing;
+}
+
+/**
+ * Fill raw `:param` records with `value` slots (`provided[key] ?? null`) so
+ * `<path>.value` references resolve like any other node. Returns true when
+ * anything was written. Idempotent — rerun whenever `provided` changes.
+ */
+export function materializeParams(raw: unknown, provided: Record<string, unknown> = {}): boolean {
+  let wrote = false;
+  eachParamRecord(raw, (record, key) => {
+    record['value'] = provided[key] ?? null;
+    wrote = true;
+  });
+  return wrote;
 }
 
 /** JSON-friendly serializer: Dice → `"d6"`, functions → `"[fn name()]"`. */

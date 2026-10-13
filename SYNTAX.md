@@ -213,6 +213,8 @@ value plus the attached `:doc`.
   `missingParams` report.
 - `:param` records survive `apply()` (markers copy with other `:meta`), so
   patch files can declare params reported against the merged actor.
+- Filled values are readable as `<path>.value` from other expressions
+  (missing params read `null`), e.g. `@.level.value` in derived stats.
 
 ```yaml
 # Examples (examples/08-parameters.yaml)

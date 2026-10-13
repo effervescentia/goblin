@@ -1,0 +1,82 @@
+# D&D 5e (2014 SRD-ish) character basics.
+#
+# Play it:
+#   goblin 5e/character.yaml --param name=Aria --param level=3
+# Without params the CLI returns { query: [...] } (name, level).
+#
+# Adopt a class in code (the CLI does not apply patches):
+#   engine.apply(actor, 'fighter.yaml', level)   # then resolve() with params
+# Level is provided rather than derived from XP; XP thresholds are left out.
+
+$: Character
+
+# Identity — provided by the player.
+name:
+  :doc: Your hero's name, as sung by bards.
+  :param: true
+  :type: string
+
+# Level 1-20, provided; drives proficiency bonus and class application.
+level:
+  :doc: Character level, 1 through 20.
+  :param: true
+  :type: integer
+
+abilities:
+  strength:
+    base: 10
+    modifier: $.utils.ability_modifier(.base)
+  dexterity:
+    base: 10
+    modifier: $.utils.ability_modifier(.base)
+  constitution:
+    base: 10
+    modifier: $.utils.ability_modifier(.base)
+  intelligence:
+    base: 10
+    modifier: $.utils.ability_modifier(.base)
+  wisdom:
+    base: 10
+    modifier: $.utils.ability_modifier(.base)
+  charisma:
+    base: 10
+    modifier: $.utils.ability_modifier(.base)
+
+utils:
+  'ability_modifier(x)': $.math.floor((x - 10) / 2)
+
+# Proficiency climbs +1 at levels 5, 9, 13, 17.
+proficiency_bonus: 2 + $.math.floor((@.level.value - 1) / 4)
+
+armor_class: '10 + $.abilities.dexterity.modifier'
+speed: 30
+attacks: 1
+
+initiative:
+  base: $.abilities.dexterity.modifier
+  'roll()': 1d20 + .base
+
+hit_die: d8
+hit_points:
+  '!validate':
+    - .value >= 0
+    - .value <= .max
+  value: 8
+  max: 8
+
+features: {}
+actions:
+  unarmed_strike:
+    die: d4
+    type: action
+proficiencies:
+  armor: []
+  weapon: []
+  saving_throws: []
+resources: {}
+
+rest:
+  'short()': |
+    @.hit_points.value = $.math.min(@.hit_points.value + @.hit_die, @.hit_points.max)
+  'long()': |
+    @.hit_points.value = @.hit_points.max
