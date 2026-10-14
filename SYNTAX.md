@@ -92,19 +92,25 @@ holding the definition.
 
 A **record body** defines a node instead of an expression: the call hands back
 a fresh copy, so two uses never share nodes and a `:param` filled in one does
-not show up in the other. Parameters bind into that copy — each expression
-inside it takes the argument as a literal, while metadata is left alone — so
-one definition covers a family of nodes:
+not show up in the other. Parameters bind into that copy, so one definition covers a family of nodes:
+a bare parameter is the argument itself wherever the engine evaluates (a
+string with no ref is plain data, and keeps its bare words), and `{param}`
+anywhere in a string — metadata included — is its text.
 
 ```yaml
 # 5e/abilities.yaml
-'entry(ability)':
-  bought: { :param: true, :type: integer, :options: [8, …, 15] }
+'entry(ability, label)':
+  bought:
+    :label: '{label}'
+    :doc: Point-buy score for {label}, 8 to 15 before improvements.
+    :param: true
+    :type: integer
+    :options: [8, …, 15]
   base: .bought + $lib.list.count(@.improvements, ability)
 
 # 5e/character.yaml
 abilities:
-  strength: "#.abilities.entry('strength')"
+  strength: "#.abilities.entry('strength', 'Strength')"
 ```
 
 A call written as a plain document value expands where it stands, so the

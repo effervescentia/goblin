@@ -137,22 +137,31 @@ export class FunctionNode extends Node<unknown> {
  */
 function bindParams(node: unknown, params: string[], args: unknown[]): unknown {
   if (params.length === 0) return node;
-  const bind = (value: unknown): unknown => {
-    if (Array.isArray(value)) return value.map(bind);
+  const bind = (value: unknown, inMeta: boolean): unknown => {
+    if (Array.isArray(value)) return value.map((item) => bind(item, inMeta));
     if (value !== null && typeof value === 'object') {
       const record = value as Record<string, unknown>;
       for (const [key, entry] of Object.entries(record)) {
-        if (!key.startsWith(META_PREFIX)) record[key] = bind(entry);
+        record[key] = bind(entry, inMeta || key.startsWith(META_PREFIX));
       }
       return record;
     }
-    if (typeof value !== 'string' || !ExpressionNode.matches(value)) return value;
-    return params.reduce((text, param, i) => text.replace(identifier(param), JSON.stringify(args[i] ?? null)), value);
+    if (typeof value !== 'string') return value;
+    // `{param}` is the argument's text, in prose as much as anywhere else.
+    const text = params.reduce((out, param, i) => out.replace(placeholder(param), String(args[i] ?? '')), value);
+    if (inMeta || !ExpressionNode.matches(text)) return text;
+    // In an expression, a bare parameter is the argument itself.
+    return params.reduce((out, param, i) => out.replace(identifier(param), JSON.stringify(args[i] ?? null)), text);
   };
-  return bind(node);
+  return bind(node, false);
 }
 
 /** The parameter as a standalone token — never a `.segment` of a ref. */
 function identifier(param: string): RegExp {
   return new RegExp(`(?<![\\w.$])${param}(?![\\w])`, 'g');
+}
+
+/** `{param}` — the spelling that reaches metadata, where prose lives. */
+function placeholder(param: string): RegExp {
+  return new RegExp(`\\{\\s*${param}\\s*\\}`, 'g');
 }

@@ -59,8 +59,12 @@ describe('examples', () => {
 
   it('04-functions.yaml hands back a record body per call', () => {
     const data = (cli('examples/04-functions.yaml') as { data: Record<string, unknown> }).data;
-    expect(data.off_hand).toEqual({ ':doc': 'A sturdy board of wood and iron.', armor_class: 2 });
-    expect(data.shield).toMatchObject({ ':type': 'function', ':params': [] });
+    expect(data.off_hand).toEqual({
+      ':label': 'Heater Shield',
+      ':doc': 'A sturdy board of wood and iron.',
+      armor_class: 12, // base_armor 10 + the bonus it was called with
+    });
+    expect(data.shield).toMatchObject({ ':type': 'function', ':params': ['name', 'bonus'] });
   });
 
   it('10-choice-params.yaml reports constraints in query, enforces them in data', () => {

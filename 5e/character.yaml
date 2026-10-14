@@ -35,12 +35,12 @@ improvements:
   :doc: Choices made at the levels that grant an improvement.
 
 abilities:
-  strength: "#.abilities.entry('strength')"
-  dexterity: "#.abilities.entry('dexterity')"
-  constitution: "#.abilities.entry('constitution')"
-  intelligence: "#.abilities.entry('intelligence')"
-  wisdom: "#.abilities.entry('wisdom')"
-  charisma: "#.abilities.entry('charisma')"
+  strength: "#.abilities.entry('strength', 'Strength')"
+  dexterity: "#.abilities.entry('dexterity', 'Dexterity')"
+  constitution: "#.abilities.entry('constitution', 'Constitution')"
+  intelligence: "#.abilities.entry('intelligence', 'Intelligence')"
+  wisdom: "#.abilities.entry('wisdom', 'Wisdom')"
+  charisma: "#.abilities.entry('charisma', 'Charisma')"
 
 utils:
   'ability_modifier(x)': $lib.math.floor((x - 10) / 2)

@@ -55,6 +55,7 @@ describe('FunctionNode record bodies', () => {
     const record = {
       'entry(ability)': {
         ':doc': 'ability text is prose, left alone',
+        ':label': '{ability} score',
         bought: { ':param': true },
         base: '.bought + $lib.list.count(@.improvements, ability)',
       },
@@ -68,8 +69,9 @@ describe('FunctionNode record bodies', () => {
     const wisdom = call('wisdom');
     expect(strength.base).toBe('.bought + $lib.list.count(@.improvements, "strength")');
     expect(wisdom.base).toBe('.bought + $lib.list.count(@.improvements, "wisdom")');
-    // Metadata is prose, not an expression: the parameter name stays put.
+    // Prose keeps the bare word; `{param}` is how a parameter reaches it.
     expect(strength[':doc']).toBe('ability text is prose, left alone');
+    expect(strength[':label']).toBe('strength score');
     // Separate copies, so a value filled in one never shows up in the other.
     expect(strength.bought).not.toBe(wisdom.bought);
   });

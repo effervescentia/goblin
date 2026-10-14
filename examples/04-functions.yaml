@@ -15,7 +15,11 @@ floored: $lib.math.floor(2.9) # → 2
 'lucky()': 1d20 # zero-arg callable
 
 # A record body: the call hands back a fresh copy of the node itself.
-'shield()':
+# Parameters bind in — `{name}` reaches metadata, a bare `bonus` is a value
+# wherever the engine evaluates (a string with no ref is plain data).
+base_armor: 10
+'shield(name, bonus)':
+  :label: '{name}'
   :doc: A sturdy board of wood and iron.
-  armor_class: 2
-off_hand: $.shield()
+  armor_class: $.base_armor + bonus
+off_hand: $.shield('Heater Shield', 2)

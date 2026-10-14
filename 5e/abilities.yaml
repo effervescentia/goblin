@@ -19,10 +19,10 @@ point_buy:
     #.abilities.point_cost(@.abilities.charisma.bought)
 
 # One ability: what you bought, plus the improvements that named it.
-'entry(ability)':
+'entry(ability, label)':
   bought:
-    :label: Ability score
-    :doc: Point-buy score, 8 to 15 before improvements.
+    :label: '{label}'
+    :doc: Point-buy score for {label}, 8 to 15 before improvements.
     :param: true
     :type: integer
     :options: [8, 9, 10, 11, 12, 13, 14, 15]

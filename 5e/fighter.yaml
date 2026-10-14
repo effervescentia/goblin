@@ -62,7 +62,7 @@ $: Character
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 4'
-    '@.improvements.level_4': '#.features.ability_improvement()'
+    '@.improvements.level_4': '#.features.ability_improvement(4)'
   +extra_attack:
     :label: Extra Attack
     :doc: Strike twice whenever you take the Attack action.
@@ -76,7 +76,7 @@ $: Character
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 6'
-    '@.improvements.level_6': '#.features.ability_improvement()'
+    '@.improvements.level_6': '#.features.ability_improvement(6)'
   +subclass_feature_1:
     :label: Martial Archetype Feature
     :doc: Martial archetype feature (see your subclass).
@@ -85,7 +85,7 @@ $: Character
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 8'
-    '@.improvements.level_8': '#.features.ability_improvement()'
+    '@.improvements.level_8': '#.features.ability_improvement(8)'
   +indomitable:
     :label: Indomitable
     :doc: Reroll a failed saving throw, once per long rest.
@@ -104,12 +104,12 @@ $: Character
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 12'
-    '@.improvements.level_12': '#.features.ability_improvement()'
+    '@.improvements.level_12': '#.features.ability_improvement(12)'
   +ability_score_improvement_5:
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 14'
-    '@.improvements.level_14': '#.features.ability_improvement()'
+    '@.improvements.level_14': '#.features.ability_improvement(14)'
   +subclass_feature_3:
     :label: Martial Archetype Feature
     :doc: Martial archetype feature (see your subclass).
@@ -118,7 +118,7 @@ $: Character
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 16'
-    '@.improvements.level_16': '#.features.ability_improvement()'
+    '@.improvements.level_16': '#.features.ability_improvement(16)'
   +subclass_feature_4:
     :label: Martial Archetype Feature
     :doc: Martial archetype feature (see your subclass).
@@ -127,4 +127,4 @@ $: Character
     :label: Epic Boon
     :doc: Add +2 to one ability score or +1 to two, or take an epic boon feat.
     $if: '@.level >= 19'
-    '@.improvements.level_19': '#.features.ability_improvement()'
+    '@.improvements.level_19': '#.features.ability_improvement(19)'

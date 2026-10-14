@@ -342,6 +342,16 @@ describe('5e', () => {
     );
   });
 
+  it('names each choice from the definition it was called with', () => {
+    const query = cli('5e/main.yaml', '--param', 'name=Aria', '--param', 'xp=6500') as {
+      query: Array<{ path: string; label?: string }>;
+    };
+    const labels = Object.fromEntries(query.query.map((param) => [param.path, param.label]));
+    expect(labels['abilities.strength.bought']).toBe('Strength');
+    expect(labels['abilities.charisma.bought']).toBe('Charisma');
+    expect(labels['improvements.level_4']).toBe('Ability Score Improvement (level 4)');
+  });
+
   it('rejects a fighting style outside the options', () => {
     expect(
       cliFails(
