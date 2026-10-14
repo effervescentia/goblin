@@ -20,17 +20,17 @@ $: Character
 
 level: $tmpl('level.yaml')
 feature: $tmpl('feature.yaml')
-ability: $tmpl('ability.yaml')
+ability: $tmpl('ability/ability.yaml')
 
 actor: $tmpl('character.yaml')
 adopt:
   # Only the one matching `ability_method` applies.
-  - $tmpl('point_buy.yaml')
-  - $tmpl('standard_array.yaml')
-  - $tmpl('roll.yaml')
-  - $tmpl('roll_assign.yaml')
-  - $tmpl('fighter.yaml')
+  - $tmpl('ability/point_buy.yaml')
+  - $tmpl('ability/standard_array.yaml')
+  - $tmpl('ability/roll.yaml')
+  - $tmpl('ability/roll_assign.yaml')
+  - $tmpl('fighter/fighter.yaml')
   # Subclasses: only the one `features.martial_archetype` names applies.
-  - $tmpl('champion.yaml')
-  - $tmpl('battle_master.yaml')
-  - $tmpl('eldritch_knight.yaml')
+  - $tmpl('fighter/champion.yaml')
+  - $tmpl('fighter/battle_master.yaml')
+  - $tmpl('fighter/eldritch_knight.yaml')

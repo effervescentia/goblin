@@ -1,7 +1,7 @@
 # Ability score helpers, attached as `#.ability` by 5e/main.yaml: the shape of
 # one ability entry (5e/character.yaml) and the per-ability choice each
-# starting method adds (5e/point_buy.yaml, 5e/standard_array.yaml,
-# 5e/roll.yaml, 5e/roll_assign.yaml).
+# starting method adds (5e/ability/point_buy.yaml, 5e/ability/standard_array.yaml,
+# 5e/ability/roll.yaml, 5e/ability/roll_assign.yaml).
 
 # Points bought above 8: each costs one, the sixth and seventh (14, 15) two.
 'point_cost(bought)': bought + (bought >= 6) + (bought >= 7)

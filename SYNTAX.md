@@ -82,7 +82,7 @@ hands back nodes owned by the document that made the call.
 - Function bodies read as the document that defined them, so a helper can
   use its own document's `_` fields wherever it is called from.
 - `!validate` rules run over the evaluated sheet, where `.`-relative refs
-  see `_` fields: `5e/standard_array.yaml` keeps its picks as `_assigned`
+  see `_` fields: `5e/ability/standard_array.yaml` keeps its picks as `_assigned`
   and checks them with `$lib.set.subset([…], ._assigned)`.
 - Output keeps `_` fields; `--strip-metadata` drops them with the metadata.
 
@@ -189,7 +189,7 @@ string with no ref is plain data, and keeps its bare words), and `{param}`
 anywhere in a string — metadata included — is its text.
 
 ```yaml
-# 5e/ability.yaml
+# 5e/ability/ability.yaml
 'entry(ability, label)':
   start:
     :doc: Starting {label} score, filled in by the chosen ability score method.
@@ -208,7 +208,7 @@ anywhere in a string — metadata included — is its text.
 abilities:
   strength: "#.ability.entry('strength', 'Strength')"
 
-# 5e/point_buy.yaml (a patch: the call merges into the entry above)
+# 5e/ability/point_buy.yaml (a patch: the call merges into the entry above)
 '@.abilities':
   $if: "@.ability_method == 'point_buy'"
   strength: "#.ability.bought('Strength')"
@@ -305,7 +305,7 @@ level: '#.level.level_for(@.xp.value)'
 
 A patch value that is a single call — `$tmpl('…')` or a call to a
 record-bodied function — inlines on the way in, so a repeated node can live
-in one place and still be filled: `5e/fighter.yaml` writes
+in one place and still be filled: `5e/fighter/fighter.yaml` writes
 `'@.improvements.level_4': '#.feature.ability_improvement()'`, and the
 `:param` record it hands back lands in the actor tree where the query finds
 it.
@@ -341,10 +341,10 @@ evaluate with `.` bound to the containing node; use `.`-relative refs, since
 
 The CLI runs them on every resolved sheet: failing rules replace the `{ data }`
 envelope with `{ errors }`, listing each failure message, so a caller never
-receives data that breaks its own rules. `5e/point_buy.yaml` budgets point
+receives data that breaks its own rules. `5e/ability/point_buy.yaml` budgets point
 buy this way — six `bought` params on the point-buy ladder, a `spent` total,
 and `.spent <= ._budget` over them (the budget private to that file) — and
-`5e/standard_array.yaml` checks that its six `_assigned` scores use each
+`5e/ability/standard_array.yaml` checks that its six `_assigned` scores use each
 array value once: they cover the array
 (`$lib.set.subset([15, 14, 13, 12, 10, 8], ._assigned)`) and number six
 (`$lib.list.size(._assigned) == 6`).
@@ -385,8 +385,8 @@ syntax:
   null, or `""` the block is unconditional; otherwise `$if` must evaluate
   truthy. A false condition applies nothing — not even `:meta` — so gated-out
   content leaves no residue. Gating on a `:param` turns a choice into
-  alternative patches: 5e/main.yaml adopts `point_buy.yaml`,
-  `standard_array.yaml`, `roll.yaml` and `roll_assign.yaml`, each gated on `@.ability_method`, so only the chosen
+  alternative patches: 5e/main.yaml adopts `ability/point_buy.yaml`,
+  `ability/standard_array.yaml`, `ability/roll.yaml` and `ability/roll_assign.yaml`, each gated on `@.ability_method`, so only the chosen
   method's params reach the next `{ query }`. `$then` is itself a patch whose path keys are
   absolute; a bare `$then` without `$if` applies unconditionally.
   `$if`/`$then` are never serialized.
@@ -449,26 +449,26 @@ patch touched print bare, as before.
   expression made them: `=` as `:set` (the new value), `+=` as `:add` and
   `-=` as `:subtract` (the amount, with any dice rolled once — so the event
   and the field agree). Using Second Wind logs
-  `{ ":source": "fighter.yaml", ":add": 7 }` on `hit_points.current` and
-  `{ ":source": "fighter.yaml", ":subtract": 1 }` on its uses.
+  `{ ":source": "fighter/fighter.yaml", ":add": 7 }` on `hit_points.current` and
+  `{ ":source": "fighter/fighter.yaml", ":subtract": 1 }` on its uses.
 - The first event is the value the field already held when the first patch
   or assignment landed, so a history reads base-then-patch. A field a patch
   creates has no such origin event.
 - Metadata (`:doc`, `:label`, …) and function definitions are never wrapped.
 
 ```ts
-// 5e/main.yaml: actor character.yaml, adopt [fighter.yaml]
+// 5e/main.yaml: actor character.yaml, adopt [fighter/fighter.yaml]
 "attacks": {                                   // a scalar pairs up
   ":value": 2,
   ":events": [
     { ":source": "character.yaml", ":set": 1 },
-    { ":source": "fighter.yaml", ":add": 1 }     // `1 + (@.level >= 11) + …` at level 5
+    { ":source": "fighter/fighter.yaml", ":add": 1 }     // `1 + (@.level >= 11) + …` at level 5
   ]
 },
 "second_wind": {                               // a record takes the key in place
   ":label": "Second Wind",
   ":doc": "Regain hit points in a pinch, once per rest.",
-  ":events": [{ ":source": "fighter.yaml", ":add": "second_wind" }]
+  ":events": [{ ":source": "fighter/fighter.yaml", ":add": "second_wind" }]
 }
 ```
 
@@ -514,8 +514,8 @@ resolves the base, applies each patch in order, then resolves the merged
 result — gate per-level content with `$if` on actor state so choices declared
 by adopted patches surface in the `{ query }` envelope. Provided values fill in
 before each patch applies, so a later patch can gate on a choice an earlier
-one declared: 5e/main.yaml adopts `champion.yaml`, `battle_master.yaml` and
-`eldritch_knight.yaml` after `fighter.yaml`, each gated on
+one declared: 5e/main.yaml adopts `fighter/champion.yaml`, `fighter/battle_master.yaml` and
+`fighter/eldritch_knight.yaml` after `fighter/fighter.yaml`, each gated on
 `@.level >= 3 && @.features.martial_archetype == '…'` (level first, since
 `&&` never reads the choice before the fighter declares it). Template paths are
 root-relative; nested references resolve relative to their own file.
@@ -530,7 +530,7 @@ level: $tmpl('level.yaml')
 
 actor: $tmpl('character.yaml')
 adopt:
-  - $tmpl('fighter.yaml')
+  - $tmpl('fighter/fighter.yaml')
 ```
 
 ## Parameters

@@ -14,7 +14,7 @@ const root = `${import.meta.dir}/..`;
 /** Entry candidates: every document outside tooling folders. */
 async function entries(): Promise<string[]> {
   const found: string[] = [];
-  for await (const file of new Bun.Glob('{5e,examples,wip}/*.yaml').scan(root)) found.push(file);
+  for await (const file of new Bun.Glob('{5e,examples,wip}/**/*.yaml').scan(root)) found.push(file);
   return found.sort();
 }
 

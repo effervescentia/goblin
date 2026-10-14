@@ -6,7 +6,7 @@
 # its own choices (a fighter from level 4 asks for `improvements`).
 #
 # Adopt a class in code (the CLI does not apply patches): evaluate the actor
-# to read its derived level, then engine.apply(actor, 'fighter.yaml', level).
+# to read its derived level, then engine.apply(actor, 'fighter/fighter.yaml', level).
 # XP thresholds follow the standard progression (L2 at 300 … L20 at 355000).
 
 $: Character
@@ -26,8 +26,8 @@ xp:
 
 level: '#.level.level_for(@.xp)'
 
-# How the six scores start; the matching patch (5e/point_buy.yaml,
-# 5e/standard_array.yaml, 5e/roll.yaml or 5e/roll_assign.yaml) adds that
+# How the six scores start; the matching patch (5e/ability/point_buy.yaml,
+# 5e/ability/standard_array.yaml, 5e/ability/roll.yaml or 5e/ability/roll_assign.yaml) adds that
 # method's choice to each ability.
 ability_method:
   :label: Ability Score Method

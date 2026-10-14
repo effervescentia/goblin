@@ -1,5 +1,5 @@
 # D&D 5e Fighter. Applied onto a 5e/character.yaml actor:
-#   engine.apply(actor, 'fighter.yaml')
+#   engine.apply(actor, 'fighter/fighter.yaml')
 
 $: Character
 
