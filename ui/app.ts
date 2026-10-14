@@ -20,6 +20,8 @@ interface Resolution {
 const state = {
   entry: '',
   params: {} as Record<string, unknown>,
+  /** Values forced by path (the CLI's `--set`): they beat params, patches and expressions. */
+  overrides: {} as Record<string, unknown>,
   result: undefined as Resolution | undefined,
   selected: '',
   collapsed: new Set<string>(),
@@ -179,39 +181,56 @@ function renderViewer(): HTMLElement | null {
   );
 }
 
-// -- choices, kept per entry for the browser session ---------------------------
+// -- choices and overrides, kept per entry for the browser session ------------
 
-const choicesKey = (entry: string) => `goblin:choices:${entry}`;
+type Kept = 'choices' | 'overrides';
+const keptKey = (kind: Kept, entry: string) => `goblin:${kind}:${entry}`;
 
-/** Storage can be blocked (private windows, previews): choices then last only
+/** Storage can be blocked (private windows, previews): values then last only
  * as long as the page. */
-function loadChoices(entry: string): Record<string, unknown> {
+function load(kind: Kept, entry: string): Record<string, unknown> {
   try {
-    const stored = sessionStorage.getItem(choicesKey(entry));
+    const stored = sessionStorage.getItem(keptKey(kind, entry));
     return stored ? (JSON.parse(stored) as Record<string, unknown>) : {};
   } catch {
     return {};
   }
 }
 
-function saveChoices(): void {
+function save(kind: Kept, values: Record<string, unknown>): void {
   try {
-    if (Object.keys(state.params).length === 0) sessionStorage.removeItem(choicesKey(state.entry));
-    else sessionStorage.setItem(choicesKey(state.entry), JSON.stringify(state.params));
+    if (Object.keys(values).length === 0) sessionStorage.removeItem(keptKey(kind, state.entry));
+    else sessionStorage.setItem(keptKey(kind, state.entry), JSON.stringify(values));
   } catch {
     /* not persisted — the page still works */
+  }
+}
+
+function loadEntry(entry: string): void {
+  state.entry = entry;
+  state.params = load('choices', entry);
+  state.overrides = load('overrides', entry);
+}
+
+/** An override's text as `--set` reads it: JSON, else a plain string. */
+function parseOverride(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
   }
 }
 
 // -- resolution ---------------------------------------------------------------
 
 async function resolve(): Promise<void> {
-  saveChoices();
+  save('choices', state.params);
+  save('overrides', state.overrides);
   $('status').textContent = 'Resolving…';
   const response = await fetch('/api/resolve', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ entry: state.entry, params: state.params }),
+    body: JSON.stringify({ entry: state.entry, params: state.params, overrides: state.overrides }),
   });
   state.result = (await response.json()) as Resolution;
   $('status').textContent = '';
@@ -239,30 +258,76 @@ function render(): void {
 }
 
 function renderChoices(): void {
-  const entries = Object.entries(state.params);
-  $('choices').hidden = entries.length === 0;
-  $('choice-list').replaceChildren(
-    ...entries.map(([path, value]) =>
-      h(
-        'span',
-        { className: 'chip' },
-        h('code', {}, path),
-        ' = ',
-        preview(value, 32),
+  for (const [section, list, values] of [
+    ['choices', 'choice-list', state.params],
+    ['overrides', 'override-list', state.overrides],
+  ] as const) {
+    const entries = Object.entries(values);
+    $(section).hidden = entries.length === 0;
+    $(list).replaceChildren(
+      ...entries.map(([path, value]) =>
         h(
-          'button',
-          {
-            type: 'button',
-            className: 'chip-x',
-            title: `Forget ${path}`,
-            onclick: () => {
-              delete state.params[path];
-              void resolve();
+          'span',
+          { className: `chip${section === 'overrides' ? ' forced' : ''}` },
+          h('code', {}, path),
+          ' = ',
+          preview(value, 32),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'chip-x',
+              title: `Forget ${path}`,
+              onclick: () => {
+                delete values[path];
+                void resolve();
+              },
             },
-          },
-          '×',
+            '×',
+          ),
         ),
       ),
+    );
+  }
+}
+
+/** Force this field's value, as `--set` does; it wins over everything else. */
+function renderOverride(node: InspectNode): HTMLElement {
+  const forced = node.path in state.overrides;
+  const input = h('textarea', {
+    className: 'override-input',
+    rows: 2,
+    spellcheck: false,
+    value: JSON.stringify(forced ? state.overrides[node.path] : (node.value ?? null)),
+  });
+  const apply = (event: SubmitEvent) => {
+    event.preventDefault();
+    state.overrides[node.path] = parseOverride(input.value.trim());
+    void resolve();
+  };
+  return h(
+    'form',
+    { className: 'override', onsubmit: apply },
+    input,
+    h(
+      'div',
+      { className: 'override-actions' },
+      h('button', { type: 'submit' }, forced ? 'Update override' : 'Override'),
+      forced
+        ? h(
+            'button',
+            {
+              type: 'button',
+              className: 'ghost',
+              onclick: () => {
+                delete state.overrides[node.path];
+                void resolve();
+              },
+            },
+            'Remove',
+          )
+        : null,
+      h('span', { className: 'note' }, 'JSON, else text. Beats choices, patches and expressions.'),
     ),
   );
 }
@@ -449,6 +514,7 @@ function renderTree(nodes: InspectNode[], select: (path: string) => void): HTMLE
           filter ? node.path || '(actor)' : node.key || '(actor)',
         ),
         h('span', { className: `kind ${node.kind}` }, node.kind),
+        node.path in state.overrides ? h('span', { className: 'kind forced' }, 'override') : null,
         node.kind !== 'record' && node.kind !== 'list' && node.kind !== 'function'
           ? h('span', { className: 'val' }, preview(node.value, 28))
           : null,
@@ -539,6 +605,7 @@ function renderDetail(
       node.label ?? (node.key || 'Actor'),
       ' ',
       h('span', { className: `kind ${node.kind}` }, node.kind),
+      node.path in state.overrides ? h('span', { className: 'kind forced' }, 'override') : null,
       node.private ? h('span', { className: 'kind private' }, 'private') : null,
     ),
     node.doc ? h('p', { className: 'doc' }, node.doc) : null,
@@ -555,6 +622,7 @@ function renderDetail(
         )
       : section('Value', h('pre', { className: 'value' }, JSON.stringify(node.value, null, 2) ?? 'undefined')),
     node.expression ? section('Expression', h('pre', { className: 'expr' }, node.expression)) : null,
+    node.kind !== 'function' && node.path !== '' ? section('Override', renderOverride(node)) : null,
     node.param ? section('Choice', h('pre', { className: 'value' }, JSON.stringify(node.param, null, 2))) : null,
     node.rules
       ? section(
@@ -656,10 +724,9 @@ async function boot(): Promise<void> {
   picker.replaceChildren(...entries.map((entry) => h('option', { value: entry }, entry)));
   state.entry = entries.includes('5e/main.yaml') ? '5e/main.yaml' : (entries[0] ?? '');
   picker.value = state.entry;
-  state.params = loadChoices(state.entry);
+  loadEntry(state.entry);
   picker.addEventListener('change', () => {
-    state.entry = picker.value;
-    state.params = loadChoices(state.entry);
+    loadEntry(picker.value);
     state.selected = '';
     state.collapsed.clear();
     void resolve();

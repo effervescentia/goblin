@@ -316,6 +316,11 @@ main {
   color: var(--bad);
 }
 
+.kind.forced {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
 .count {
   margin-left: auto;
   font-size: 11px;
@@ -564,4 +569,34 @@ button.source.located:hover {
 .viewer .code li.hit {
   background: var(--accent-soft);
   box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* Overrides force a value: marked apart from ordinary choices. */
+.chip.forced {
+  border-color: var(--bad);
+}
+
+.override {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.override-input {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  resize: vertical;
+  width: 100%;
+}
+
+.override-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
