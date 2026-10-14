@@ -333,6 +333,44 @@ describe('apply', () => {
     );
   });
 
+  it('inlines a call to a record-bodied definition, params and all', () => {
+    const engine = new GoblinEngine('.');
+    engine.appRoot.features = { 'choice()': { ':label': 'Pick', ':param': true, ':type': 'string' } };
+    engine.docs.set('grant.yaml', {
+      '@.choices.first': '#.features.choice()',
+      '@.choices.second': '#.features.choice()',
+      // A call that yields a number stays an expression, lazy as written.
+      '@.armor_class': '$lib.math.floor(12.9)',
+    });
+    const actor = engine.apply({ choices: {} }, 'grant.yaml') as Record<string, unknown>;
+    expect(RecordNode.collectParams(actor)).toEqual([
+      { path: 'choices.first', label: 'Pick', type: 'string' },
+      { path: 'choices.second', label: 'Pick', type: 'string' },
+    ]);
+
+    engine.docs.set('actor.yaml', actor);
+    const resolved = engine.resolve('actor.yaml', { 'choices.first': 'a', 'choices.second': 'b' }) as {
+      data: { choices: Record<string, Record<string, unknown>> };
+    };
+    // Each call got its own copy — one filled value does not leak into the other.
+    expect(resolved.data.choices.first?.[':value']).toBe('a');
+    expect(resolved.data.choices.second?.[':value']).toBe('b');
+    expect((actor as { armor_class: unknown }).armor_class).toBe('$lib.math.floor(12.9)');
+  });
+
+  it('inlines a `$tmpl(…)` patch value, params and all', () => {
+    const engine = new GoblinEngine('.');
+    engine.docs.set('choice.yaml', { ':label': 'Pick', ':param': true, ':type': 'string' });
+    engine.docs.set('grant.yaml', { '@.choices.first': "$tmpl('choice.yaml')" });
+    const actor = engine.apply({ choices: {} }, 'grant.yaml');
+    // The record lands in the tree, so the param is asked for by its path.
+    expect(RecordNode.collectParams(actor)).toEqual([{ path: 'choices.first', label: 'Pick', type: 'string' }]);
+    engine.docs.set('actor.yaml', actor);
+    expect(engine.resolve('actor.yaml', { 'choices.first': 'athletics' })).toEqual({
+      data: { choices: { first: { ':label': 'Pick', ':param': true, ':type': 'string', ':value': 'athletics' } } },
+    });
+  });
+
   it('rejects a list that mixes `+item` additions with plain items', () => {
     const engine = new GoblinEngine('.');
     const actor = () => ({ proficiencies: { armor: [] as string[] } });

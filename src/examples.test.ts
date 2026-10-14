@@ -57,6 +57,12 @@ describe('examples', () => {
     });
   });
 
+  it('04-functions.yaml hands back a record body per call', () => {
+    const data = (cli('examples/04-functions.yaml') as { data: Record<string, unknown> }).data;
+    expect(data.off_hand).toEqual({ ':doc': 'A sturdy board of wood and iron.', armor_class: 2 });
+    expect(data.shield).toMatchObject({ ':type': 'function', ':params': [] });
+  });
+
   it('10-choice-params.yaml reports constraints in query, enforces them in data', () => {
     const query = cli('examples/10-choice-params.yaml') as { query: Array<Record<string, unknown>> };
     expect(query.query).toEqual([

@@ -44,6 +44,9 @@ describe('FunctionNode', () => {
     expect(fn?.params).toEqual(['x']);
     expect(FunctionNode.match('plain', 'x', record)).toBeNull();
     expect(FunctionNode.match('roll()', 42, record)).toBeNull();
+    // A record body is a definition; a list is neither.
+    expect(FunctionNode.match('shield()', { armor_class: 2 }, record)).toBeInstanceOf(FunctionNode);
+    expect(FunctionNode.match('shield()', [1, 2], record)).toBeNull();
   });
 });
 

@@ -42,6 +42,9 @@ export const DOTLESS_SIGIL = /([#$@])(?=[A-Za-z_])/g;
 /** Quoted string literals, protected from ref/dice rewriting. */
 export const STRING_LITERAL = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g;
 
+/** Whole-string call to a definition: `$tmpl('x.yaml')`, `#.features.y()`. */
+export const CALL_EXPR = /^[#$@.][\w.]*\([^()]*\)$/;
+
 /** Whole-string template call: `$tmpl('file.yaml')`. */
 export const TEMPLATE_CALL = /^\$tmpl\(\s*['"]([^'"]+)['"]\s*\)$/;
 

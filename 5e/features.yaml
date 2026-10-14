@@ -1,0 +1,10 @@
+# Feature definitions shared across classes, attached as `#.features` by
+# 5e/main.yaml and called from the feature that grants one.
+
+'ability_improvement()':
+  :label: Ability Score Improvement
+  :doc: 'Pick two: one ability twice for +2, or two abilities for +1 each.'
+  :param: true
+  :type: array
+  :options: [strength, dexterity, constitution, intelligence, wisdom, charisma]
+  :count: 2

@@ -14,6 +14,7 @@
 $: Character
 
 levels: $tmpl('levels.yaml')
+features: $tmpl('features.yaml')
 
 actor: $tmpl('character.yaml')
 adopt:

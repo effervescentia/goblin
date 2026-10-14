@@ -10,6 +10,7 @@ import {
 } from '../constants';
 import type { GoblinEngine } from '../engine';
 import type { EvalRoots } from '../utils';
+import { deepClone } from '../utils';
 import { Node } from './node';
 
 /** Metadata attached to engine-created function closures for printing. */
@@ -23,16 +24,17 @@ export interface GoblinFunctionMeta {
 }
 
 /**
- * A `name()` / `name(params)` key with a string body. Evaluates to a tagged
- * callable; `.` inside the body is the record holding the definition.
+ * A `name()` / `name(params)` key. A string body is an expression evaluated
+ * per call (`.` is the record holding it); a record body is a definition the
+ * call hands back a fresh copy of.
  */
-export class FunctionNode extends Node<string> {
+export class FunctionNode extends Node<unknown> {
   readonly name: string;
   readonly params: string[];
 
   constructor(
     key: string,
-    readonly body: string,
+    readonly body: unknown,
     readonly record: Record<string, unknown>,
   ) {
     super(body);
@@ -50,8 +52,14 @@ export class FunctionNode extends Node<string> {
   }
 
   static match(key: string, value: unknown, record: Record<string, unknown>): FunctionNode | null {
-    if (typeof value !== 'string' || !FunctionNode.isKey(key)) return null;
+    const bodied = typeof value === 'string' || FunctionNode.isRecordBody(value);
+    if (!bodied || !FunctionNode.isKey(key)) return null;
     return new FunctionNode(key, value, record);
+  }
+
+  /** A definition handed back whole, rather than an expression to evaluate. */
+  static isRecordBody(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
   }
 
   /** Sigil refs a body resolves, in order, outside string literals. */
@@ -93,16 +101,29 @@ export class FunctionNode extends Node<string> {
   }
 
   override evaluate(engine: GoblinEngine, scope: EvalRoots): unknown {
+    const body = this.body;
+    if (FunctionNode.isRecordBody(body)) {
+      // A fresh copy per call: two uses of one definition must not share
+      // nodes, or a `:param` filled in one would show up in the other.
+      const fn = () => deepClone(body);
+      return FunctionNode.tag(fn, {
+        name: this.name,
+        params: this.params,
+        source: JSON.stringify(body),
+        deps: [],
+      });
+    }
+    const text = String(body);
     const fnPath = [...(scope.path ?? []), this.name];
     const fn = (...args: unknown[]) => {
       const callParams = Object.fromEntries(this.params.map((p, i) => [p, args[i]]));
-      return engine.evalExpr(this.body, { ...scope, current: this.record, params: callParams, path: fnPath });
+      return engine.evalExpr(text, { ...scope, current: this.record, params: callParams, path: fnPath });
     };
     return FunctionNode.tag(fn, {
       name: this.name,
       params: this.params,
-      source: this.body,
-      deps: FunctionNode.detectDeps(this.body),
+      source: text,
+      deps: FunctionNode.detectDeps(text),
     });
   }
 }

@@ -18,6 +18,7 @@ import {
   ACTOR,
   ADD_KEY,
   APP,
+  CALL_EXPR,
   CURRENT,
   DIE_LITERAL,
   DOCUMENT,
@@ -173,6 +174,9 @@ export class GoblinEngine {
     // so `#.utils.…` works for self-contained docs like main.yaml.
     if (data && typeof data === 'object' && !Array.isArray(data)) {
       for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
+        // A document that is itself one node (a `$tmpl`'d `:param` record)
+        // would otherwise bind its metadata as app-root tables.
+        if (isMetaKey(k) || isValidateKey(k) || isBareSigil(k)) continue;
         if (!(k in this.appRoot)) this.appRoot[k] = deepClone(v);
       }
     }
@@ -555,6 +559,22 @@ export class GoblinEngine {
     return { owner: node, key };
   }
 
+  /** A patch value that is one call to a definition (`$tmpl('…')`,
+   * `#.features.x()`) inlines here, so `:param` nodes inside it land in the
+   * actor tree instead of staying an expression. Calls that yield anything
+   * but a record stay as written, and so stay lazy. */
+  private inlinePatchValue(value: unknown, scope: EvalRoots): unknown {
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    if (!CALL_EXPR.test(trimmed)) return value;
+    try {
+      const inlined = this.evalExpr(trimmed, scope);
+      return FunctionNode.isRecordBody(inlined) ? inlined : value;
+    } catch {
+      return value; // not resolvable yet — leave the expression in place
+    }
+  }
+
   /**
    * A `$if` wrapper gates its whole node: false applies nothing (not even
    * `:meta`), so gated-out content leaves no residue. Missing or empty
@@ -584,7 +604,8 @@ export class GoblinEngine {
     }
   }
 
-  private applyAtPath(pathKey: string, value: unknown, scope: EvalRoots): void {
+  private applyAtPath(pathKey: string, rawValue: unknown, scope: EvalRoots): void {
+    const value = this.inlinePatchValue(rawValue, scope);
     // A path key written `+@.attacks` adds to what is there.
     const adds = pathKey.startsWith('+');
     const { root, path } = parseRef(stripPlus(pathKey));
@@ -664,7 +685,8 @@ export class GoblinEngine {
     }
   }
 
-  private mergeEntry(target: Record<string, unknown>, key: string, value: unknown, scope: EvalRoots): void {
+  private mergeEntry(target: Record<string, unknown>, key: string, rawValue: unknown, scope: EvalRoots): void {
+    const value = this.inlinePatchValue(rawValue, scope);
     if (isMetaKey(key) || isValidateKey(key)) {
       target[key] = deepClone(value);
       return;

@@ -90,6 +90,11 @@ callable. Lookup matches `name` to the `name(params)` entry; calling evaluates
 the body per call with the arguments bound. Inside a body, `.` is the record
 holding the definition.
 
+A **record body** defines a node instead of an expression: the call hands back
+a fresh copy, so two uses never share nodes and a `:param` filled in one does
+not show up in the other. `5e/features.yaml` keeps the ability score
+improvement this way, and each granting feature calls it.
+
 The stdlib lives under `$lib`, implicitly loaded by the engine, merged with
 `src/lib/lib.yaml` when present. A document defining its own top-level `lib`
 table takes precedence for `$lib.…` refs. Native namespaces:
@@ -160,6 +165,14 @@ which keeps the calling document free of the table:
 ```yaml
 level: '#.levels.level_for(@.xp.value)'
 ```
+
+A patch value that is a single call — `$tmpl('…')` or a call to a
+record-bodied function — inlines on the way in, so a repeated node can live
+in one place and still be filled: `5e/fighter.yaml` writes
+`'@.improvements.level_4': '#.features.ability_improvement()'`, and the
+`:param` record it hands back lands in the actor tree where the query finds
+it. A call that yields anything but a record stays as written, and stays
+lazy.
 
 ```yaml
 # Examples (examples/05-templates.yaml, examples/05-greeting.yaml)
