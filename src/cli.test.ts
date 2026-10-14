@@ -271,6 +271,8 @@ describe('cli', () => {
       '5e/main.yaml',
       '--compact',
       '--param',
+      'ability_method=point_buy',
+      '--param',
       'abilities.strength.bought=7',
       '--param',
       'abilities.dexterity.bought=6',

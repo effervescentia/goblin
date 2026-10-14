@@ -1,25 +1,19 @@
-# Point buy and the shape of one ability entry, attached as `#.ability` by
-# 5e/main.yaml and used by 5e/character.yaml.
+# Ability score helpers, attached as `#.ability` by 5e/main.yaml: the shape of
+# one ability entry (5e/character.yaml) and the per-ability choice each
+# starting method adds (5e/point_buy.yaml, 5e/standard_array.yaml).
 
 # Points bought above 8: each costs one, the sixth and seventh (14, 15) two.
 'point_cost(bought)': bought + (bought >= 6) + (bought >= 7)
 
-point_buy:
-  :label: Point Buy
-  :doc: 27 points buy your six scores; each starts at 8 and tops out at 15.
-  '!validate':
-    - .spent <= .budget
-  budget: 27
-  spent: >-
-    #.ability.point_cost(@.abilities.strength.bought) +
-    #.ability.point_cost(@.abilities.dexterity.bought) +
-    #.ability.point_cost(@.abilities.constitution.bought) +
-    #.ability.point_cost(@.abilities.intelligence.bought) +
-    #.ability.point_cost(@.abilities.wisdom.bought) +
-    #.ability.point_cost(@.abilities.charisma.bought)
-
-# One ability: 8, plus what you bought, plus the improvements that named it.
+# One ability: its starting score, plus the improvements that named it.
 'entry(ability, label)':
+  start:
+    :doc: Starting {label} score, filled in by the chosen ability score method.
+  base: .start + $lib.list.count(@.improvements, ability)
+  modifier: $.utils.ability_modifier(.base)
+
+# Point buy: 8, plus the points bought for it.
+'bought(label)':
   bought:
     :label: '{label}'
     :doc: Points bought for {label} above its base 8, 0 to 7 (a score of 8 to 15).
@@ -27,5 +21,14 @@ point_buy:
     :type: integer
     :min: 0
     :max: 7
-  base: 8 + .bought + $lib.list.count(@.improvements, ability)
-  modifier: $.utils.ability_modifier(.base)
+  start: 8 + .bought
+
+# Standard array: one of the six preset scores, each used once.
+'assigned(label)':
+  assigned:
+    :label: '{label}'
+    :doc: The standard array score you assign to {label}.
+    :param: true
+    :type: integer
+    :options: [15, 14, 13, 12, 10, 8]
+  start: .assigned

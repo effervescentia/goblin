@@ -100,6 +100,10 @@ anywhere in a string — metadata included — is its text.
 ```yaml
 # 5e/ability.yaml
 'entry(ability, label)':
+  start:
+    :doc: Starting {label} score, filled in by the chosen ability score method.
+  base: .start + $lib.list.count(@.improvements, ability)
+'bought(label)':
   bought:
     :label: '{label}'
     :doc: Points bought for {label} above its base 8, 0 to 7 (a score of 8 to 15).
@@ -107,11 +111,16 @@ anywhere in a string — metadata included — is its text.
     :type: integer
     :min: 0
     :max: 7
-  base: 8 + .bought + $lib.list.count(@.improvements, ability)
+  start: 8 + .bought
 
 # 5e/character.yaml
 abilities:
   strength: "#.ability.entry('strength', 'Strength')"
+
+# 5e/point_buy.yaml (a patch: the call merges into the entry above)
+'@.abilities':
+  $if: "@.ability_method == 'point_buy'"
+  strength: "#.ability.bought('Strength')"
 ```
 
 A call written as a plain document value expands where it stands, so the
@@ -229,9 +238,11 @@ evaluate with `.` bound to the containing node; use `.`-relative refs, since
 
 The CLI runs them on every resolved sheet: failing rules replace the `{ data }`
 envelope with `{ errors }`, listing each failure message, so a caller never
-receives data that breaks its own rules. `5e/character.yaml` budgets point
+receives data that breaks its own rules. `5e/point_buy.yaml` budgets point
 buy this way — six `bought` params on the point-buy ladder, a `spent` total,
-and `.spent <= .budget` over them.
+and `.spent <= .budget` over them — and `5e/standard_array.yaml` checks that
+its six `assigned` scores use each array value once
+(`$lib.list.count(.assigned, 15) == 1`, …).
 
 ```yaml
 # Examples (examples/06-metadata-validation.yaml)
@@ -268,7 +279,10 @@ syntax:
 - **`$if` / `$then` conditions** gate a whole node: when `$if` is absent,
   null, or `""` the block is unconditional; otherwise `$if` must evaluate
   truthy. A false condition applies nothing — not even `:meta` — so gated-out
-  content leaves no residue. `$then` is itself a patch whose path keys are
+  content leaves no residue. Gating on a `:param` turns a choice into
+  alternative patches: 5e/main.yaml adopts both `point_buy.yaml` and
+  `standard_array.yaml`, each gated on `@.ability_method`, so only the chosen
+  method's params reach the next `{ query }`. `$then` is itself a patch whose path keys are
   absolute; a bare `$then` without `$if` applies unconditionally.
   `$if`/`$then` are never serialized.
 - **Type tags**: a bare `$` key (e.g. `$: Player`) declares the expected actor

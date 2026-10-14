@@ -5,11 +5,13 @@
 # Template paths resolve relative to their own file.
 #
 # Play: goblin 5e/main.yaml --param name=Aria --param xp=6500 \
+#         --param ability_method=point_buy \
 #         --param abilities.strength.bought=7 … (points over 8, 27 total) \
 #         --param features.fighting_style=dueling \
 #         --param features.martial_archetype=Champion \
 #         --param skills.trained='["athletics", "perception"]' \
 #         --param improvements.level_4='["strength", "strength"]'
+#   (or ability_method=standard_array with abilities.<name>.assigned=15 …)
 # Missing choices come back as { query }; a full sheet as { data }.
 
 $: Character
@@ -20,4 +22,7 @@ ability: $tmpl('ability.yaml')
 
 actor: $tmpl('character.yaml')
 adopt:
+  # Only the one matching `ability_method` applies.
+  - $tmpl('point_buy.yaml')
+  - $tmpl('standard_array.yaml')
   - $tmpl('fighter.yaml')

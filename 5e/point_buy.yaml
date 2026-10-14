@@ -1,0 +1,28 @@
+# Point buy, applied when the character picks `ability_method: point_buy`:
+# 27 points raise six scores from 8, each to at most 15.
+
+$: Character
+
+'@.point_buy':
+  $if: "@.ability_method == 'point_buy'"
+  :label: Point Buy
+  :doc: 27 points buy your six scores; each starts at 8 and tops out at 15.
+  '!validate':
+    - .spent <= .budget
+  budget: 27
+  spent: >-
+    #.ability.point_cost(@.abilities.strength.bought) +
+    #.ability.point_cost(@.abilities.dexterity.bought) +
+    #.ability.point_cost(@.abilities.constitution.bought) +
+    #.ability.point_cost(@.abilities.intelligence.bought) +
+    #.ability.point_cost(@.abilities.wisdom.bought) +
+    #.ability.point_cost(@.abilities.charisma.bought)
+
+'@.abilities':
+  $if: "@.ability_method == 'point_buy'"
+  strength: "#.ability.bought('Strength')"
+  dexterity: "#.ability.bought('Dexterity')"
+  constitution: "#.ability.bought('Constitution')"
+  intelligence: "#.ability.bought('Intelligence')"
+  wisdom: "#.ability.bought('Wisdom')"
+  charisma: "#.ability.bought('Charisma')"

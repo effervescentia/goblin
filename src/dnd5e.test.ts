@@ -40,6 +40,7 @@ const script = `
   const baseMissing = e.missingParams('character.yaml').map((m) => m.path).sort();
 
   const BOUGHT = {
+    ability_method: 'point_buy',
     'abilities.strength.bought': 7,
     'abilities.dexterity.bought': 6,
     'abilities.constitution.bought': 5,
@@ -67,12 +68,14 @@ const script = `
     const a = fresh();
     const provided = baseProvided(xp);
     const lv = e.evaluate(a, scopeOf(a, provided)).level;
+    e.apply(a, 'point_buy.yaml');
     e.apply(a, 'fighter.yaml');
     return { lv, v: e.evaluate(a, scopeOf(a, provided)) };
   };
 
   const a3 = fresh();
-  e.evaluate(a3, scopeOf(a3, { name: 'X', xp: 900 }));
+  e.evaluate(a3, scopeOf(a3, { name: 'X', xp: 900, ability_method: 'point_buy' }));
+  e.apply(a3, 'point_buy.yaml');
   e.apply(a3, 'fighter.yaml');
   const mergedMissing = RecordNode.collectParams(a3).map((m) => m.path).sort();
 
@@ -95,6 +98,7 @@ const script = `
   const a5 = fresh();
   const provided5 = { ...baseProvided(6500), name: 'Bram' };
   e.evaluate(a5, scopeOf(a5, provided5));
+  e.apply(a5, 'point_buy.yaml');
   e.apply(a5, 'fighter.yaml');
   e.docs.set('fighter5.yaml', a5);
   const resolved = e.resolve('fighter5.yaml', provided5);
@@ -123,6 +127,8 @@ const script = `
 // The classic 15/14/13/10/10/8 spread: 25 of the 27 points.
 const BOUGHT = [
   '--param',
+  'ability_method=point_buy',
+  '--param',
   'abilities.strength.bought=7',
   '--param',
   'abilities.dexterity.bought=6',
@@ -140,15 +146,8 @@ describe('5e', () => {
   it('levels a fighter from 1 to 20 on XP', () => {
     const out = execFileSync('bun', ['-e', script], { cwd: root, encoding: 'utf8' });
     expect(JSON.parse(out)).toEqual({
-      baseMissing: [
-        'abilities.charisma.bought',
-        'abilities.constitution.bought',
-        'abilities.dexterity.bought',
-        'abilities.intelligence.bought',
-        'abilities.strength.bought',
-        'abilities.wisdom.bought',
-        'name',
-      ],
+      // Each ability's choice waits on the method that adds it.
+      baseMissing: ['ability_method', 'name'],
       mergedMissing: [
         'abilities.charisma.bought',
         'abilities.constitution.bought',
@@ -156,6 +155,7 @@ describe('5e', () => {
         'abilities.intelligence.bought',
         'abilities.strength.bought',
         'abilities.wisdom.bought',
+        'ability_method',
         'features.fighting_style',
         'features.martial_archetype',
         'name',
@@ -194,14 +194,10 @@ describe('5e', () => {
   });
 
   it('serves the composed fighter through the root entry', () => {
+    // The method comes first: no ability asks for a score until it is chosen.
     const query = cli('5e/main.yaml') as { query: Array<{ path: string }> };
     expect(query.query.map((param) => param.path).sort()).toEqual([
-      'abilities.charisma.bought',
-      'abilities.constitution.bought',
-      'abilities.dexterity.bought',
-      'abilities.intelligence.bought',
-      'abilities.strength.bought',
-      'abilities.wisdom.bought',
+      'ability_method',
       'features.fighting_style',
       'name',
       'skills.trained',
@@ -283,13 +279,13 @@ describe('5e', () => {
 
     // Bought 15/14/13: the improvement stacks on the point-buy score.
     const doubled = sheet('["strength","strength"]').data;
-    expect(doubled.abilities.strength).toEqual({ bought: 7, base: 17, modifier: 3 });
-    expect(doubled.abilities.dexterity).toEqual({ bought: 6, base: 14, modifier: 2 });
+    expect(doubled.abilities.strength).toEqual({ bought: 7, start: 15, base: 17, modifier: 3 });
+    expect(doubled.abilities.dexterity).toEqual({ bought: 6, start: 14, base: 14, modifier: 2 });
 
     const split = sheet('["dexterity","constitution"]').data;
-    expect(split.abilities.dexterity).toEqual({ bought: 6, base: 15, modifier: 2 });
-    expect(split.abilities.constitution).toEqual({ bought: 5, base: 14, modifier: 2 });
-    expect(split.abilities.strength).toEqual({ bought: 7, base: 15, modifier: 2 });
+    expect(split.abilities.dexterity).toEqual({ bought: 6, start: 14, base: 15, modifier: 2 });
+    expect(split.abilities.constitution).toEqual({ bought: 5, start: 13, base: 14, modifier: 2 });
+    expect(split.abilities.strength).toEqual({ bought: 7, start: 15, base: 15, modifier: 2 });
 
     // A pick outside the six abilities is refused.
     expect(cliFails(...args('["luck","luck"]'))).toContain(
@@ -302,11 +298,14 @@ describe('5e', () => {
   });
 
   it('spends point buy within its budget, and refuses more', () => {
-    const spread = (...scores: number[]): string[] =>
-      ['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma'].flatMap((ability, i) => [
+    const spread = (...scores: number[]): string[] => [
+      '--param',
+      'ability_method=point_buy',
+      ...['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma'].flatMap((ability, i) => [
         '--param',
         `abilities.${ability}.bought=${(scores[i] ?? 8) - 8}`,
-      ]);
+      ]),
+    ];
     const rest = [
       '--param',
       'name=Aria',
@@ -340,8 +339,67 @@ describe('5e', () => {
     );
   });
 
+  it('assigns the standard array instead of point buy, each score once', () => {
+    const rest = [
+      '--param',
+      'name=Aria',
+      '--param',
+      'xp=0',
+      '--param',
+      'ability_method=standard_array',
+      '--param',
+      'features.fighting_style=dueling',
+      '--param',
+      'skills.trained=["athletics","perception"]',
+    ];
+    const assign = (...scores: number[]): string[] =>
+      ['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma'].flatMap((ability, i) => [
+        '--param',
+        `abilities.${ability}.assigned=${scores[i]}`,
+      ]);
+
+    // The chosen method swaps in its own choice per ability.
+    const query = cli('5e/main.yaml', ...rest) as { query: Array<{ path: string; options?: unknown[] }> };
+    expect(query.query.map((param) => param.path)).toEqual([
+      'abilities.strength.assigned',
+      'abilities.dexterity.assigned',
+      'abilities.constitution.assigned',
+      'abilities.intelligence.assigned',
+      'abilities.wisdom.assigned',
+      'abilities.charisma.assigned',
+    ]);
+    expect(query.query[0]?.options).toEqual([15, 14, 13, 12, 10, 8]);
+
+    const data = cli('5e/main.yaml', '--strip-metadata', ...assign(8, 15, 14, 10, 13, 12), ...rest) as {
+      data: Record<string, unknown> & { abilities: Record<string, { base: number; modifier: number }> };
+    };
+    expect(data.data.abilities.dexterity).toEqual({ assigned: 15, start: 15, base: 15, modifier: 2 });
+    expect(data.data.abilities.strength).toEqual({ assigned: 8, start: 8, base: 8, modifier: -1 });
+    expect(data.data.armor_class).toBe(12);
+    // Point buy never applied: no budget, no bought scores.
+    expect(data.data.point_buy).toBeUndefined();
+    expect(data.data.standard_array).toEqual({ assigned: [8, 15, 14, 10, 13, 12] });
+
+    // Every score once: a repeat leaves another unused, and both rules say so.
+    expect(cli('5e/main.yaml', ...assign(15, 15, 14, 10, 13, 12), ...rest)).toEqual({
+      errors: ['$lib.list.count(.assigned, 15) == 1', '$lib.list.count(.assigned, 8) == 1'],
+    });
+    // A score off the array is refused outright.
+    expect(cliFails('5e/main.yaml', ...assign(16, 15, 14, 10, 13, 12), ...rest)).toContain(
+      'param options mismatch: abilities.strength.assigned expected one of [15, 14, 13, 12, 10, 8], got 16',
+    );
+  });
+
   it('names each choice from the definition it was called with', () => {
-    const query = cli('5e/main.yaml', '--param', 'name=Aria', '--param', 'xp=6500') as {
+    const query = cli(
+      '5e/main.yaml',
+      '--param',
+      'name=Aria',
+      '--param',
+      'xp=6500',
+      '--param',
+      'ability_method=point_buy',
+    ) as {
       query: Array<{ path: string; label?: string }>;
     };
     const labels = Object.fromEntries(query.query.map((param) => [param.path, param.label]));

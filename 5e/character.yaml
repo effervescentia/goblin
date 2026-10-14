@@ -26,7 +26,14 @@ xp:
 
 level: '#.levels.level_for(@.xp)'
 
-point_buy: '#.ability.point_buy'
+# How the six scores start; the matching patch (5e/point_buy.yaml or
+# 5e/standard_array.yaml) adds that method's choice to each ability.
+ability_method:
+  :label: Ability Score Method
+  :doc: 'point_buy: spend 27 points on scores from 8 to 15. standard_array: assign 15, 14, 13, 12, 10 and 8.'
+  :param: true
+  :type: string
+  :options: [point_buy, standard_array]
 
 # Pick lists filled by the features that grant them; an ability counts its own
 # name across all of them, so twice is +2 and once each is +1 apiece.
