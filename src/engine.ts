@@ -266,13 +266,17 @@ export class GoblinEngine {
         }
         return undefined;
       }
-      const value = this.evaluate(rawTarget, {
+      const targetScope = {
         ...scope,
         current: parentOf(base, segments) ?? scope.current,
         // The target's own path, so `:param` nodes inside it look up provided
         // values by where they live, not where the reference was written.
         path: root === CURRENT ? [...(scope.path ?? []), ...segments] : segments,
-      });
+      };
+      const value =
+        found !== null && found.parent === targetScope.current
+          ? this.evaluateField(found.parent, found.key, rawTarget, targetScope)
+          : this.evaluate(rawTarget, targetScope);
       this.cache.set(key, value);
       return value;
     } finally {
@@ -374,6 +378,22 @@ export class GoblinEngine {
       return this.evaluate(raw, { ...scope, path: [] });
     }
     return parse(raw).evaluate(this, scope);
+  }
+
+  /**
+   * Evaluate the field `record[key]` (raw value `raw`) under `scope`. An
+   * expression field evaluates once per cache lifetime, however it is reached
+   * (any ref spelling, or the sheet walk), so a roll reads the same everywhere.
+   */
+  evaluateField(record: object, key: string, raw: unknown, scope: EvalRoots): unknown {
+    const memoizable =
+      typeof raw === 'string' && ExpressionNode.matches(raw) && Object.keys(scope.params ?? {}).length === 0;
+    if (!memoizable) return this.evaluate(raw, scope);
+    const memo = `field|${this.idOf(scope.doc)}|${this.idOf(scope.actor)}|${this.idOf(record)}|${key}`;
+    if (this.cache.has(memo)) return this.cache.get(memo);
+    const value = this.evaluate(raw, scope);
+    this.cache.set(memo, value);
+    return value;
   }
 
   /** Evaluate a whole loaded document as an actor (`$` and `@` coincide). */
@@ -547,6 +567,29 @@ export class GoblinEngine {
   eventsFor(record: object, key: string): unknown[] | undefined {
     const log = this.fieldEvents.get(record)?.get(key);
     return log && log.length > 0 ? log : undefined;
+  }
+
+  /**
+   * `record[key]`'s events with each written expression resolved where it
+   * landed. The latest `:set` is the field's own `value`, so the two agree
+   * even when it rolled.
+   */
+  resolvedEventsFor(record: object, key: string, value: unknown, scope: EvalRoots): unknown[] | undefined {
+    const log = this.eventsFor(record, key);
+    if (log === undefined) return undefined;
+    return log.map((entry, i) => {
+      const event = entry as Record<string, unknown>;
+      const kind = SET_KEY in event ? SET_KEY : ADD_KEY;
+      if (i === log.length - 1 && kind === SET_KEY) return { ...event, [kind]: value };
+      return { ...event, [kind]: this.resolveWritten(event, kind, event[kind], scope) };
+    });
+  }
+
+  /** A logged write's value: expressions evaluate (once, keyed on the event), lists item by item. */
+  private resolveWritten(owner: object, key: string, raw: unknown, scope: EvalRoots): unknown {
+    if (Array.isArray(raw)) return raw.map((item, i) => this.resolveWritten(owner, `${key}.${i}`, item, scope));
+    if (typeof raw === 'string' && ExpressionNode.matches(raw)) return this.evaluateField(owner, key, raw, scope);
+    return raw;
   }
 
   /** The record owning the path's last segment and the key within it,

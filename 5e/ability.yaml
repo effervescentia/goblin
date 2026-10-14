@@ -1,6 +1,7 @@
 # Ability score helpers, attached as `#.ability` by 5e/main.yaml: the shape of
 # one ability entry (5e/character.yaml) and the per-ability choice each
-# starting method adds (5e/point_buy.yaml, 5e/standard_array.yaml).
+# starting method adds (5e/point_buy.yaml, 5e/standard_array.yaml,
+# 5e/roll.yaml).
 
 # Points bought above 8: each costs one, the sixth and seventh (14, 15) two.
 'point_cost(bought)': bought + (bought >= 6) + (bought >= 7)
@@ -32,3 +33,7 @@
     :type: integer
     :options: [15, 14, 13, 12, 10, 8]
   start: .assigned
+
+# Roll: 4d6, dropping the lowest die — fresh on every resolve.
+'rolled()':
+  start: $lib.dice.keep_highest(4, 6, 3)

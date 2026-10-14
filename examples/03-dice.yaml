@@ -6,3 +6,4 @@ hit_die: d8 # → "d8"
 damage: 2d6 # → "2d6"
 initiative: 1d20 + 2 # → a rolled number between 3 and 22
 heal: $.hit_die + 0 # Die used in arithmetic rolls → 1..8
+healed: $.heal # The same roll: a field rolls once per evaluation

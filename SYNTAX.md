@@ -75,6 +75,10 @@ strong: $.strength > $.dexterity      # → true
   and is *not* rolled.
 - Inline in a larger expression, dice are **rolled immediately**.
 - A die used in arithmetic rolls (`hit_points + hit_die` rolls the die).
+- An expression field rolls **once per evaluation**: every ref to it, and the
+  evaluated sheet itself, reads the same number (`base: .start` matches a
+  rolled `start`). Each new resolve rolls afresh; function calls
+  (`'roll()': 1d20 + .base`) roll on every call.
 
 ```yaml
 # Examples (examples/03-dice.yaml)
@@ -134,6 +138,10 @@ The stdlib lives under `$lib`, implicitly loaded by the engine, merged with
 table takes precedence for `$lib.…` refs. Native namespaces:
 
 - `math`: `floor`, `ceil`, `round`, `abs`, `min`, `max`.
+- `dice`: `keep_highest(count, sides, keep)` rolls `count` dice of `sides`
+  and sums the `keep` highest — 5e's rolled scores are
+  `$lib.dice.keep_highest(4, 6, 3)` (4d6, drop the lowest). It takes numbers,
+  since inline `NdM` rolls to a sum before a call could see each die.
 - `list`: `count(value, item)`, `has(value, item)` (1 or 0, for arithmetic),
   `size(value)` — reading choices back out of a list, or out of a table of
   `:param` choice records, where a record counts its `:value` and never its
@@ -147,6 +155,7 @@ table takes precedence for `$lib.…` refs. Native namespaces:
 # Examples (examples/09-stdlib.yaml)
 floored: $lib.math.floor(2.9)                 # → 2
 smallest: $lib.math.min(3, 9)                 # → 3
+ability_roll: $lib.dice.keep_highest(4, 6, 3) # → 3..18
 athletics_picks: $lib.list.count(@.picks, 'athletics')
 ```
 
@@ -280,8 +289,8 @@ syntax:
   null, or `""` the block is unconditional; otherwise `$if` must evaluate
   truthy. A false condition applies nothing — not even `:meta` — so gated-out
   content leaves no residue. Gating on a `:param` turns a choice into
-  alternative patches: 5e/main.yaml adopts both `point_buy.yaml` and
-  `standard_array.yaml`, each gated on `@.ability_method`, so only the chosen
+  alternative patches: 5e/main.yaml adopts `point_buy.yaml`,
+  `standard_array.yaml` and `roll.yaml`, each gated on `@.ability_method`, so only the chosen
   method's params reach the next `{ query }`. `$then` is itself a patch whose path keys are
   absolute; a bare `$then` without `$if` applies unconditionally.
   `$if`/`$then` are never serialized.
@@ -323,10 +332,15 @@ patch touched print bare, as before.
   `:source: override`, so an explicit value shows what it beat. Overrides
   apply both before and after the patches, so one that re-writes the value
   already in place is not recorded twice.
-- `:set` is the raw value written: the expression as written, not its result.
-  A plain list (`- all_armor`) is the document stating the list itself, so it
-  files as `:set` holding that list.
-- `:add` names what an addition added: the value a `+@.path` key added,
+- `:set` is the value written, resolved: an expression logs its result, not
+  its text, evaluated where it landed. The latest `:set` is the field's own
+  value, so a roll (`$lib.dice.keep_highest(4, 6, 3)`) logs the number the
+  sheet shows; one a later write replaced still resolves (an overridden
+  `level` logs what `#.levels.level_for(@.xp)` gave). A plain list
+  (`- all_armor`) is the document stating the list itself, so it files as
+  `:set` holding that list, each item resolved.
+- `:add` names what an addition added: the value a `+@.path` key added
+  (resolved, like `:set`),
   the items a `+item` list appended, or the key a `+key` record addition
   introduced. A `+key` holding a scalar or a
   list records that value instead, so nothing is logged twice.
@@ -341,7 +355,7 @@ patch touched print bare, as before.
   ":value": 2,
   ":events": [
     { ":source": "character.yaml", ":set": 1 },
-    { ":source": "fighter.yaml", ":set": "1 + (@.level >= 5) + (@.level >= 11) + (@.level >= 20)" }
+    { ":source": "fighter.yaml", ":add": 1 }     // `1 + (@.level >= 11) + …` at level 5
   ]
 },
 "second_wind": {                               // a record takes the key in place

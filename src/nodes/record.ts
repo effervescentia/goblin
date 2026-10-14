@@ -260,9 +260,10 @@ export class RecordNode extends Node<Record<string, unknown>> {
         out[added] = engine.evaluate(value, { ...scope, current: record, path: [...base, added] });
         continue;
       }
-      const evaluated = engine.evaluate(value, { ...scope, current: record, path: [...base, key] });
-      // A field a patch wrote prints with its history.
-      out[key] = RecordNode.withEvents(evaluated, engine.eventsFor(record, key));
+      const fieldScope = { ...scope, current: record, path: [...base, key] };
+      const evaluated = engine.evaluateField(record, key, value, fieldScope);
+      // A field a patch wrote prints with its history, each write resolved.
+      out[key] = RecordNode.withEvents(evaluated, engine.resolvedEventsFor(record, key, evaluated, fieldScope));
     }
     return out;
   }

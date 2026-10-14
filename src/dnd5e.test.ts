@@ -229,12 +229,13 @@ describe('5e', () => {
     expect(data.data.level).toBe(5);
     expect(data.data.armor_class).toBe(12); // 10 + dex 14
     // A patched field carries the writes that produced it, in order — here
-    // the Extra Attack feature adding to the character's single attack.
+    // the Extra Attack feature adding to the character's single attack, each
+    // write logged as the value it resolved to (level 5 adds 1).
     expect(data.data.attacks).toEqual({
       ':value': 2,
       ':events': [
         { ':source': 'character.yaml', ':set': 1 },
-        { ':source': 'fighter.yaml', ':add': '1 + (@.level >= 11) + (@.level >= 20)' },
+        { ':source': 'fighter.yaml', ':add': 1 },
       ],
     });
     // A `+key` addition is itself a change: the feature records who added it.
@@ -390,6 +391,39 @@ describe('5e', () => {
     );
   });
 
+  it('rolls 4d6 drop lowest for each ability, asking nothing', () => {
+    const rest = [
+      '--param',
+      'name=Aria',
+      '--param',
+      'xp=0',
+      '--param',
+      'ability_method=roll',
+      '--param',
+      'features.fighting_style=dueling',
+      '--param',
+      'skills.trained=["athletics","perception"]',
+    ];
+    for (let i = 0; i < 5; i++) {
+      const data = cli('5e/main.yaml', '--strip-metadata', ...rest) as {
+        data: Record<string, unknown> & {
+          abilities: Record<string, { start: number; base: number; modifier: number }>;
+          armor_class: number;
+        };
+      };
+      for (const ability of Object.values(data.data.abilities)) {
+        expect(ability.start).toBeGreaterThanOrEqual(3);
+        expect(ability.start).toBeLessThanOrEqual(18);
+        // One roll per score: everything derived reads the same number.
+        expect(ability.base).toBe(ability.start);
+        expect(ability.modifier).toBe(Math.floor((ability.start - 10) / 2));
+      }
+      expect(data.data.armor_class).toBe(10 + (data.data.abilities.dexterity?.modifier ?? 0));
+      expect(data.data.point_buy).toBeUndefined();
+      expect(data.data.standard_array).toBeUndefined();
+    }
+  });
+
   it('names each choice from the definition it was called with', () => {
     const query = cli(
       '5e/main.yaml',
@@ -489,11 +523,11 @@ describe('5e', () => {
       'improvements.level_4=["strength","strength"]',
     ) as { data: { level: Record<string, unknown>; attacks: Record<string, unknown> } };
     expect(data.data.attacks[':value']).toBe(2);
-    // `--set` beats the derivation it replaced, and says so.
+    // `--set` beats the derivation it replaced (level 1 at 0 XP), and says so.
     expect(data.data.level).toEqual({
       ':value': 5,
       ':events': [
-        { ':source': 'character.yaml', ':set': '#.levels.level_for(@.xp)' },
+        { ':source': 'character.yaml', ':set': 1 },
         { ':source': 'override', ':set': 5 },
       ],
     });

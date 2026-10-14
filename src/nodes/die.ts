@@ -10,11 +10,12 @@ export class Die {
   ) {}
 
   roll(): number {
-    let total = 0;
-    for (let i = 0; i < this.count; i++) {
-      total += 1 + Math.floor(Math.random() * this.sides);
-    }
-    return total;
+    return this.rolls().reduce((total, face) => total + face, 0);
+  }
+
+  /** Each die's face, for rules that read them apart (drop the lowest). */
+  rolls(): number[] {
+    return Array.from({ length: this.count }, () => 1 + Math.floor(Math.random() * this.sides));
   }
 
   /** Arithmetic with a die rolls it (`hit_points + hit_die`). */

@@ -85,6 +85,27 @@ describe('dice', () => {
     expect(roll).toBeGreaterThanOrEqual(1);
     expect(roll).toBeLessThanOrEqual(20);
   });
+
+  it('rolls an expression field once per evaluation, however it is reached', () => {
+    const engine = new GoblinEngine('.');
+    const doc = { score: { roll: '1d1000000 + 0', copy: '.roll', again: '$.score.roll' } };
+    engine.docs.set('roll.yaml', doc);
+    const out = engine.evaluateDoc('roll.yaml') as { score: { roll: number; copy: number; again: number } };
+    expect(out.score.copy).toBe(out.score.roll);
+    expect(out.score.again).toBe(out.score.roll);
+  });
+
+  it('keeps the highest dice with $lib.dice.keep_highest', () => {
+    const { engine, scope } = testEngine();
+    for (let i = 0; i < 50; i++) {
+      const roll = engine.evalExpr('$lib.dice.keep_highest(4, 6, 3)', scope) as number;
+      expect(roll).toBeGreaterThanOrEqual(3);
+      expect(roll).toBeLessThanOrEqual(18);
+    }
+    // Keeping one of many d1s is always 1; keeping every die is the plain sum.
+    expect(engine.evalExpr('$lib.dice.keep_highest(5, 1, 1)', scope)).toBe(1);
+    expect(engine.evalExpr('$lib.dice.keep_highest(3, 1, 3)', scope)).toBe(3);
+  });
 });
 
 describe('expressions', () => {
@@ -253,7 +274,7 @@ describe('apply', () => {
     const { out } = appliedEngine();
     // The actor tree is a test fixture, not a loaded document, so the origin
     // event has no `:source`; the patch is a registered document, so it does.
-    expect((out.monk as Record<string, unknown>).martial_arts_die).toEqual({
+    expect(serialize((out.monk as Record<string, unknown>).martial_arts_die)).toEqual({
       ':value': expect.anything(),
       ':events': [{ ':source': 'monk.yaml', ':set': '1d6' }],
     });
@@ -286,8 +307,8 @@ describe('apply', () => {
     expect(String(fieldValue(strike.die))).toBe('1d8');
     expect(fieldValue(strike.type)).toBe('bonus_action');
     // The `$then` write lands over the actor's own `d4`.
-    expect(strike.die).toEqual({
-      ':value': expect.anything(),
+    expect(serialize(strike.die)).toEqual({
+      ':value': '1d8',
       ':events': [{ ':set': 'd4' }, { ':source': 'monk.yaml', ':set': '1d8' }],
     });
   });
