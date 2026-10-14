@@ -25,7 +25,12 @@ const state = {
   collapsed: new Set<string>(),
   filter: '',
   source: '' as string,
+  /** The document an event's location link opened, if any. */
+  viewing: undefined as { file: string; line: number; column: number } | undefined,
 };
+
+/** Fetched document text, by entry-relative file name. */
+const sources = new Map<string, string>();
 
 // -- dom helpers --------------------------------------------------------------
 
@@ -71,15 +76,137 @@ function sourceChip(source: string | undefined): HTMLElement {
   return h('span', { className: 'source', style: sourceStyle(name), title: name }, name);
 }
 
+/** A JSON value as a tree: scalars inline, objects and lists behind a
+ * one-line `<details>` summary. Toggling never selects the row it sits in. */
+function jsonView(value: unknown): HTMLElement {
+  if (value === null || typeof value !== 'object') {
+    const type = value === null ? 'null' : typeof value;
+    return h('code', { className: `json-${type}` }, JSON.stringify(value) ?? 'undefined');
+  }
+  const entries: [string, unknown][] = Array.isArray(value)
+    ? value.map((item, i) => [String(i), item])
+    : Object.entries(value as Record<string, unknown>);
+  if (entries.length === 0) return h('code', {}, Array.isArray(value) ? '[]' : '{}');
+  return h(
+    'details',
+    { className: 'json', onclick: (event: MouseEvent) => event.stopPropagation() },
+    h('summary', {}, h('code', { className: 'muted' }, preview(value, 40))),
+    h(
+      'ul',
+      {},
+      entries.map(([key, item]) => h('li', {}, h('code', { className: 'json-key' }, `${key}: `), jsonView(item))),
+    ),
+  );
+}
+
 /** An event's kind (`set`, `add`, `subtract`) and the value it carried. */
 function eventParts(event: GoblinEvent): { kind: string; value: unknown } {
-  const key = Object.keys(event).find((k) => k !== ':source') ?? ':set';
+  const key = [':set', ':add', ':subtract'].find((k) => k in event) ?? ':set';
   return { kind: key.slice(1), value: event[key] };
+}
+
+/** The event's source document — a link to the line behind it when the
+ * engine knows one (overrides and hand-built trees have none). */
+function eventOrigin(event: GoblinEvent): HTMLElement {
+  const source = event[':source'] as string | undefined;
+  const line = event[':line'] as number | undefined;
+  if (source === undefined || line === undefined) return sourceChip(source);
+  const column = (event[':column'] as number | undefined) ?? 1;
+  return h(
+    'button',
+    {
+      type: 'button',
+      className: 'source located',
+      style: sourceStyle(source),
+      title: `Open ${source} at line ${line}`,
+      onclick: (click: MouseEvent) => {
+        click.stopPropagation();
+        void openSource(source, line, column);
+      },
+    },
+    `${source}:${line}`,
+  );
+}
+
+async function openSource(file: string, line: number, column: number): Promise<void> {
+  state.viewing = { file, line, column };
+  render();
+  if (!sources.has(file)) {
+    const query = new URLSearchParams({ entry: state.entry, file });
+    const response = await fetch(`/api/source?${query}`);
+    sources.set(file, response.ok ? await response.text() : `# could not load ${file}: ${await response.text()}`);
+    render();
+  }
+  document.querySelector('.viewer .hit')?.scrollIntoView({ block: 'center' });
+}
+
+function closeSource(): void {
+  state.viewing = undefined;
+  render();
+}
+
+/** The cited document with its line marked, beside the sheet. */
+function renderViewer(): HTMLElement | null {
+  const view = state.viewing;
+  if (!view) return null;
+  const text = sources.get(view.file);
+  return h(
+    'aside',
+    { className: 'viewer', 'aria-label': `${view.file} source` },
+    h(
+      'header',
+      {},
+      h('span', { className: 'source', style: sourceStyle(view.file) }, view.file),
+      h('code', { className: 'muted' }, `line ${view.line}, column ${view.column}`),
+      h('button', { type: 'button', className: 'ghost', onclick: closeSource }, 'Close'),
+    ),
+    text === undefined
+      ? h('p', { className: 'muted' }, 'Loading…')
+      : h(
+          'ol',
+          { className: 'code' },
+          text
+            .split('\n')
+            .map((content, i) =>
+              h(
+                'li',
+                { className: i + 1 === view.line ? 'hit' : '' },
+                h('span', { className: 'ln' }, String(i + 1)),
+                h('code', {}, content || ' '),
+              ),
+            ),
+        ),
+  );
+}
+
+// -- choices, kept per entry for the browser session ---------------------------
+
+const choicesKey = (entry: string) => `goblin:choices:${entry}`;
+
+/** Storage can be blocked (private windows, previews): choices then last only
+ * as long as the page. */
+function loadChoices(entry: string): Record<string, unknown> {
+  try {
+    const stored = sessionStorage.getItem(choicesKey(entry));
+    return stored ? (JSON.parse(stored) as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveChoices(): void {
+  try {
+    if (Object.keys(state.params).length === 0) sessionStorage.removeItem(choicesKey(state.entry));
+    else sessionStorage.setItem(choicesKey(state.entry), JSON.stringify(state.params));
+  } catch {
+    /* not persisted — the page still works */
+  }
 }
 
 // -- resolution ---------------------------------------------------------------
 
 async function resolve(): Promise<void> {
+  saveChoices();
   $('status').textContent = 'Resolving…';
   const response = await fetch('/api/resolve', {
     method: 'POST',
@@ -106,6 +233,7 @@ function render(): void {
     result.errors ? renderErrors(result.errors) : null,
     result.query ? renderQuery(result.query) : null,
     result.nodes ? renderSheet(result.nodes) : null,
+    renderViewer(),
   ];
   main.replaceChildren(...parts.filter((part): part is Node | string => Boolean(part)));
 }
@@ -347,9 +475,14 @@ function renderTree(nodes: InspectNode[], select: (path: string) => void): HTMLE
   );
 }
 
-function pathLink(path: string, byPath: Map<string, InspectNode>, select: (path: string) => void): HTMLElement {
-  if (!byPath.has(path)) return h('code', { className: 'muted' }, path);
-  return h('button', { type: 'button', className: 'link', onclick: () => select(path) }, path || '(actor)');
+function pathLink(
+  path: string,
+  byPath: Map<string, InspectNode>,
+  select: (path: string) => void,
+  label = path || '(actor)',
+): HTMLElement {
+  if (!byPath.has(path)) return h('code', { className: 'muted' }, label);
+  return h('button', { type: 'button', className: 'link', onclick: () => select(path) }, label);
 }
 
 function renderReads(
@@ -392,7 +525,7 @@ function renderDetail(
   const parts = node.path ? node.path.split('.') : [];
   const crumbs = [
     pathLink('', byPath, select),
-    ...parts.flatMap((_part, i) => [' . ', pathLink(parts.slice(0, i + 1).join('.'), byPath, select)]),
+    ...parts.flatMap((part, i) => [' . ', pathLink(parts.slice(0, i + 1).join('.'), byPath, select, part)]),
   ];
   const readers = readBy.get(node.path) ?? [];
   const section = (title: string, body: Child | Child[]) => h('div', { className: 'block' }, h('h3', {}, title), body);
@@ -452,13 +585,7 @@ function renderDetail(
             { className: 'timeline' },
             node.events.map((event) => {
               const { kind, value } = eventParts(event);
-              return h(
-                'li',
-                {},
-                sourceChip(event[':source'] as string | undefined),
-                h('span', { className: `op ${kind}` }, kind),
-                h('code', {}, preview(value, 64)),
-              );
+              return h('li', {}, eventOrigin(event), h('span', { className: `op ${kind}` }, kind), jsonView(value));
             }),
           )
         : h('p', { className: 'muted' }, 'No writes: this field holds what its document declared.'),
@@ -511,10 +638,10 @@ function renderStream(nodes: InspectNode[], select: (path: string) => void): HTM
         return h(
           'li',
           { onclick: () => select(node.path), className: node.path === state.selected ? 'selected' : '' },
-          sourceChip(event[':source'] as string | undefined),
+          eventOrigin(event),
           h('span', { className: `op ${kind}` }, kind),
           h('code', { className: 'path' }, `${node.path}#${step + 1}`),
-          h('code', { className: 'muted' }, preview(value, 24)),
+          jsonView(value),
         );
       }),
     ),
@@ -529,14 +656,18 @@ async function boot(): Promise<void> {
   picker.replaceChildren(...entries.map((entry) => h('option', { value: entry }, entry)));
   state.entry = entries.includes('5e/main.yaml') ? '5e/main.yaml' : (entries[0] ?? '');
   picker.value = state.entry;
+  state.params = loadChoices(state.entry);
   picker.addEventListener('change', () => {
     state.entry = picker.value;
-    state.params = {};
+    state.params = loadChoices(state.entry);
     state.selected = '';
     state.collapsed.clear();
     void resolve();
   });
   $('resolve').addEventListener('click', () => void resolve());
+  document.addEventListener('keydown', (key) => {
+    if (key.key === 'Escape' && state.viewing) closeSource();
+  });
   $('reset').addEventListener('click', () => {
     state.params = {};
     void resolve();

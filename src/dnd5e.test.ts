@@ -274,15 +274,16 @@ describe('5e', () => {
     expect(data.data.attacks).toEqual({
       ':value': 2,
       ':events': [
-        { ':source': 'character.yaml', ':set': 1 },
-        { ':source': 'fighter.yaml', ':add': 1 },
+        // Each write cites the key behind it: `attacks: 1`, then `'+@.attacks'`.
+        { ':source': 'character.yaml', ':line': 60, ':column': 1, ':set': 1 },
+        { ':source': 'fighter.yaml', ':line': 83, ':column': 5, ':add': 1 },
       ],
     });
     // A `+key` addition is itself a change: the feature records who added it.
     expect(data.data.features.extra_attack).toEqual({
       ':label': 'Extra Attack',
       ':doc': 'Strike twice whenever you take the Attack action.',
-      ':events': [{ ':source': 'fighter.yaml', ':add': 'extra_attack' }],
+      ':events': [{ ':source': 'fighter.yaml', ':line': 79, ':column': 3, ':add': 'extra_attack' }],
     });
     expect(data.data.features.fighting_style).toEqual({
       ':label': 'Fighting Style',
@@ -291,7 +292,7 @@ describe('5e', () => {
       ':type': 'string',
       ':options': ['archery', 'defense', 'dueling', 'great_weapon_fighting', 'protection', 'two_weapon_fighting'],
       ':value': 'dueling',
-      ':events': [{ ':source': 'fighter.yaml', ':add': 'fighting_style' }],
+      ':events': [{ ':source': 'fighter.yaml', ':line': 30, ':column': 3, ':add': 'fighting_style' }],
     });
   });
 
@@ -627,7 +628,8 @@ describe('5e', () => {
     expect(data.data.level).toEqual({
       ':value': 5,
       ':events': [
-        { ':source': 'character.yaml', ':set': 1 },
+        { ':source': 'character.yaml', ':line': 27, ':column': 1, ':set': 1 },
+        // An override has no document line to cite.
         { ':source': 'override', ':set': 5 },
       ],
     });

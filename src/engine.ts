@@ -19,10 +19,12 @@ import {
   ADD_KEY,
   APP,
   CALL_EXPR,
+  COLUMN_KEY,
   CURRENT,
   DIE_LITERAL,
   DOCUMENT,
   IF_KEY,
+  LINE_KEY,
   OVERRIDE_SOURCE,
   PARAM_KEY,
   PARAM_VALUE_KEY,
@@ -37,6 +39,7 @@ import {
   VALUE_KEY,
 } from './constants';
 import { withNatives } from './lib';
+import { collectLocations, copyLocations, type Location, type Locations } from './locations';
 import { Die, DieNode } from './nodes/die';
 import { ExpressionNode } from './nodes/expression';
 import { FunctionNode } from './nodes/function';
@@ -98,6 +101,10 @@ export class GoblinEngine {
   private readonly fieldEvents = new WeakMap<object, Map<string, unknown[]>>();
   /** Source document of a raw tree: loaded documents and `$tmpl('…')` clones. */
   private readonly origins = new WeakMap<object, string>();
+  /** Where each key was written in its source document. */
+  private readonly locations: Locations = new WeakMap();
+  /** Location of the patch key being applied; events cite it. */
+  private writingAt: Location | undefined;
   /** Document that wrote each record and list, for `_` field visibility. */
   private readonly owners = new WeakMap<object, string>();
   /** Source names for the apply in progress (the patch, and the actor under it). */
@@ -117,7 +124,7 @@ export class GoblinEngine {
     const { YAML } = await import('bun');
     const text = await Bun.file(joinPath(this.rootDir, file)).text();
     const data = YAML.parse(text);
-    this.register(file, data);
+    this.register(file, data, text);
     await this.discoverTemplates(file, text);
     return data;
   }
@@ -162,7 +169,7 @@ export class GoblinEngine {
         const { YAML } = await import('bun');
         const depText = await Bun.file(joinPath(this.rootDir, path)).text();
         const depData = YAML.parse(depText);
-        this.register(path, depData);
+        this.register(path, depData, depText);
         this.register(name, depData);
         await this.discoverTemplates(path, depText);
       }
@@ -171,8 +178,11 @@ export class GoblinEngine {
   }
 
   /** Store a document under `file`, merging top-level tables into `#`. */
-  register(file: string, data: unknown): unknown {
+  register(file: string, data: unknown, text?: string): unknown {
     this.docs.set(file, data);
+    if (text !== undefined && data !== null && typeof data === 'object' && !this.locations.has(data)) {
+      collectLocations(text, data, this.locations);
+    }
     // First spelling wins, so a template registered under both its path and
     // its bare name reports one stable source.
     if (data && typeof data === 'object' && !this.origins.has(data)) this.origins.set(data, file);
@@ -184,7 +194,7 @@ export class GoblinEngine {
         // A document that is itself one node (a `$tmpl`'d `:param` record)
         // would otherwise bind its metadata as app-root tables.
         if (isMetaKey(k) || isValidateKey(k) || isBareSigil(k)) continue;
-        if (!(k in this.appRoot)) this.appRoot[k] = this.claim(deepClone(v), file);
+        if (!(k in this.appRoot)) this.appRoot[k] = this.claim(this.clone(v), file);
       }
     }
     return data;
@@ -220,7 +230,8 @@ export class GoblinEngine {
     const fn = FunctionNode.match(found.key, found.value, found.parent);
     if (!fn) return undefined;
     const source = this.fieldSource(found.parent, found.key);
-    return fn.evaluate(this, { ...scope, source }) as ((...args: unknown[]) => unknown) | undefined;
+    const at = this.locationOf(found.parent, found.key);
+    return fn.evaluate(this, { ...scope, source, at }) as ((...args: unknown[]) => unknown) | undefined;
   }
 
   resolveRef(ref: string, scope: EvalRoots): unknown {
@@ -387,6 +398,7 @@ export class GoblinEngine {
         deepClone(amount),
         scope.source,
         this.fieldSource(slot.owner, slot.key),
+        scope.at,
       );
     }
     setPath(base, path, next);
@@ -408,7 +420,7 @@ export class GoblinEngine {
       const file = tmpl[1]!;
       const doc = this.docs.get(file);
       if (doc === undefined) throw new Error(`template not loaded: ${file}`);
-      const clone = deepClone(doc);
+      const clone = this.clone(doc);
       // The clone keeps the document's name so patch events can cite it.
       if (clone && typeof clone === 'object') this.origins.set(clone, file);
       return this.claim(clone, file);
@@ -681,9 +693,47 @@ export class GoblinEngine {
     return raw && typeof raw === 'object' ? this.origins.get(raw) : undefined;
   }
 
-  /** One `{ :source?, :set | :add }` entry. */
-  private event(source: string | undefined, kind: string, value: unknown): Record<string, unknown> {
-    return source === undefined ? { [kind]: value } : { [SOURCE_KEY]: source, [kind]: value };
+  /** One `{ :source?, :line?, :column?, :set | :add | :subtract }` entry. */
+  private event(
+    source: string | undefined,
+    kind: string,
+    value: unknown,
+    at: Location | undefined,
+  ): Record<string, unknown> {
+    return {
+      ...(source === undefined ? {} : { [SOURCE_KEY]: source }),
+      ...(at === undefined ? {} : { [LINE_KEY]: at.line, [COLUMN_KEY]: at.column }),
+      [kind]: value,
+    };
+  }
+
+  /** Where `record[key]` was written in its source document, when known. */
+  locationOf(record: object, key: string): Location | undefined {
+    return this.locations.get(record)?.get(key);
+  }
+
+  /** A structural copy that keeps the source locations of its keys. */
+  private clone<T>(value: T): T {
+    const copy = deepClone(value);
+    copyLocations(value, copy, this.locations);
+    return copy;
+  }
+
+  /** Run `write` with events citing `record[key]`'s location — or the
+   * enclosing one, for keys with none (e.g. a call's copied body). */
+  private writing(record: object, key: string, write: () => void): void {
+    const at = this.locationOf(record, key);
+    if (at === undefined) {
+      write();
+      return;
+    }
+    const outer = this.writingAt;
+    this.writingAt = at;
+    try {
+      write();
+    } finally {
+      this.writingAt = outer;
+    }
   }
 
   /** Note a patch write, in application order. Call before writing. */
@@ -694,8 +744,9 @@ export class GoblinEngine {
     value: unknown,
     source = this.applySource,
     origin = this.actorSource,
+    at = this.writingAt,
   ): void {
-    this.seedEvents(target, key, origin).push(this.event(source, kind, value));
+    this.seedEvents(target, key, origin).push(this.event(source, kind, value, at));
   }
 
   /** Open a field's log, recording what it already holds as the first event.
@@ -708,7 +759,7 @@ export class GoblinEngine {
     }
     let log = fields.get(key);
     if (log === undefined) {
-      log = key in target ? [this.event(origin, SET_KEY, deepClone(target[key]))] : [];
+      log = key in target ? [this.event(origin, SET_KEY, deepClone(target[key]), this.locationOf(target, key))] : [];
       fields.set(key, log);
     }
     return log;
@@ -830,7 +881,7 @@ export class GoblinEngine {
         continue;
       }
       if (key === IF_KEY || key === THEN_KEY) continue; // handled by mergeInto
-      this.mergeEntry(target, key, value, scope);
+      this.writing(patch, key, () => this.mergeEntry(target, key, value, scope));
     }
   }
 
@@ -891,12 +942,12 @@ export class GoblinEngine {
       if (THEN_KEY in rec) this.applyPatchObject(rec[THEN_KEY], scope);
       for (const [k, v] of Object.entries(rec)) {
         if (k === IF_KEY || k === THEN_KEY) continue;
-        this.mergeEntry(tgt, k, v, scope);
+        this.writing(rec, k, () => this.mergeEntry(tgt, k, v, scope));
       }
       return;
     }
     for (const [k, v] of Object.entries(rec)) {
-      this.mergeEntry(tgt, k, v, scope);
+      this.writing(rec, k, () => this.mergeEntry(tgt, k, v, scope));
     }
   }
 
@@ -907,11 +958,12 @@ export class GoblinEngine {
     for (const [k, v] of Object.entries(patch as Record<string, unknown>)) {
       if (isBareSigil(k) || k === DOCUMENT || k === IF_KEY || k === THEN_KEY) continue;
       if (isMetaKey(k) || isValidateKey(k)) continue;
+      const record = patch as Record<string, unknown>;
       if (isPathKey(k)) {
-        this.applyAtPath(k, v, scope);
+        this.writing(record, k, () => this.applyAtPath(k, v, scope));
         continue;
       }
-      this.mergeEntry(scope.actor as Record<string, unknown>, k, v, scope);
+      this.writing(record, k, () => this.mergeEntry(scope.actor as Record<string, unknown>, k, v, scope));
     }
   }
 

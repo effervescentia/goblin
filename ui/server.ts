@@ -4,6 +4,7 @@
  *
  *   bun run ui            # http://localhost:3000
  */
+import { resolve as resolvePath } from 'node:path';
 import { resolveApp } from '../src/cli';
 import { inspect } from '../src/inspect';
 import index from './index.html';
@@ -28,6 +29,20 @@ const server = Bun.serve({
   routes: {
     '/': index,
     '/api/entries': async () => Response.json(await entries()),
+    // A document an event cites, read relative to the entry that loaded it.
+    '/api/source': async (req) => {
+      const url = new URL(req.url);
+      const entry = url.searchParams.get('entry') ?? '';
+      const file = url.searchParams.get('file') ?? '';
+      const dir = entry.includes('/') ? entry.slice(0, entry.lastIndexOf('/')) : '';
+      const path = resolvePath(root, dir, file);
+      if (!path.startsWith(`${resolvePath(root)}/`) || !path.endsWith('.yaml')) {
+        return new Response('not a document in this project', { status: 400 });
+      }
+      const source = Bun.file(path);
+      if (!(await source.exists())) return new Response('no such document', { status: 404 });
+      return new Response(await source.text(), { headers: { 'content-type': 'text/plain; charset=utf-8' } });
+    },
     '/api/resolve': {
       POST: async (req) => {
         const { entry, params = {}, overrides = {} } = (await req.json()) as ResolveRequest;

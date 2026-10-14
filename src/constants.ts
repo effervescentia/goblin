@@ -117,6 +117,9 @@ export const OVERRIDE_SOURCE = 'override';
 export const ADD_KEY = ':add';
 /** Event: the amount a `-=` assignment took from a field. */
 export const SUBTRACT_KEY = ':subtract';
+/** Event: where in its `:source` document the write was made (1-based). */
+export const LINE_KEY = ':line';
+export const COLUMN_KEY = ':column';
 
 /** Printed function descriptor keys (see `FunctionNode.serialize`). */
 export const PARAMS_KEY = ':params';

@@ -428,6 +428,11 @@ patch touched print bare, as before.
   `:source: override`, so an explicit value shows what it beat. Overrides
   apply both before and after the patches, so one that re-writes the value
   already in place is not recorded twice.
+- `:line` / `:column` (1-based) point at the key in the `:source` document
+  that made the write — the patch key, the field's own declaration for the
+  first event, or the function that ran an assignment. They are left out
+  when the engine has no text for the document (an override, a hand-built
+  tree), so a client can link every other event back to its line.
 - `:set` is the value written, resolved: an expression logs its result, not
   its text, evaluated where it landed. The latest `:set` is the field's own
   value, so a roll (`$lib.dice.keep_highest(4, 6, 3)`) logs the number the

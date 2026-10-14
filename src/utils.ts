@@ -17,6 +17,7 @@ import {
   VALIDATE_KEY,
   WILDCARD,
 } from './constants';
+import type { Location } from './locations';
 import { Die } from './nodes/die';
 
 export interface EvalRoots {
@@ -37,6 +38,8 @@ export interface EvalRoots {
   /** Document that wrote the expression being evaluated — the only one that
    * may reach `_` fields it wrote. */
   source?: string;
+  /** Where that expression sits in its document, for the events it writes. */
+  at?: Location;
 }
 
 /** A `_` key is private to the document that wrote it. */

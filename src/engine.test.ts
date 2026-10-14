@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { parse as parseYaml } from 'yaml';
 import { GoblinEngine } from './engine';
 import { Die, DieNode } from './nodes/die';
 import { ExpressionNode } from './nodes/expression';
@@ -359,6 +360,53 @@ describe('wildcards', () => {
     engine.register('b.yaml', { all: '#.stats.*' });
     const out = engine.evaluateDoc('b.yaml') as { all: unknown };
     expect(out.all).toEqual([2]);
+  });
+});
+
+describe('event locations', () => {
+  // Documents registered with their text cite the line and column of the key
+  // behind each write; `yaml` parses here so the test stays runtime-agnostic.
+  const load = (engine: GoblinEngine, file: string, text: string) => engine.register(file, parseYaml(text), text);
+
+  it('cites the patch key, the origin key and the function that assigned', () => {
+    const engine = new GoblinEngine('.');
+    load(engine, 'actor.yaml', ['hp:', '  current: 3', '  max: 9', "'heal()': '@.hp.current += 2'"].join('\n'));
+    load(engine, 'patch.yaml', ['note: unrelated', "'@.hp':", '  max: 12'].join('\n'));
+    const actor = engine.evalExpr("$tmpl('actor.yaml')", { doc: {}, actor: {}, app: engine.appRoot, current: {} });
+    engine.apply(actor, 'patch.yaml');
+    const scope: EvalRoots = { doc: actor, actor, app: engine.appRoot, current: actor };
+    (engine.evaluate(actor, scope) as { heal: () => void }).heal();
+    const out = engine.evaluate(actor, scope) as { hp: { current: unknown; max: unknown } };
+    expect(out.hp.max).toEqual({
+      ':value': 12,
+      ':events': [
+        { ':source': 'actor.yaml', ':line': 3, ':column': 3, ':set': 9 },
+        { ':source': 'patch.yaml', ':line': 3, ':column': 3, ':set': 12 },
+      ],
+    });
+    expect(out.hp.current).toEqual({
+      ':value': 5,
+      ':events': [
+        { ':source': 'actor.yaml', ':line': 2, ':column': 3, ':set': 3 },
+        { ':source': 'actor.yaml', ':line': 4, ':column': 1, ':add': 2 },
+      ],
+    });
+  });
+
+  it('leaves positions out when a document was registered without its text', () => {
+    const engine = new GoblinEngine('.');
+    engine.register('actor.yaml', { hp: 1 });
+    engine.register('patch.yaml', { '@.hp': 2 });
+    const actor = engine.evalExpr("$tmpl('actor.yaml')", { doc: {}, actor: {}, app: engine.appRoot, current: {} });
+    engine.apply(actor, 'patch.yaml');
+    const out = engine.evaluate(actor, { doc: actor, actor, app: engine.appRoot, current: actor }) as { hp: unknown };
+    expect(out.hp).toEqual({
+      ':value': 2,
+      ':events': [
+        { ':source': 'actor.yaml', ':set': 1 },
+        { ':source': 'patch.yaml', ':set': 2 },
+      ],
+    });
   });
 });
 

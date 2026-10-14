@@ -252,7 +252,8 @@ export class RecordNode extends Node<Record<string, unknown>> {
       }
       const fn = FunctionNode.match(key, value, record);
       if (fn) {
-        out[fn.name] = fn.evaluate(engine, { ...scope, source: engine.fieldSource(record, key) });
+        const source = engine.fieldSource(record, key);
+        out[fn.name] = fn.evaluate(engine, { ...scope, source, at: engine.locationOf(record, key) });
         continue;
       }
       if (isPathKey(key)) continue; // patch instruction (incl. `+@.x`) — handled by apply()
