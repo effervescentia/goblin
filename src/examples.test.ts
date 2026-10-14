@@ -135,6 +135,11 @@ describe('examples', () => {
     });
   });
 
+  it('11-private-fields.yaml reads its own `_` fields and strips them', () => {
+    const state = cli('examples/11-private-fields.yaml', '--strip-metadata') as { data: unknown };
+    expect(state.data).toEqual({ budget: { limit: 27, left: 15 } });
+  });
+
   it('applies 07-class.yaml to 07-actor.yaml with $if gating', () => {
     const script = `
       import { GoblinEngine } from './src/engine.ts';

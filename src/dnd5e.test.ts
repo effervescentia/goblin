@@ -379,11 +379,16 @@ describe('5e', () => {
     expect(data.data.armor_class).toBe(12);
     // Point buy never applied: no budget, no bought scores.
     expect(data.data.point_buy).toBeUndefined();
-    expect(data.data.standard_array).toEqual({ assigned: [8, 15, 14, 10, 13, 12] });
+    // Its pick list is private (`_assigned`): stripped output leaves nothing.
+    expect(data.data.standard_array).toBeNull();
+    const full = cli('5e/main.yaml', ...assign(8, 15, 14, 10, 13, 12), ...rest) as {
+      data: { standard_array: { _assigned: { ':value': unknown } } };
+    };
+    expect(full.data.standard_array._assigned[':value']).toEqual([8, 15, 14, 10, 13, 12]);
 
     // Every score once: a repeat leaves another unused.
     expect(cli('5e/main.yaml', ...assign(15, 15, 14, 10, 13, 12), ...rest)).toEqual({
-      errors: ['$lib.set.subset([15, 14, 13, 12, 10, 8], .assigned)'],
+      errors: ['$lib.set.subset([15, 14, 13, 12, 10, 8], ._assigned)'],
     });
     // A score off the array is refused outright.
     expect(cliFails('5e/main.yaml', ...assign(16, 15, 14, 10, 13, 12), ...rest)).toContain(
@@ -449,12 +454,13 @@ describe('5e', () => {
 
     const data = cli('5e/main.yaml', '--strip-metadata', ...take(6, 5, 4, 3, 2, 1), ...rest) as {
       data: Record<string, unknown> & {
-        roll_assign: { rolls: number[]; taken: number[] };
+        roll_assign: { rolls: number[] };
         abilities: Record<string, { roll: number; start: number; base: number }>;
       };
     };
-    const { rolls, taken } = data.data.roll_assign;
-    expect(taken).toEqual([6, 5, 4, 3, 2, 1]);
+    // The private `_taken` picks stay out of stripped output.
+    expect(Object.keys(data.data.roll_assign)).toEqual(['rolls']);
+    const { rolls } = data.data.roll_assign;
     expect(rolls).toHaveLength(6);
     for (const roll of rolls) {
       expect(roll).toBeGreaterThanOrEqual(3);
@@ -470,7 +476,7 @@ describe('5e', () => {
 
     // Every roll once: a repeat leaves another untaken.
     expect(cli('5e/main.yaml', ...take(6, 5, 4, 3, 2, 6), ...rest)).toEqual({
-      errors: ['$lib.set.subset([1, 2, 3, 4, 5, 6], .taken)'],
+      errors: ['$lib.set.subset([1, 2, 3, 4, 5, 6], ._taken)'],
     });
     expect(cliFails('5e/main.yaml', ...take(7, 5, 4, 3, 2, 1), ...rest)).toContain(
       'param options mismatch: abilities.strength.roll expected one of [1, 2, 3, 4, 5, 6], got 7',

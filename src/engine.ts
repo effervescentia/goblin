@@ -52,6 +52,7 @@ import {
   isBareSigil,
   isMetaKey,
   isPathKey,
+  isPrivateKey,
   isValidateKey,
   joinPath,
   parentOf,
@@ -94,6 +95,8 @@ export class GoblinEngine {
   private readonly fieldEvents = new WeakMap<object, Map<string, unknown[]>>();
   /** Source document of a raw tree: loaded documents and `$tmpl('…')` clones. */
   private readonly origins = new WeakMap<object, string>();
+  /** Document that wrote each record and list, for `_` field visibility. */
+  private readonly owners = new WeakMap<object, string>();
   /** Source names for the apply in progress (the patch, and the actor under it). */
   private applySource: string | undefined;
   private actorSource: string | undefined;
@@ -170,6 +173,7 @@ export class GoblinEngine {
     // First spelling wins, so a template registered under both its path and
     // its bare name reports one stable source.
     if (data && typeof data === 'object' && !this.origins.has(data)) this.origins.set(data, file);
+    this.claim(data, file);
     // Merge top-level `utils`/`math`-style tables into the app namespace
     // so `#.utils.…` works for self-contained docs like main.yaml.
     if (data && typeof data === 'object' && !Array.isArray(data)) {
@@ -177,7 +181,7 @@ export class GoblinEngine {
         // A document that is itself one node (a `$tmpl`'d `:param` record)
         // would otherwise bind its metadata as app-root tables.
         if (isMetaKey(k) || isValidateKey(k) || isBareSigil(k)) continue;
-        if (!(k in this.appRoot)) this.appRoot[k] = deepClone(v);
+        if (!(k in this.appRoot)) this.appRoot[k] = this.claim(deepClone(v), file);
       }
     }
     return data;
@@ -202,7 +206,7 @@ export class GoblinEngine {
   }
 
   private cacheKey(ref: string, scope: EvalRoots): string {
-    return `${this.idOf(scope.doc)}|${this.idOf(scope.actor)}|${this.idOf(scope.current)}|${ref}`;
+    return `${this.idOf(scope.doc)}|${this.idOf(scope.actor)}|${this.idOf(scope.current)}|${scope.source ?? ''}|${ref}`;
   }
 
   /** Wrap a raw `name(params)` function-definition entry in a callable. */
@@ -212,7 +216,8 @@ export class GoblinEngine {
   ): ((...args: unknown[]) => unknown) | undefined {
     const fn = FunctionNode.match(found.key, found.value, found.parent);
     if (!fn) return undefined;
-    return fn.evaluate(this, scope) as ((...args: unknown[]) => unknown) | undefined;
+    const source = this.fieldSource(found.parent, found.key);
+    return fn.evaluate(this, { ...scope, source }) as ((...args: unknown[]) => unknown) | undefined;
   }
 
   resolveRef(ref: string, scope: EvalRoots): unknown {
@@ -268,6 +273,7 @@ export class GoblinEngine {
       }
       const targetScope = {
         ...scope,
+        source: found === null ? scope.source : this.fieldSource(found.parent, found.key),
         current: parentOf(base, segments) ?? scope.current,
         // The target's own path, so `:param` nodes inside it look up provided
         // values by where they live, not where the reference was written.
@@ -317,6 +323,7 @@ export class GoblinEngine {
       if (seg === VALUE_KEY && RecordNode.isParam(node)) return null;
       entry = getChildEntry(node, seg);
       if (entry === null) return null;
+      if (isPrivateKey(seg)) this.assertVisible(entry.parent, entry.key, path, scope);
       parent = node;
       node = entry.value;
     }
@@ -352,12 +359,13 @@ export class GoblinEngine {
     // `$tmpl('file.yaml')` — synchronous template lookup (must be loaded).
     const tmpl = trimmed.match(TEMPLATE_CALL);
     if (tmpl) {
-      const doc = this.docs.get(tmpl[1]!);
-      if (doc === undefined) throw new Error(`template not loaded: ${tmpl[1]}`);
+      const file = tmpl[1]!;
+      const doc = this.docs.get(file);
+      if (doc === undefined) throw new Error(`template not loaded: ${file}`);
       const clone = deepClone(doc);
       // The clone keeps the document's name so patch events can cite it.
-      if (clone && typeof clone === 'object') this.origins.set(clone, tmpl[1]!);
-      return clone;
+      if (clone && typeof clone === 'object') this.origins.set(clone, file);
+      return this.claim(clone, file);
     }
     const run = compileBody(trimmed, Object.keys(scope.params ?? {}));
     return run(this.hooks(scope), scope.params ?? {});
@@ -385,7 +393,9 @@ export class GoblinEngine {
    * expression field evaluates once per cache lifetime, however it is reached
    * (any ref spelling, or the sheet walk), so a roll reads the same everywhere.
    */
-  evaluateField(record: object, key: string, raw: unknown, scope: EvalRoots): unknown {
+  evaluateField(record: object, key: string, raw: unknown, fieldScope: EvalRoots): unknown {
+    // List items keep the source of the field holding the list.
+    const scope = Array.isArray(record) ? fieldScope : { ...fieldScope, source: this.fieldSource(record, key) };
     const memoizable =
       typeof raw === 'string' && ExpressionNode.matches(raw) && Object.keys(scope.params ?? {}).length === 0;
     if (!memoizable) return this.evaluate(raw, scope);
@@ -396,10 +406,44 @@ export class GoblinEngine {
     return value;
   }
 
+  /** The document that wrote `record[key]`: its latest write's `:source`,
+   * else the document the record came from. */
+  fieldSource(record: object, key: string): string | undefined {
+    const log = this.fieldEvents.get(record)?.get(key);
+    const last = log?.at(-1) as Record<string, unknown> | undefined;
+    if (last !== undefined) return last[SOURCE_KEY] as string | undefined;
+    return this.owners.get(record);
+  }
+
+  /** Throw unless the expression being evaluated was written by the document
+   * that wrote the `_` field it reaches. */
+  private assertVisible(record: object, key: string, path: string[], scope: EvalRoots): void {
+    const owner = this.fieldSource(record, key) ?? '';
+    const reader = scope.source ?? '';
+    if (owner === reader) return;
+    const at = path.join('.');
+    throw new Error(
+      `private field: ${at} belongs to ${owner || 'an unnamed document'}, not ${reader || 'an unnamed document'}`,
+    );
+  }
+
+  /** Mark every record and list in `tree` not yet owned as written by `source`. */
+  private claim<T>(tree: T, source: string | undefined): T {
+    if (source === undefined) return tree;
+    const visit = (node: unknown) => {
+      if (node === null || typeof node !== 'object' || node instanceof Die) return;
+      if (!this.owners.has(node)) this.owners.set(node, source);
+      for (const child of Object.values(node)) visit(child);
+    };
+    visit(tree);
+    return tree;
+  }
+
   /** Evaluate a whole loaded document as an actor (`$` and `@` coincide). */
   evaluateDoc(file: string, provided?: Record<string, unknown>): unknown {
     const raw = this.docs.get(file);
     if (raw === undefined) throw new Error(`document not loaded: ${file}`);
+    this.claim(raw, file);
     if (RecordNode.materializeParams(raw, provided)) this.cache.clear();
     const scope: EvalRoots = {
       doc: raw,
@@ -512,7 +556,11 @@ export class GoblinEngine {
       app: this.appRoot,
       current: actorRaw,
     };
-    this.asSource(source ?? this.sourceOf(patch), actorRaw, () => this.applyNode(actorRaw, patch, scope));
+    const patchSource = source ?? this.sourceOf(patch);
+    this.claim(actorRaw, this.sourceOf(actorRaw) ?? '');
+    this.asSource(patchSource, actorRaw, () => this.applyNode(actorRaw, patch, { ...scope, source: patchSource }));
+    // Whatever is still unowned was created by the patch.
+    this.claim(actorRaw, patchSource ?? '');
     return actorRaw;
   }
 
@@ -631,7 +679,7 @@ export class GoblinEngine {
         node.forEach((item, index) => {
           const next = this.inlinePatchValue(item, scope);
           if (next !== item) {
-            node[index] = next;
+            node[index] = this.claim(next, this.owners.get(node) ?? '');
             wrote = true;
           }
           visit(node[index]);
@@ -644,7 +692,7 @@ export class GoblinEngine {
         if (isMetaKey(key) || isValidateKey(key)) continue;
         const next = this.inlinePatchValue(value, scope);
         if (next !== value) {
-          record[key] = next;
+          record[key] = this.claim(next, this.fieldSource(record, key) ?? '');
           wrote = true;
         }
         visit(record[key]);

@@ -33,6 +33,14 @@ export interface EvalRoots {
   path?: string[];
   /** User-provided values for `:param` nodes, keyed by dotted path or alias. */
   provided?: Record<string, unknown>;
+  /** Document that wrote the expression being evaluated — the only one that
+   * may reach `_` fields it wrote. */
+  source?: string;
+}
+
+/** A `_` key is private to the document that wrote it. */
+export function isPrivateKey(key: string): boolean {
+  return key.startsWith('_');
 }
 
 /** Any `:`-prefixed key (`:doc`, …) is metadata: never evaluated. */

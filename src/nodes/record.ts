@@ -21,7 +21,7 @@ import {
 } from '../constants';
 import type { GoblinEngine } from '../engine';
 import type { EvalRoots } from '../utils';
-import { isBareSigil, isMetaKey, isPathKey, isValidateKey, stripPlus } from '../utils';
+import { isBareSigil, isMetaKey, isPathKey, isPrivateKey, isValidateKey, stripPlus } from '../utils';
 import { Die } from './die';
 import { FunctionNode } from './function';
 import { Node } from './node';
@@ -221,7 +221,8 @@ export class RecordNode extends Node<Record<string, unknown>> {
       }
       const out: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(rec)) {
-        if (isMetaKey(k) || isValidateKey(k)) continue;
+        // `_` fields are working state, dropped with the metadata.
+        if (isMetaKey(k) || isValidateKey(k) || isPrivateKey(k)) continue;
         out[k] = RecordNode.stripMetadata(v);
       }
       return Object.keys(out).length === 0 ? null : out;
@@ -251,7 +252,7 @@ export class RecordNode extends Node<Record<string, unknown>> {
       }
       const fn = FunctionNode.match(key, value, record);
       if (fn) {
-        out[fn.name] = fn.evaluate(engine, scope);
+        out[fn.name] = fn.evaluate(engine, { ...scope, source: engine.fieldSource(record, key) });
         continue;
       }
       if (isPathKey(key)) continue; // patch instruction (incl. `+@.x`) — handled by apply()

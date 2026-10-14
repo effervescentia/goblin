@@ -9,9 +9,10 @@ $: Character
   :doc: Assign 15, 14, 13, 12, 10 and 8, one to each ability.
   # Six picks covering all six scores: each used exactly once.
   '!validate':
-    - $lib.set.subset([15, 14, 13, 12, 10, 8], .assigned)
-    - $lib.list.size(.assigned) == 6
-  assigned:
+    - $lib.set.subset([15, 14, 13, 12, 10, 8], ._assigned)
+    - $lib.list.size(._assigned) == 6
+  # Private: only this document's own rules read the picks back.
+  _assigned:
     - '@.abilities.strength.assigned'
     - '@.abilities.dexterity.assigned'
     - '@.abilities.constitution.assigned'

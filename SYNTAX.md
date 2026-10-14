@@ -32,6 +32,32 @@ Cross-namespace fallback: when a path is missing under `$` or `@`, the app
 root is tried next (so `@.utils.…` works when the app supplies `utils`); a
 missing `#` path falls back to the current document.
 
+## Private fields
+
+A key starting with `_` is **private**: only expressions written by the same
+document can reference it, through any sigil. Documents compose into one
+tree, so "written by" follows provenance rather than where a node sits: a
+field belongs to the `:source` of its latest write (see Change events), else
+to the document its record came from. A record call (`#.ability.entry(…)`)
+hands back nodes owned by the document that made the call.
+
+- A ref from another document that reaches a `_` segment throws
+  `private field: <path> belongs to <owner>, not <reader>`.
+- Function bodies read as the document that defined them, so a helper can
+  use its own document's `_` fields wherever it is called from.
+- `!validate` rules run over the evaluated sheet, where `.`-relative refs
+  see `_` fields: `5e/standard_array.yaml` keeps its picks as `_assigned`
+  and checks them with `$lib.set.subset([…], ._assigned)`.
+- Output keeps `_` fields; `--strip-metadata` drops them with the metadata.
+
+```yaml
+# Examples (examples/11-private-fields.yaml)
+budget:
+  _spent: 12
+  limit: 27
+  left: .limit - ._spent # → 15
+```
+
 ## Values: plain strings, expressions, dice
 
 A scalar is evaluated by shape:
@@ -162,8 +188,8 @@ table takes precedence for `$lib.…` refs. Native namespaces:
   lists without repeats, in order of first appearance; `subset(a, b)` is 1
   when every item of `a` is in `b`, else 0. Paired with `list.size`, it says
   "each exactly once": 5e's standard array checks
-  `$lib.set.subset([15, 14, 13, 12, 10, 8], .assigned)` and
-  `$lib.list.size(.assigned) == 6`.
+  `$lib.set.subset([15, 14, 13, 12, 10, 8], ._assigned)` and
+  `$lib.list.size(._assigned) == 6`.
 
 ```yaml
 # Examples (examples/09-stdlib.yaml)
@@ -266,8 +292,8 @@ receives data that breaks its own rules. `5e/point_buy.yaml` budgets point
 buy this way — six `bought` params on the point-buy ladder, a `spent` total,
 and `.spent <= .budget` over them — and `5e/standard_array.yaml` checks that
 its six `assigned` scores use each array value once: they cover the array
-(`$lib.set.subset([15, 14, 13, 12, 10, 8], .assigned)`) and number six
-(`$lib.list.size(.assigned) == 6`).
+(`$lib.set.subset([15, 14, 13, 12, 10, 8], ._assigned)`) and number six
+(`$lib.list.size(._assigned) == 6`).
 
 ```yaml
 # Examples (examples/06-metadata-validation.yaml)
@@ -471,7 +497,8 @@ constraints, so a UI can prompt with a display name rather than a path.
   node's `value` slot does not resolve; data records like `hit_points.value`
   are unaffected.
 - The CLI `--strip-metadata` flag collapses `:param` records (and
-  `{ :value, :events }` pairs) to their `:value`, leaving plain values only.
+  `{ :value, :events }` pairs) to their `:value`, leaving plain values only,
+  and drops private `_` fields.
 
 ```yaml
 # Examples (examples/08-parameters.yaml)

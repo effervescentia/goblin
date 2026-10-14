@@ -230,6 +230,59 @@ function fieldValue(node: unknown): unknown {
   return node && typeof node === 'object' && ':value' in node ? (node as Record<string, unknown>)[':value'] : node;
 }
 
+describe('private fields', () => {
+  // `register` records which document wrote each node, as loadFile does.
+  const engineWith = (docs: Record<string, unknown>) => {
+    const engine = new GoblinEngine('.');
+    for (const [file, doc] of Object.entries(docs)) engine.register(file, doc);
+    return engine;
+  };
+
+  it('lets a document read its own `_` fields', () => {
+    const engine = engineWith({ 'own.yaml': { _secret: 4, shown: '$._secret * 2', box: { _n: 1, m: '._n + 1' } } });
+    const out = engine.evaluateDoc('own.yaml') as { shown: number; box: { m: number } };
+    expect(out.shown).toBe(8);
+    expect(out.box.m).toBe(2);
+    // Stripped output drops them like metadata.
+    expect(RecordNode.stripMetadata(serialize(out))).toEqual({ shown: 8, box: { m: 2 } });
+  });
+
+  it('hides `_` fields from documents that did not write them', () => {
+    const engine = engineWith({
+      'actor.yaml': { stats: { _hidden: 3, open: 5 }, peek: '@.stats._hidden' },
+      'public.yaml': { '@.stats.sum': '@.stats.open + 1' },
+      'sneaky.yaml': { '@.stats.sneak': '@.stats._hidden + 1' },
+    });
+    const run = (patch: string) => {
+      // A `$tmpl` clone, as 5e/main.yaml composes its actor.
+      const actor = engine.evalExpr("$tmpl('actor.yaml')", { doc: {}, actor: {}, app: engine.appRoot, current: {} });
+      engine.apply(actor, patch);
+      return engine.evaluate(actor, { doc: actor, actor, app: engine.appRoot, current: actor }) as {
+        peek: number;
+        stats: { sum: unknown };
+      };
+    };
+    // The actor reads its own field; public fields cross documents freely.
+    const out = run('public.yaml');
+    expect(out.peek).toBe(3);
+    expect(fieldValue(out.stats.sum)).toBe(6);
+    expect(() => run('sneaky.yaml')).toThrow('private field: stats._hidden belongs to actor.yaml, not sneaky.yaml');
+  });
+
+  it('lets a patch read the `_` fields it wrote itself', () => {
+    const engine = engineWith({
+      'actor.yaml': { stats: { open: 5 } },
+      'patch.yaml': { '@.stats': { _bonus: 2, total: '@.stats.open + @.stats._bonus' } },
+    });
+    const actor = structuredClone(engine.docs.get('actor.yaml'));
+    engine.apply(actor, 'patch.yaml');
+    const out = engine.evaluate(actor, { doc: actor, actor, app: engine.appRoot, current: actor }) as {
+      stats: { total: unknown };
+    };
+    expect(fieldValue(out.stats.total)).toBe(7);
+  });
+});
+
 describe('apply', () => {
   function appliedEngine(level = 1) {
     const { engine, doc } = testEngine();

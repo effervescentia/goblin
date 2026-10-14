@@ -1,0 +1,11 @@
+# Private fields: a `_` key is visible only to the document that wrote it.
+# Refs from this file reach them; a patch from another file that tries
+# (`@.budget._spent`) fails with `private field: …`. `--strip-metadata`
+# drops them from the output.
+
+budget:
+  _spent: 12 # → hidden when stripped
+  limit: 27
+  left: .limit - ._spent # → 15, read from this same document
+  '!validate':
+    - ._spent <= .limit
