@@ -22,10 +22,6 @@ athletics_picks: $lib.list.count(@.picks, 'athletics') # → 2
 picks_made: $lib.list.size(@.picks) # → 2
 trained_in_stealth: $lib.list.has(@.picks, 'stealth') # → 0
 
-# `at` reads one item by position, from 0.
-ranked: [gold, silver, bronze]
-second_ranked: $lib.list.at(@.ranked, 1) # → silver
-
 # `set` treats lists as sets: no repeats, first appearance first.
 melee: [athletics, intimidation]
 scouting: [athletics, perception, survival]

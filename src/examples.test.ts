@@ -123,8 +123,6 @@ describe('examples', () => {
       athletics_picks: 2,
       picks_made: 2,
       trained_in_stealth: 0,
-      ranked: ['gold', 'silver', 'bronze'],
-      second_ranked: 'silver',
       melee: ['athletics', 'intimidation'],
       scouting: ['athletics', 'perception', 'survival'],
       either: ['athletics', 'intimidation', 'perception', 'survival'],
@@ -133,6 +131,11 @@ describe('examples', () => {
       melee_is_scouting: 0,
       picked_athletics: 1,
     });
+  });
+
+  it('12-indexing.yaml picks list items by position', () => {
+    const state = cli('examples/12-indexing.yaml') as { data: Record<string, unknown> };
+    expect(state.data).toMatchObject({ first: 'gold', last: 'bronze', placed: 'silver', missing: null, corner: 3 });
   });
 
   it('11-private-fields.yaml reads its own `_` fields and strips them', () => {

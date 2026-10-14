@@ -93,6 +93,27 @@ mean: ($.strength + $.dexterity) / 2  # → 14.5
 strong: $.strength > $.dexterity      # → true
 ```
 
+## Indexing
+
+`list[index]` picks one item from a list, counting from 0. A negative index
+counts from the end, and an index past either end gives `null`. The index is
+any expression, and indexes chain (`$.grid[1][0]`). Indexing anything but a
+list, or with a non-integer, throws. A `[` right after a ref, a call or
+another index is indexing; anywhere else it opens a list literal
+(`$lib.set.subset([1, 2], .picks)`).
+
+5e's roll-and-assign picks a pooled roll with
+`'@.roll_assign.rolls[.roll - 1]'` (quoted: YAML reserves a leading `@`).
+
+```yaml
+# Examples (examples/12-indexing.yaml)
+ranked: [gold, silver, bronze]
+first: $.ranked[0]              # → gold
+last: $.ranked[-1]              # → bronze
+placed: $.ranked[$.place - 1]   # → silver
+missing: $.ranked[5]            # → null
+```
+
 ## Dice
 
 `dN` / `NdM` (`d6`, `2d6`, `1d20`) are dice.
@@ -172,10 +193,7 @@ table takes precedence for `$lib.…` refs. Native namespaces:
   and sums the `keep` highest — 5e's rolled scores are
   `$lib.dice.keep_highest(4, 6, 3)` (4d6, drop the lowest). It takes numbers,
   since inline `NdM` rolls to a sum before a call could see each die.
-- `list`: `at(list, index)` — the item at `index`, from 0 (negative counts
-  from the end; `null` past either end). 5e's roll-and-assign picks a pooled
-  roll with `$lib.list.at(@.roll_assign.rolls, .roll - 1)`.
-  `count(value, item)`, `has(value, item)` (1 or 0, for arithmetic),
+- `list`: `count(value, item)`, `has(value, item)` (1 or 0, for arithmetic),
   `size(value)` — reading choices back out of a list, or out of a table of
   `:param` choice records, where a record counts its `:value` and never its
   `:options`. This is how picks become numbers: the 5e fighter's ability
@@ -197,7 +215,6 @@ floored: $lib.math.floor(2.9)                 # → 2
 smallest: $lib.math.min(3, 9)                 # → 3
 ability_roll: $lib.dice.keep_highest(4, 6, 3) # → 3..18
 athletics_picks: $lib.list.count(@.picks, 'athletics')
-second_ranked: $lib.list.at(@.ranked, 1)        # → silver
 ```
 
 ```yaml

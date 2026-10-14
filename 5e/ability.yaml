@@ -46,4 +46,4 @@
     :param: true
     :type: integer
     :options: [1, 2, 3, 4, 5, 6]
-  start: $lib.list.at(@.roll_assign.rolls, .roll - 1)
+  start: '@.roll_assign.rolls[.roll - 1]'

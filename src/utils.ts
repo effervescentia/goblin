@@ -186,11 +186,11 @@ function transpileStatement(stmt: string): { code: string; isAssign: boolean } {
     const rhs = protected_.slice(assignIdx + 1).trim();
     SIGIL_REF.lastIndex = 0;
     if (SIGIL_REF.test(lhs) && lhs.replace(SIGIL_REF, '').trim() === '') {
-      const code = `__assign(${JSON.stringify(lhs)}, (${rewriteExpr(rhs)}))`;
+      const code = `__assign(${JSON.stringify(lhs)}, (${rewriteIndexing(rewriteExpr(rhs))}))`;
       return { code: restoreLiterals(code, literals), isAssign: true };
     }
   }
-  return { code: restoreLiterals(rewriteExpr(protected_), literals), isAssign: false };
+  return { code: restoreLiterals(rewriteIndexing(rewriteExpr(protected_)), literals), isAssign: false };
 }
 
 function rewriteExpr(code: string): string {
@@ -203,8 +203,52 @@ function rewriteExpr(code: string): string {
     .replace(SIGIL_REF, (m) => `__resolve(${JSON.stringify(m)})`);
 }
 
+/** `x[i]` → `__index(x, i)`, leftmost first so chains (`x[0][1]`) nest. A `[`
+ * right after `)`, `]` or a name indexes; anywhere else it opens a list. */
+function rewriteIndexing(code: string): string {
+  for (let i = 0; i < code.length; i++) {
+    if (code[i] !== '[' || !/[\w)\]]/.test(code[i - 1] ?? '')) continue;
+    const close = matchBracket(code, i, 1);
+    const start = operandStart(code, i - 1);
+    const inner = rewriteIndexing(code.slice(i + 1, close));
+    const rewritten = `__index(${code.slice(start, i)}, ${inner})`;
+    return rewriteIndexing(code.slice(0, start) + rewritten + code.slice(close + 1));
+  }
+  return code;
+}
+
+/** Index of the bracket pairing with `code[at]`, scanning in `step` direction. */
+function matchBracket(code: string, at: number, step: 1 | -1): number {
+  let depth = 0;
+  for (let i = at; i >= 0 && i < code.length; i += step) {
+    const c = code.charAt(i);
+    if ('([{'.includes(c)) depth += step;
+    else if (')]}'.includes(c)) depth -= step;
+    if (depth === 0) return i;
+  }
+  throw new Error(`unbalanced brackets in expression: ${code}`);
+}
+
+/** Where the operand ending at `end` starts: a call with its name, a list, or a name. */
+function operandStart(code: string, end: number): number {
+  let i = end;
+  if (code[i] === ')' || code[i] === ']') i = matchBracket(code, i, -1);
+  else i += 1;
+  while (i > 0 && /[\w.$]/.test(code.charAt(i - 1))) i--;
+  return i;
+}
+
 function restoreLiterals(code: string, literals: string[]): string {
   return code.replace(/__STR(\d+)__/g, (_m, i: string) => literals[Number(i)]!);
+}
+
+/** `list[index]`: from 0, negative from the end, null past either end. */
+function indexList(list: unknown, index: unknown): unknown {
+  if (!Array.isArray(list)) throw new Error(`cannot index ${list === null ? 'null' : typeof list}: not a list`);
+  if (typeof index !== 'number' || !Number.isInteger(index)) {
+    throw new Error(`list index must be an integer, got ${String(index)}`);
+  }
+  return list.at(index) ?? null;
 }
 
 export interface ResolveHooks {
@@ -229,7 +273,9 @@ export function compileBody(body: string, paramNames: string[] = []) {
 
   // No stdlib free variable is bound here: `$lib.…` is the only way in, so
   // `$math` stays an ordinary document ref that resolves to nothing.
-  const fn = new Function('__resolve', '__assign', '__roll', ...paramNames, js) as (...args: unknown[]) => unknown;
+  const fn = new Function('__resolve', '__assign', '__roll', '__index', ...paramNames, js) as (
+    ...args: unknown[]
+  ) => unknown;
 
   return (hooks: ResolveHooks, params: Record<string, unknown> = {}) => {
     const roll = (count: number, sides: number) => {
@@ -237,7 +283,7 @@ export function compileBody(body: string, paramNames: string[] = []) {
       for (let i = 0; i < count; i++) total += 1 + Math.floor(Math.random() * sides);
       return total;
     };
-    const args = [hooks.resolve, hooks.assign, roll, ...paramNames.map((p) => params[p])];
+    const args = [hooks.resolve, hooks.assign, roll, indexList, ...paramNames.map((p) => params[p])];
     return fn(...args);
   };
 }

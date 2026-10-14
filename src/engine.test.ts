@@ -97,18 +97,11 @@ describe('dice', () => {
 
   it('rolls each list item once, however it is reached', () => {
     const engine = new GoblinEngine('.');
-    const doc = {
-      rolls: ['1d1000000 + 0', '1d1000000 + 0'],
-      first: '$lib.list.at($.rolls, 0)',
-      last: '$lib.list.at($.rolls, -1)',
-    };
+    const doc = { rolls: ['1d1000000 + 0', '1d1000000 + 0'], first: '$.rolls[0]', last: '$.rolls[-1]' };
     engine.docs.set('rolls.yaml', doc);
     const out = engine.evaluateDoc('rolls.yaml') as { rolls: number[]; first: number; last: number };
     expect(out.first).toBe(out.rolls[0]);
     expect(out.last).toBe(out.rolls[1]);
-    expect(
-      engine.evalExpr('$lib.list.at($.rolls, 2)', { doc, actor: doc, app: engine.appRoot, current: doc }),
-    ).toBeNull();
   });
 
   it('keeps the highest dice with $lib.dice.keep_highest', () => {
@@ -229,6 +222,42 @@ describe('evaluate', () => {
 function fieldValue(node: unknown): unknown {
   return node && typeof node === 'object' && ':value' in node ? (node as Record<string, unknown>)[':value'] : node;
 }
+
+describe('indexing', () => {
+  const scopeOf = (doc: Record<string, unknown>): EvalRoots => ({ doc, actor: doc, app: {}, current: doc });
+  const doc = {
+    ranked: ['gold', 'silver', 'bronze'],
+    grid: [
+      [1, 2],
+      [3, 4],
+    ],
+    place: 2,
+    name: 'x',
+  };
+
+  it('picks items from 0, negative from the end, null past either end', () => {
+    const engine = new GoblinEngine('.');
+    expect(engine.evalExpr('$.ranked[0]', scopeOf(doc))).toBe('gold');
+    expect(engine.evalExpr('$.ranked[-1]', scopeOf(doc))).toBe('bronze');
+    expect(engine.evalExpr('$.ranked[$.place - 1]', scopeOf(doc))).toBe('silver');
+    expect(engine.evalExpr('$.ranked[3]', scopeOf(doc))).toBeNull();
+    expect(engine.evalExpr('$.ranked[-4]', scopeOf(doc))).toBeNull();
+  });
+
+  it('chains, nests, and leaves list literals alone', () => {
+    const engine = new GoblinEngine('.');
+    expect(engine.evalExpr('$.grid[1][0]', scopeOf(doc))).toBe(3);
+    expect(engine.evalExpr('$.grid[$.grid[0][0]][1]', scopeOf(doc))).toBe(4);
+    expect(engine.evalExpr('$lib.set.subset([1, 2], [2, 1, 3])', scopeOf(doc))).toBe(1);
+    expect(engine.evalExpr('[$.place, 5][1]', scopeOf(doc))).toBe(5);
+  });
+
+  it('refuses non-lists and non-integer indexes', () => {
+    const engine = new GoblinEngine('.');
+    expect(() => engine.evalExpr('$.name[0]', scopeOf(doc))).toThrow('cannot index string: not a list');
+    expect(() => engine.evalExpr('$.ranked[0.5]', scopeOf(doc))).toThrow('list index must be an integer, got 0.5');
+  });
+});
 
 describe('private fields', () => {
   // `register` records which document wrote each node, as loadFile does.

@@ -15,9 +15,7 @@ export function picksOf(value: unknown): unknown[] {
 
 /** `$lib.list` — reading choices back out, so documents can turn picks into
  * numbers. */
-export const LIST_LIB: Record<string, (...args: never[]) => unknown> = {
-  /** The item at `index` (from 0, negative from the end), null past either end. */
-  at: ((value: unknown, index: number) => (Array.isArray(value) ? (value.at(index) ?? null) : null)) as never,
+export const LIST_LIB: Record<string, (...args: never[]) => number> = {
   /** How many times `item` was picked. */
   count: ((value: unknown, item: unknown) => picksOf(value).filter((pick) => pick === item).length) as never,
   /** 1 when picked at all, else 0 — expressions do arithmetic on that. */
