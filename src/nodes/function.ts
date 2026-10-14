@@ -91,7 +91,7 @@ export class FunctionNode extends Node<unknown> {
   }
 
   /** Printed form: the `$goblin` descriptor, or `[fn name()]` for natives. */
-  static serialize(fn: unknown): unknown {
+  static debug(fn: unknown): unknown {
     const meta = FunctionNode.metaOf(fn);
     if (meta) {
       return {
@@ -103,6 +103,13 @@ export class FunctionNode extends Node<unknown> {
     }
     const name = (fn as { name?: unknown }).name;
     return `[fn ${typeof name === 'string' && name ? name : 'anonymous'}()]`;
+  }
+
+  /** Plain output keeps user function bodies and native function labels. */
+  static print(fn: unknown): unknown {
+    const meta = FunctionNode.metaOf(fn);
+    if (meta) return meta.source.trim();
+    return FunctionNode.debug(fn);
   }
 
   override evaluate(engine: GoblinEngine, scope: EvalRoots): unknown {

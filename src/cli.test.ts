@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parseArgs, parseParamValue, USAGE } from './cli';
-import { RecordNode } from './nodes/record';
+import { print } from './nodes/serialize';
 
 describe('parseArgs', () => {
   it('defaults to no entry and pretty output', () => {
@@ -158,10 +158,10 @@ describe('parseArgs', () => {
   });
 });
 
-describe('RecordNode.stripMetadata', () => {
+describe('print', () => {
   it('drops :-prefixed and !validate keys recursively, keeping values', () => {
     expect(
-      RecordNode.stripMetadata({
+      print({
         name: 'Aria',
         hit_points: { '!validate': ['.current >= 0'], current: 10, max: 10 },
         features: { second_wind: { ':doc': 'Regain.' } },
@@ -188,8 +188,8 @@ describe('RecordNode.stripMetadata', () => {
       attacks: 2,
       armor: ['shields'],
     });
-    expect(RecordNode.stripMetadata('d10')).toBe('d10');
-    expect(RecordNode.stripMetadata(null)).toBeNull();
+    expect(print('d10')).toBe('d10');
+    expect(print(null)).toBeNull();
   });
 });
 

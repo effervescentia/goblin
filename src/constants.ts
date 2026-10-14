@@ -125,7 +125,7 @@ export const SUBTRACT_KEY = ':subtract';
 export const LINE_KEY = ':line';
 export const COLUMN_KEY = ':column';
 
-/** Printed function descriptor keys (see `FunctionNode.serialize`). */
+/** Debug function descriptor keys (see `FunctionNode.debug`). */
 export const PARAMS_KEY = ':params';
 export const SOURCE_KEY = ':source';
 export const DEPS_KEY = ':deps';

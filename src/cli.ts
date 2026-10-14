@@ -13,6 +13,7 @@
  */
 import { GoblinEngine } from './engine';
 import { RecordNode } from './nodes/record';
+import { print } from './nodes/serialize';
 
 export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--strip-metadata] [--help]
 
@@ -199,10 +200,7 @@ if (import.meta.main) {
       process.exit(0);
     }
     const state = await resolveAppState(process.cwd(), args.entry, args.params, args.overrides);
-    const out =
-      args.stripMetadata && 'data' in state
-        ? { data: RecordNode.stripMetadata((state as { data: unknown }).data) }
-        : state;
+    const out = args.stripMetadata && 'data' in state ? { data: print((state as { data: unknown }).data) } : state;
     process.stdout.write(`${JSON.stringify(out, null, args.compact ? 0 : 2)}\n`);
   } catch (err) {
     console.error(err instanceof Error ? err.message : err);

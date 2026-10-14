@@ -46,7 +46,7 @@ import { ExpressionNode } from './nodes/expression';
 import { FunctionNode } from './nodes/function';
 import { parse } from './nodes/parse';
 import { type MissingParam, RecordNode } from './nodes/record';
-import { serialize } from './nodes/serialize';
+import { debug } from './nodes/serialize';
 import {
   type AssignOp,
   compileBody,
@@ -649,7 +649,7 @@ export class GoblinEngine {
     this.expandCalls(actorRaw, scope);
     const outstanding = RecordNode.collectParams(actorRaw).filter((param) => provided[param.path] === undefined);
     if (outstanding.length > 0) return { query: outstanding };
-    return { data: serialize(this.evaluate(actorRaw, scope)) };
+    return { data: debug(this.evaluate(actorRaw, scope)) };
   }
 
   // -- patches (class files, levels, conditions) ----------------------------

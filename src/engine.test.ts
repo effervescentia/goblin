@@ -5,7 +5,7 @@ import { Die, DieNode } from './nodes/die';
 import { ExpressionNode } from './nodes/expression';
 import { FunctionNode } from './nodes/function';
 import { RecordNode } from './nodes/record';
-import { serialize } from './nodes/serialize';
+import { debug, print } from './nodes/serialize';
 import { type EvalRoots, parseRef } from './utils';
 
 function testEngine() {
@@ -496,7 +496,7 @@ describe('private fields', () => {
     expect(out.shown).toBe(8);
     expect(out.box.m).toBe(2);
     // Stripped output drops them like metadata.
-    expect(RecordNode.stripMetadata(serialize(out))).toEqual({ shown: 8, box: { m: 2 } });
+    expect(print(out)).toEqual({ shown: 8, box: { m: 2 } });
   });
 
   it('hides `_` fields from documents that did not write them', () => {
@@ -595,7 +595,7 @@ describe('apply', () => {
     const { out } = appliedEngine();
     // The actor tree is a test fixture, not a loaded document, so the origin
     // event has no `:source`; the patch is a registered document, so it does.
-    expect(serialize((out.monk as Record<string, unknown>).martial_arts_die)).toEqual({
+    expect(debug((out.monk as Record<string, unknown>).martial_arts_die)).toEqual({
       ':value': expect.anything(),
       ':events': [{ ':source': 'monk.yaml', ':set': '1d6' }],
     });
@@ -628,7 +628,7 @@ describe('apply', () => {
     expect(String(fieldValue(strike.die))).toBe('1d8');
     expect(fieldValue(strike.type)).toBe('bonus_action');
     // The `$then` write lands over the actor's own `d4`.
-    expect(serialize(strike.die)).toEqual({
+    expect(debug(strike.die)).toEqual({
       ':value': '1d8',
       ':events': [{ ':set': 'd4' }, { ':source': 'monk.yaml', ':set': '1d8' }],
     });
@@ -771,29 +771,29 @@ describe('validate with patched fields', () => {
   });
 });
 
-describe('serialize', () => {
+describe('debug', () => {
   it('converts dice and functions to JSON-friendly values', () => {
-    expect(serialize(new Die(1, 6, '1d6'))).toBe('1d6');
-    expect(serialize(function roll() {})).toBe('[fn roll()]');
-    expect(serialize({ a: [new Die(1, 4, 'd4')] })).toEqual({ a: ['d4'] });
+    expect(debug(new Die(1, 6, '1d6'))).toBe('1d6');
+    expect(debug(function roll() {})).toBe('[fn roll()]');
+    expect(debug({ a: [new Die(1, 4, 'd4')] })).toEqual({ a: ['d4'] });
   });
 
   it('prints tagged functions as :type/:source/:params/:deps objects', () => {
     const { engine } = testEngine();
     const out = engine.evaluateDoc('main.yaml') as Record<string, any>;
-    expect(serialize(out.utils.ability_modifier)).toEqual({
+    expect(debug(out.utils.ability_modifier)).toEqual({
       ':type': 'function',
       ':params': ['x'],
       ':source': '$lib.math.floor((x - 10) / 2)',
       ':deps': [],
     });
-    expect(serialize((out.initiative as { roll: unknown }).roll)).toEqual({
+    expect(debug((out.initiative as { roll: unknown }).roll)).toEqual({
       ':type': 'function',
       ':params': [],
       ':source': '1d20 + .base',
       ':deps': ['.base'],
     });
-    expect(serialize((out.rest as { short: unknown }).short)).toEqual({
+    expect(debug((out.rest as { short: unknown }).short)).toEqual({
       ':type': 'function',
       ':params': [],
       ':source': '#.hit_points.current = $lib.math.min(#.hit_points.current + #.hit_die, #.hit_points.max)',
@@ -822,7 +822,7 @@ describe('FunctionNode.detectDeps', () => {
 
   it('trims whitespace from printed source', () => {
     const fn = FunctionNode.tag(() => 1, { name: 'f', params: [], source: '  1d20 + 2\n', deps: [] });
-    expect(serialize(fn)).toEqual({ ':type': 'function', ':params': [], ':source': '1d20 + 2', ':deps': [] });
+    expect(debug(fn)).toEqual({ ':type': 'function', ':params': [], ':source': '1d20 + 2', ':deps': [] });
   });
 });
 
@@ -1115,7 +1115,7 @@ describe('parameters', () => {
         ':events': [{ ':set': { ':doc': 'Your name.', ':param': true } }, { ':source': 'override', ':set': 'Aria' }],
       },
     });
-    expect(RecordNode.stripMetadata(resolved.data)).toEqual({ computed: 99, brand: { new: 1 }, name: 'Aria' });
+    expect(print(resolved.data)).toEqual({ computed: 99, brand: { new: 1 }, name: 'Aria' });
   });
 
   it('resolve keeps :type contracts on overridden params', () => {

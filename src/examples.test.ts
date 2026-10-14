@@ -166,7 +166,7 @@ describe('examples', () => {
   it('applies 07-class.yaml to 07-actor.yaml with $if gating', () => {
     const script = `
       import { GoblinEngine } from './src/engine.ts';
-      import { serialize } from './src/nodes/serialize.ts';
+      import { debug } from './src/nodes/serialize.ts';
       const e = new GoblinEngine('examples');
       // Fields a patch wrote print as { :value, :events } — read the value.
       const val = (v) => (v && typeof v === 'object' && ':value' in v ? v[':value'] : v);
@@ -189,9 +189,9 @@ describe('examples', () => {
         l2die: String(val(l2.actions.unarmed_strike.die)),
         l2type: val(l2.actions.unarmed_strike.type),
         l2focus: 'monks_focus' in l2.features,
-        l2dieEvents: serialize(l2.actions.unarmed_strike.die[':events']),
+        l2dieEvents: debug(l2.actions.unarmed_strike.die[':events']),
         martialEvents: l2.features.martial_arts[':events'],
-        martialDieEvents: serialize(l2.monk.martial_arts_die[':events']),
+        martialDieEvents: debug(l2.monk.martial_arts_die[':events']),
       }));
     `;
     const out = execFileSync('bun', ['-e', script], { cwd: root, encoding: 'utf8' });

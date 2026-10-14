@@ -3,9 +3,12 @@ import type { EvalRoots } from '../utils';
 import { Node } from './node';
 
 export class ListNode extends Node<unknown[]> {
-  /** Printed form: item-wise, through the caller's `each` for recursion. */
-  static serialize(items: unknown[], each: (value: unknown) => unknown): unknown[] {
-    return items.map(each);
+  override debug(each: (value: unknown) => unknown): unknown[] {
+    return this.raw.map(each);
+  }
+
+  override print(each: (value: unknown) => unknown): unknown[] {
+    return this.raw.map(each);
   }
 
   override evaluate(engine: GoblinEngine, scope: EvalRoots): unknown {

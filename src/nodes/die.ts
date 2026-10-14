@@ -57,9 +57,8 @@ export class DieNode extends Node<Die> {
     return null;
   }
 
-  /** Printed form: the spec as written (`d6`, `2d8`), never a roll. */
-  static serialize(die: Die): string {
-    return die.toString();
+  override debug(): string {
+    return this.raw.toString();
   }
 
   override evaluate(): unknown {

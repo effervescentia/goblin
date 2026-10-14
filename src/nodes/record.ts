@@ -197,37 +197,22 @@ export class RecordNode extends Node<Record<string, unknown>> {
     return wrote;
   }
 
-  /** Printed form: entry-wise, through the caller's `each` for recursion. */
-  static serialize(record: Record<string, unknown>, each: (value: unknown) => unknown): Record<string, unknown> {
-    return Object.fromEntries(Object.entries(record).map(([key, value]) => [key, each(value)]));
+  override debug(each: (value: unknown) => unknown): Record<string, unknown> {
+    return Object.fromEntries(Object.entries(this.raw).map(([key, value]) => [key, each(value)]));
   }
 
-  /**
-   * Recursively drop metadata keys (`:…` and `!validate`) from resolved
-   * output. `:param` records collapse to their `:value`; serialized functions
-   * (`{ :type: 'function', :source, … }`) print as their source expression;
-   * other records left empty (e.g. `{ :doc }`) collapse to `null`. Arrays are
-   * mapped item-wise; scalars pass through.
-   */
-  static stripMetadata(value: unknown): unknown {
-    if (Array.isArray(value)) return value.map(RecordNode.stripMetadata);
-    if (value && typeof value === 'object') {
-      const rec = value as Record<string, unknown>;
-      if (RecordNode.isParam(rec) || RecordNode.isEvented(rec)) {
-        return RecordNode.stripMetadata(rec[PARAM_VALUE_KEY] ?? null);
-      }
-      if (rec[TYPE_KEY] === 'function' && typeof rec[SOURCE_KEY] === 'string') {
-        return rec[SOURCE_KEY];
-      }
-      const out: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(rec)) {
-        // `_` fields are working state, dropped with the metadata.
-        if (isMetaKey(k) || isValidateKey(k) || isPrivateKey(k)) continue;
-        out[k] = RecordNode.stripMetadata(v);
-      }
-      return Object.keys(out).length === 0 ? null : out;
+  override print(each: (value: unknown) => unknown): unknown {
+    const record = this.raw;
+    if (RecordNode.isParam(record) || RecordNode.isEvented(record)) {
+      return each(record[PARAM_VALUE_KEY] ?? null);
     }
-    return value;
+    if (record[TYPE_KEY] === 'function' && typeof record[SOURCE_KEY] === 'string') return record[SOURCE_KEY];
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(record)) {
+      if (isMetaKey(key) || isValidateKey(key) || isPrivateKey(key)) continue;
+      out[key] = each(value);
+    }
+    return Object.keys(out).length === 0 ? null : out;
   }
 
   override evaluate(engine: GoblinEngine, scope: EvalRoots): unknown {
