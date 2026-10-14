@@ -3,7 +3,8 @@
 # as #.levels.level_for(@.xp). Inside the body, `.` is this document's
 # root and `xp` is the call argument.
 
-thresholds:
+# Private: only level_for (defined here) reads them.
+_thresholds:
   l2: 300
   l3: 900
   l4: 2700
@@ -26,16 +27,16 @@ thresholds:
 
 # Each met threshold adds 1 (comparisons coerce to 0/1 — no conditionals).
 level_for(xp): >-
-  1 + (xp >= .thresholds.l2) + (xp >= .thresholds.l3) +
-  (xp >= .thresholds.l4) + (xp >= .thresholds.l5) +
-  (xp >= .thresholds.l6) + (xp >= .thresholds.l7) +
-  (xp >= .thresholds.l8) + (xp >= .thresholds.l9) +
-  (xp >= .thresholds.l10) + (xp >= .thresholds.l11) +
-  (xp >= .thresholds.l12) + (xp >= .thresholds.l13) +
-  (xp >= .thresholds.l14) + (xp >= .thresholds.l15) +
-  (xp >= .thresholds.l16) + (xp >= .thresholds.l17) +
-  (xp >= .thresholds.l18) + (xp >= .thresholds.l19) +
-  (xp >= .thresholds.l20)
+  1 + (xp >= ._thresholds.l2) + (xp >= ._thresholds.l3) +
+  (xp >= ._thresholds.l4) + (xp >= ._thresholds.l5) +
+  (xp >= ._thresholds.l6) + (xp >= ._thresholds.l7) +
+  (xp >= ._thresholds.l8) + (xp >= ._thresholds.l9) +
+  (xp >= ._thresholds.l10) + (xp >= ._thresholds.l11) +
+  (xp >= ._thresholds.l12) + (xp >= ._thresholds.l13) +
+  (xp >= ._thresholds.l14) + (xp >= ._thresholds.l15) +
+  (xp >= ._thresholds.l16) + (xp >= ._thresholds.l17) +
+  (xp >= ._thresholds.l18) + (xp >= ._thresholds.l19) +
+  (xp >= ._thresholds.l20)
 
 # Proficiency climbs +1 at levels 5, 9, 13, 17.
 'proficiency_for(level)': 2 + $lib.math.floor((level - 1) / 4)

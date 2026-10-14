@@ -290,8 +290,9 @@ The CLI runs them on every resolved sheet: failing rules replace the `{ data }`
 envelope with `{ errors }`, listing each failure message, so a caller never
 receives data that breaks its own rules. `5e/point_buy.yaml` budgets point
 buy this way — six `bought` params on the point-buy ladder, a `spent` total,
-and `.spent <= .budget` over them — and `5e/standard_array.yaml` checks that
-its six `assigned` scores use each array value once: they cover the array
+and `.spent <= ._budget` over them (the budget private to that file) — and
+`5e/standard_array.yaml` checks that its six `_assigned` scores use each
+array value once: they cover the array
 (`$lib.set.subset([15, 14, 13, 12, 10, 8], ._assigned)`) and number six
 (`$lib.list.size(._assigned) == 6`).
 

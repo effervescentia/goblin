@@ -8,8 +8,9 @@ $: Character
   :label: Point Buy
   :doc: 27 points buy your six scores; each starts at 8 and tops out at 15.
   '!validate':
-    - .spent <= .budget
-  budget: 27
+    - .spent <= ._budget
+  # Private: the limit only this document's rule reads.
+  _budget: 27
   spent: >-
     #.ability.point_cost(@.abilities.strength.bought) +
     #.ability.point_cost(@.abilities.dexterity.bought) +

@@ -320,9 +320,10 @@ describe('5e', () => {
 
     // 15/14/13/10/10/8 costs 9+7+5+2+2+0 = 25 of 27.
     const data = cli('5e/main.yaml', '--strip-metadata', ...spread(15, 14, 13, 10, 10, 8), ...rest) as {
-      data: { point_buy: { budget: number; spent: number }; abilities: Record<string, { modifier: number }> };
+      data: { point_buy: { spent: number }; abilities: Record<string, { modifier: number }> };
     };
-    expect(data.data.point_buy).toEqual({ budget: 27, spent: 25 });
+    // The private `_budget` stays out of stripped output.
+    expect(data.data.point_buy).toEqual({ spent: 25 });
     expect(data.data.abilities.strength?.modifier).toBe(2);
     expect(data.data.abilities.charisma?.modifier).toBe(-1);
 
@@ -333,7 +334,7 @@ describe('5e', () => {
     expect(exact.data.point_buy.spent).toBe(27);
 
     // One point over the budget fails the rule.
-    expect(cli('5e/main.yaml', ...spread(15, 15, 15, 9, 8, 8), ...rest)).toEqual({ errors: ['.spent <= .budget'] });
+    expect(cli('5e/main.yaml', ...spread(15, 15, 15, 9, 8, 8), ...rest)).toEqual({ errors: ['.spent <= ._budget'] });
     // A score off the point-buy ladder is refused before any budget check.
     expect(cliFails('5e/main.yaml', ...spread(16, 8, 8, 8, 8, 8), ...rest)).toContain(
       'param range mismatch: abilities.strength.bought expected 0 to 7, got 8',
