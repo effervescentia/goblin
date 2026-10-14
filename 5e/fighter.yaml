@@ -62,6 +62,13 @@ $: Character
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 4'
+    '@.improvements.level_4':
+      :label: Ability Score Improvement (level 4)
+      :doc: 'Pick two: one ability twice for +2, or two abilities for +1 each.'
+      :param: true
+      :type: array
+      :options: [strength, dexterity, constitution, intelligence, wisdom, charisma]
+      :count: 2
   +extra_attack:
     :label: Extra Attack
     :doc: Strike twice whenever you take the Attack action.
@@ -75,6 +82,13 @@ $: Character
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 6'
+    '@.improvements.level_6':
+      :label: Ability Score Improvement (level 6)
+      :doc: 'Pick two: one ability twice for +2, or two abilities for +1 each.'
+      :param: true
+      :type: array
+      :options: [strength, dexterity, constitution, intelligence, wisdom, charisma]
+      :count: 2
   +subclass_feature_1:
     :label: Martial Archetype Feature
     :doc: Martial archetype feature (see your subclass).
@@ -83,6 +97,13 @@ $: Character
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 8'
+    '@.improvements.level_8':
+      :label: Ability Score Improvement (level 8)
+      :doc: 'Pick two: one ability twice for +2, or two abilities for +1 each.'
+      :param: true
+      :type: array
+      :options: [strength, dexterity, constitution, intelligence, wisdom, charisma]
+      :count: 2
   +indomitable:
     :label: Indomitable
     :doc: Reroll a failed saving throw, once per long rest.
@@ -101,10 +122,24 @@ $: Character
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 12'
+    '@.improvements.level_12':
+      :label: Ability Score Improvement (level 12)
+      :doc: 'Pick two: one ability twice for +2, or two abilities for +1 each.'
+      :param: true
+      :type: array
+      :options: [strength, dexterity, constitution, intelligence, wisdom, charisma]
+      :count: 2
   +ability_score_improvement_5:
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 14'
+    '@.improvements.level_14':
+      :label: Ability Score Improvement (level 14)
+      :doc: 'Pick two: one ability twice for +2, or two abilities for +1 each.'
+      :param: true
+      :type: array
+      :options: [strength, dexterity, constitution, intelligence, wisdom, charisma]
+      :count: 2
   +subclass_feature_3:
     :label: Martial Archetype Feature
     :doc: Martial archetype feature (see your subclass).
@@ -113,6 +148,13 @@ $: Character
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 16'
+    '@.improvements.level_16':
+      :label: Ability Score Improvement (level 16)
+      :doc: 'Pick two: one ability twice for +2, or two abilities for +1 each.'
+      :param: true
+      :type: array
+      :options: [strength, dexterity, constitution, intelligence, wisdom, charisma]
+      :count: 2
   +subclass_feature_4:
     :label: Martial Archetype Feature
     :doc: Martial archetype feature (see your subclass).
@@ -121,3 +163,10 @@ $: Character
     :label: Epic Boon
     :doc: Add +2 to one ability score or +1 to two, or take an epic boon feat.
     $if: '@.level >= 19'
+    '@.improvements.level_19':
+      :label: Epic Boon (level 19)
+      :doc: 'Pick two: one ability twice for +2, or two abilities for +1 each.'
+      :param: true
+      :type: array
+      :options: [strength, dexterity, constitution, intelligence, wisdom, charisma]
+      :count: 2

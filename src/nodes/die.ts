@@ -1,10 +1,7 @@
 import { DIE_LITERAL } from '../constants';
 import { Node } from './node';
 
-/**
- * A rolled die value. Arithmetic rolls it (`hit_points + hit_die`), while a
- * standalone literal keeps its spec (`d6`) through serialization.
- */
+/** A die value: arithmetic rolls it, a standalone literal keeps its spec. */
 export class Die {
   constructor(
     public readonly count: number,

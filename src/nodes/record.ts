@@ -47,13 +47,8 @@ export class RecordNode extends Node<Record<string, unknown>> {
     return typeof node === 'object' && node !== null && EVENTS_KEY in node && PARAM_VALUE_KEY in node;
   }
 
-  /**
-   * Attach the writes that produced a value. A record takes `:events` as one
-   * more metadata key, in place — a feature or `:param` node keeps its own
-   * shape rather than gaining a wrapper layer. Everything else (scalars,
-   * arrays, dice) pairs up as `{ :value, :events }`. Untouched fields (no
-   * events) print bare, exactly as before.
-   */
+  /** Attach the writes that produced a value: a record takes `:events` in
+   * place, everything else pairs up as `{ :value, :events }`. */
   static withEvents(value: unknown, events: unknown[] | undefined): unknown {
     if (events === undefined) return value;
     if (value !== null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Die)) {
@@ -237,7 +232,7 @@ export class RecordNode extends Node<Record<string, unknown>> {
         continue;
       }
       const evaluated = engine.evaluate(value, { ...scope, current: record, path: [...base, key] });
-      // A field a patch wrote prints with its history (see `GoblinEngine.apply`).
+      // A field a patch wrote prints with its history.
       out[key] = RecordNode.withEvents(evaluated, engine.eventsFor(record, key));
     }
     return out;

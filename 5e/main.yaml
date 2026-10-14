@@ -7,7 +7,8 @@
 # Play: goblin 5e/main.yaml --param name=Aria --param xp=6500 \
 #         --param features.fighting_style=dueling \
 #         --param features.martial_archetype=Champion \
-#         --param skills.trained='["athletics", "perception"]'
+#         --param skills.trained='["athletics", "perception"]' \
+#         --param improvements.level_4='["strength", "strength"]'
 # Missing choices come back as { query }; a full sheet as { data }.
 
 $: Character

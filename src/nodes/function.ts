@@ -54,10 +54,7 @@ export class FunctionNode extends Node<string> {
     return new FunctionNode(key, value, record);
   }
 
-  /**
-   * Detect a body's reference dependencies: sigil refs outside string
-   * literals, dot-less sigils normalized, deduplicated in order.
-   */
+  /** Sigil refs a body resolves, in order, outside string literals. */
   static detectDeps(body: string): string[] {
     const code = body.replace(STRING_LITERAL, '').replace(DOTLESS_SIGIL, '$1.');
     SIGIL_REF.lastIndex = 0;
@@ -80,11 +77,7 @@ export class FunctionNode extends Node<string> {
     return typeof meta === 'object' && meta !== null ? (meta as GoblinFunctionMeta) : undefined;
   }
 
-  /**
-   * Printed form: the `{ :type, :params, :source, :deps }` descriptor read
-   * back from the closure's `$goblin` tag. Untagged callables (engine natives
-   * like `$lib.math.floor`) print as `[fn name()]`.
-   */
+  /** Printed form: the `$goblin` descriptor, or `[fn name()]` for natives. */
   static serialize(fn: unknown): unknown {
     const meta = FunctionNode.metaOf(fn);
     if (meta) {

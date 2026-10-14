@@ -61,12 +61,8 @@ import {
   stripPlus,
 } from './utils';
 
-/**
- * `+field` on a scalar: add to the value already there. Two numbers sum;
- * anything else composes an expression, so an added expression stays lazy
- * (`attacks: 1` + `1 + (@.level >= 11)` → `(1) + (1 + (@.level >= 11))`).
- * A field holding a record or a list has no scalar to add to.
- */
+/** `+field` on a scalar: two numbers sum, anything else composes an
+ * expression so an added expression stays lazy. */
 function addRaw(existing: unknown, value: unknown, label: string): unknown {
   if (existing === undefined || existing === null) return deepClone(value);
   if (typeof existing === 'number' && typeof value === 'number') return existing + value;
@@ -76,11 +72,8 @@ function addRaw(existing: unknown, value: unknown, label: string): unknown {
   return `(${String(existing)}) + (${String(value)})`;
 }
 
-/**
- * How a patch list applies: `+item` entries add to the target, a plain list
- * replaces it. The two readings are incompatible, so a list that mixes them
- * is rejected rather than silently picking one.
- */
+/** `+item` entries add, a plain list replaces; mixing the two readings in one
+ * list is rejected rather than silently picking one. */
 function isAdditiveList(items: unknown[], label = 'list'): boolean {
   const additions = items.filter((item) => typeof item === 'string' && item.startsWith('+'));
   if (additions.length > 0 && additions.length < items.length) {
@@ -128,11 +121,8 @@ export class GoblinEngine {
     Object.assign(this.library, withNatives(data as Record<string, unknown>));
   }
 
-  /**
-   * Implicitly load the stdlib document shipped with the engine
-   * (`src/lib/lib.yaml`). Missing files are normal (tests seed documents
-   * directly) — the in-code natives stand alone.
-   */
+  /** Load the stdlib document shipped with the engine. A missing file is
+   * normal (tests seed documents directly): the natives stand alone. */
   private async ensureLib(): Promise<void> {
     if (this.libLoaded) return;
     this.libLoaded = true;
@@ -275,6 +265,9 @@ export class GoblinEngine {
       const value = this.evaluate(rawTarget, {
         ...scope,
         current: parentOf(base, segments) ?? scope.current,
+        // The target's own path, so `:param` nodes inside it look up provided
+        // values by where they live, not where the reference was written.
+        path: root === CURRENT ? [...(scope.path ?? []), ...segments] : segments,
       });
       this.cache.set(key, value);
       return value;
@@ -283,13 +276,8 @@ export class GoblinEngine {
     }
   }
 
-  /**
-   * Wrapper records dereference to the value they hold: a `:param` record to
-   * its materialized `value` slot (so a bare `@.xp` reads the filled value —
-   * provided, default, or `null`), a `{ :value, :events }` pair to its
-   * `:value` (so refs into evaluated output, e.g. `!validate` predicates,
-   * see through a field's history). Anything else passes through untouched.
-   */
+  /** Wrappers dereference to the value they hold, so a bare `@.xp` reads the
+   * filled param and predicates see through a field's event history. */
   private derefValue(rawTarget: unknown): unknown {
     if (RecordNode.isParam(rawTarget)) {
       const slot = rawTarget[VALUE_KEY];
@@ -416,10 +404,8 @@ export class GoblinEngine {
    * created — but a `:param` record keeps its `:type` contract. Mutates like
    * `apply`; re-load or re-resolve for a pristine tree.
    *
-   * Each value actually changed is filed as an `override` event, so a sheet
-   * shows the explicit value beating whatever derived it. Overrides apply
-   * both before and after the patches (explicit values always win), so a
-   * re-application that writes the value already in place is not an event.
+   * Changed values file an `override` event. Overrides apply both before and
+   * after the patches, so re-writing the value already there is not an event.
    */
   applyOverrides(actorRaw: unknown, overrides: Record<string, unknown>): void {
     this.asSource(OVERRIDE_SOURCE, actorRaw, () => {
@@ -490,11 +476,8 @@ export class GoblinEngine {
     return this.applyRaw(actorRaw, patch, patchFile);
   }
 
-  /**
-   * Apply an in-memory patch (e.g. a `$tmpl('…')` clone) onto an actor.
-   * `source` names the patch in the fields' event logs; it defaults to the
-   * document the tree came from, when the engine loaded it.
-   */
+  /** Apply an in-memory patch (e.g. a `$tmpl('…')` clone) onto an actor.
+   * `source` names it in the event logs; defaults to the document it came from. */
   applyRaw(actorRaw: unknown, patch: unknown, source?: string): unknown {
     const scope: EvalRoots = {
       doc: patch,
@@ -532,21 +515,13 @@ export class GoblinEngine {
     return source === undefined ? { [kind]: value } : { [SOURCE_KEY]: source, [kind]: value };
   }
 
-  /**
-   * Note a patch write on `target[key]`, in application order. Call before
-   * writing: the first event on a field that already holds a value records
-   * that value first, so a history reads base-then-patch. Fields no patch
-   * ever touched stay event-free, and print as bare values.
-   */
+  /** Note a patch write, in application order. Call before writing. */
   private recordEvent(target: Record<string, unknown>, key: string, kind: string, value: unknown): void {
     this.seedEvents(target, key).push(this.event(this.applySource, kind, value));
   }
 
-  /**
-   * Open `target[key]`'s log, recording the value it already holds as the
-   * first event. Call before mutating in place (array appends), so the
-   * origin event captures what was there rather than the result.
-   */
+  /** Open a field's log, recording what it already holds as the first event.
+   * Call before mutating in place, so that origin is the prior value. */
   private seedEvents(target: Record<string, unknown>, key: string): unknown[] {
     let fields = this.fieldEvents.get(target);
     if (fields === undefined) {
@@ -567,11 +542,8 @@ export class GoblinEngine {
     return log && log.length > 0 ? log : undefined;
   }
 
-  /**
-   * The record owning the last segment of `path` and the key within it,
-   * creating intermediate records the way `setPath` does so an event can be
-   * filed before the write lands.
-   */
+  /** The record owning the path's last segment and the key within it,
+   * creating parents the way `setPath` does so events can be filed first. */
   private ownerOf(base: unknown, path: string[]): { owner: Record<string, unknown>; key: string } | null {
     const key = path.at(-1);
     if (key === undefined || base === null || typeof base !== 'object') return null;
@@ -704,10 +676,8 @@ export class GoblinEngine {
     const k = stripPlus(key);
     if (value && typeof value === 'object' && !Array.isArray(value)) {
       if (!this.condPasses(value as Record<string, unknown>, scope)) return;
-      // A `+key` record (a feature, an action, a resource) is a change to the
-      // key itself: its fields may be pure metadata, so without this the
-      // addition would leave no trace. Scalar and array `+key` writes record
-      // their own content below, and are not double-logged here.
+      // A record of pure metadata writes no field events, so the addition
+      // itself is the only trace. Scalars and lists log their own content.
       if (key !== k) this.recordEvent(target, k, ADD_KEY, k);
       // Always merge through mergeInto so nested `+`, path keys and
       // `$if`/`$then` wrappers are consumed rather than stored raw.
@@ -727,11 +697,8 @@ export class GoblinEngine {
     target[k] = deepClone(value);
   }
 
-  /**
-   * Apply an array patch and file the write. A list carrying `+item` entries
-   * is an addition (`:add`, holding what was appended); a plain list is the
-   * document stating the list itself, so it files as `:set`.
-   */
+  /** Apply an array patch and file it: `+item` entries as `:add`, a plain
+   * list as `:set` — the document stating what the list is. */
   private applyArrayWrite(
     target: unknown[],
     items: unknown[],
@@ -745,12 +712,8 @@ export class GoblinEngine {
     else if (added.length > 0) this.recordEvent(slot.owner, slot.key, ADD_KEY, added);
   }
 
-  /**
-   * Array patch. A plain list replaces the target list — the patch states
-   * what the list is. A list carrying `+item` entries adds to it instead:
-   * `+item` appends deduplicated, and plain items alongside them append raw.
-   * Returns the items written, for the field's event log.
-   */
+  /** A plain list replaces the target; `+item` entries append deduplicated
+   * (plain items alongside them append raw). Returns what was written. */
   private applyArray(target: unknown[], items: unknown[], label?: string): unknown[] {
     if (!isAdditiveList(items, label)) {
       const replacement = items.map(deepClone);

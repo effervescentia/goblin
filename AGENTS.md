@@ -71,6 +71,8 @@ apart. Treat a missing spec update as an incomplete change.
 - The standard library (`$lib`) lives in `src/lib/`: one file per namespace
   (`math.ts`), listed in `src/lib/index.ts`, plus `src/lib/lib.yaml` for
   yaml-defined helpers. Natives always win over yaml of the same name.
+- Keep new comments to one or two lines. Say the non-obvious thing — why, or
+  the catch — and let the code say the rest.
 - Imports stay acyclic: `src/utils.ts` may import from `src/nodes/` (e.g. `Die`),
   so helpers it depends on must not be moved onto a node class that imports
   back from `src/utils.ts`.

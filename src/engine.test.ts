@@ -464,6 +464,18 @@ describe('parameters', () => {
     ]);
   });
 
+  it('keys params by where they live, not where the reference was written', () => {
+    const engine = new GoblinEngine('.');
+    const picks = {
+      choices: { first: { ':param': true, ':type': 'string' } },
+      // Reads the whole table, so its params fill by their own dotted path.
+      taken: "$lib.list.count(@.choices, 'athletics')",
+    };
+    engine.docs.set('picks.yaml', picks);
+    const out = engine.evaluateDoc('picks.yaml', { 'choices.first': 'athletics' }) as Record<string, unknown>;
+    expect(out.taken).toBe(1);
+  });
+
   it('rejects unknown param types', () => {
     expect(() => RecordNode.collectParams({ x: { ':param': true, ':type': 'spell' } })).toThrow(
       'unknown param type: spell (at x)',

@@ -96,10 +96,17 @@ describe('examples', () => {
   });
 
   it('09-stdlib.yaml resolves $lib with no attaching', () => {
-    const state = cli('examples/09-stdlib.yaml') as {
-      data: { floored: number; smallest: number };
+    const state = cli('examples/09-stdlib.yaml', '--strip-metadata') as {
+      data: Record<string, unknown>;
     };
-    expect(state.data).toEqual({ floored: 2, smallest: 3 });
+    expect(state.data).toEqual({
+      floored: 2,
+      smallest: 3,
+      picks: { first: 'athletics', second: 'athletics' },
+      athletics_picks: 2,
+      picks_made: 2,
+      trained_in_stealth: 0,
+    });
   });
 
   it('applies 07-class.yaml to 07-actor.yaml with $if gating', () => {

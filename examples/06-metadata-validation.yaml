@@ -1,6 +1,5 @@
-# Metadata (`:label`, `:doc`) and validation (`!validate`).
-# `:label` is the node's display name and `:doc` its documentation: both are
-# copied verbatim, never evaluated, even with refs inside.
+# Metadata (`:label` display name, `:doc` documentation) is copied verbatim,
+# never evaluated — even with refs inside.
 # `!validate` lists predicates (`.` = containing node) checked by validate().
 
 hit_points:

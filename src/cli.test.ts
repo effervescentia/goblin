@@ -280,6 +280,8 @@ describe('cli', () => {
       'features.martial_archetype=champion',
       '--param',
       'skills.trained=["athletics","perception"]',
+      '--param',
+      'improvements.level_4=["strength","strength"]',
     ];
     const full = runCli(...args);
     expect(full.status).toBe(0);

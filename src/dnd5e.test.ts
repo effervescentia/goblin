@@ -47,6 +47,8 @@ const script = `
     'features.fighting_style': 'defense',
     'features.martial_archetype': 'champion',
     'skills.trained': ['athletics', 'perception'],
+    // The level-4 feature's pick: the same ability twice is +2.
+    'improvements.level_4': ['strength', 'strength'],
   });
 
   // Derive the level from XP, then adopt the fighter: omitted maxLevel
@@ -91,6 +93,9 @@ const script = `
     baseMissing,
     mergedMissing,
     ac: val(v5.armor_class),
+    strength: val(v5.abilities.strength.base),
+    strengthModifier: val(v5.abilities.strength.modifier),
+    dexterity: val(v5.abilities.dexterity.base),
     hp: { value: val(v5.hit_points.current), max: val(v5.hit_points.max) },
     trained: v5.skills.trained[':value'],
     surge: { value: val(v5.resources.action_surge.current), max: val(v5.resources.action_surge.max) },
@@ -112,6 +117,9 @@ describe('5e', () => {
       baseMissing: ['name'],
       mergedMissing: ['features.fighting_style', 'features.martial_archetype', 'name', 'skills.trained'],
       ac: 10,
+      strength: 12,
+      strengthModifier: 1,
+      dexterity: 10,
       hp: { value: 10, max: 10 },
       trained: ['athletics', 'perception'],
       surge: { value: 1, max: 1 },
@@ -160,6 +168,8 @@ describe('5e', () => {
       'features.martial_archetype=champion',
       '--param',
       'skills.trained=["athletics","perception"]',
+      '--param',
+      'improvements.level_4=["strength","strength"]',
     ) as {
       data: {
         level: number;
@@ -196,6 +206,47 @@ describe('5e', () => {
     });
   });
 
+  it('improves abilities from the level-4 choice: twice for +2, split for +1 each', () => {
+    const args = (picks: string): [string, ...string[]] => [
+      '5e/main.yaml',
+      '--strip-metadata',
+      '--param',
+      'name=Aria',
+      '--param',
+      'xp=6500',
+      '--param',
+      'features.fighting_style=dueling',
+      '--param',
+      'features.martial_archetype=champion',
+      '--param',
+      'skills.trained=["athletics","perception"]',
+      '--param',
+      `improvements.level_4=${picks}`,
+    ];
+    const sheet = (picks: string) =>
+      cli(...args(picks)) as {
+        data: { abilities: Record<string, { base: number; modifier: number }>; armor_class: number };
+      };
+
+    const doubled = sheet('["strength","strength"]').data;
+    expect(doubled.abilities.strength).toEqual({ base: 12, modifier: 1 });
+    expect(doubled.abilities.dexterity).toEqual({ base: 10, modifier: 0 });
+
+    const split = sheet('["dexterity","constitution"]').data;
+    expect(split.abilities.dexterity).toEqual({ base: 11, modifier: 0 });
+    expect(split.abilities.constitution).toEqual({ base: 11, modifier: 0 });
+    expect(split.abilities.strength).toEqual({ base: 10, modifier: 0 });
+
+    // A pick outside the six abilities is refused.
+    expect(cliFails(...args('["luck","luck"]'))).toContain(
+      'param options mismatch: improvements.level_4[0] expected one of',
+    );
+    // Exactly two picks: no more, no fewer.
+    expect(cliFails(...args('["strength"]'))).toContain(
+      'param count mismatch: improvements.level_4 expected 2 items, got 1',
+    );
+  });
+
   it('rejects a fighting style outside the options', () => {
     expect(
       cliFails(
@@ -210,6 +261,8 @@ describe('5e', () => {
         'features.martial_archetype=champion',
         '--param',
         'skills.trained=["athletics","perception"]',
+        '--param',
+        'improvements.level_4=["strength","strength"]',
       ),
     ).toContain(
       'param options mismatch: features.fighting_style expected one of ["archery", "defense", "dueling", "great_weapon_fighting", "protection", "two_weapon_fighting"], got "kung_fu"',
@@ -227,6 +280,8 @@ describe('5e', () => {
       'features.fighting_style=dueling',
       '--param',
       'features.martial_archetype=champion',
+      '--param',
+      'improvements.level_4=["strength","strength"]',
     ];
     expect(cliFails(...base, '--param', 'skills.trained=["athletics","sneak"]')).toContain(
       'param options mismatch: skills.trained[1] expected one of ["acrobatics", "animal_handling", "athletics", "history", "insight", "intimidation", "perception", "survival"], got "sneak"',
@@ -248,6 +303,7 @@ describe('5e', () => {
     expect(query.query.map((param) => param.path).sort()).toEqual([
       'features.fighting_style',
       'features.martial_archetype',
+      'improvements.level_4',
       'skills.trained',
     ]);
 
@@ -265,6 +321,8 @@ describe('5e', () => {
       'features.martial_archetype=champion',
       '--param',
       'skills.trained=["athletics","perception"]',
+      '--param',
+      'improvements.level_4=["strength","strength"]',
     ) as { data: { level: Record<string, unknown>; attacks: Record<string, unknown> } };
     expect(data.data.attacks[':value']).toBe(2);
     // `--set` beats the derivation it replaced, and says so.

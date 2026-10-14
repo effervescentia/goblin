@@ -1,8 +1,4 @@
-/**
- * `$lib.math` — native numeric helpers, bound in code so they are available
- * before any document loads. Yaml helpers of the same name never shadow
- * these (see `GoblinEngine.mergeLib`).
- */
+/** `$lib.math` — bound in code, so it is there before any document loads. */
 export const MATH_LIB: Record<string, (...args: number[]) => number> = {
   floor: (n: number) => Math.floor(n),
   ceil: (n: number) => Math.ceil(n),

@@ -1,18 +1,14 @@
-/**
- * Goblin standard library — everything reachable as `$lib.…`.
- *
- * Each namespace is a table of natives bound in code (`./math`), optionally
- * extended by the yaml document in `./lib.yaml`. Natives always win over yaml
- * definitions of the same name, so documents can add to a namespace but never
- * redefine its primitives. Add a namespace by writing `./<name>.ts` and
- * listing it in `NATIVE_LIB`.
- */
+/** Goblin standard library (`$lib.…`): one file per namespace, listed in
+ * `NATIVE_LIB`, extended by `./lib.yaml` but never overridden by it. */
+import { LIST_LIB } from './list';
 import { MATH_LIB } from './math';
 
+export { LIST_LIB } from './list';
 export { MATH_LIB } from './math';
 
 /** Native namespaces, by the name they answer to under `$lib`. */
 export const NATIVE_LIB: Record<string, Record<string, unknown>> = {
+  list: LIST_LIB,
   math: MATH_LIB,
 };
 

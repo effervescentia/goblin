@@ -1,12 +1,5 @@
-/**
- * Goblin — pure utilities for `.yaml` documents.
- *
- * Engine-independent helpers shared by `engine.ts`, `cli.ts`, and tests:
- * reference parsing, expression compilation, and path access. Node-specific
- * helpers live on their node class in `./nodes` (dice on `DieNode`, `:param`
- * records and metadata stripping on `RecordNode`, printing on each node's
- * `serialize`). Nothing here may import from `engine.ts`.
- */
+/** Goblin — refs, paths, and expression compilation. Node-specific helpers
+ * live on their node class in `./nodes`; nothing here imports `engine.ts`. */
 
 import {
   ACTOR,
@@ -52,10 +45,8 @@ export function isValidateKey(key: string): boolean {
   return key === VALIDATE_KEY;
 }
 
-/**
- * Quoted or bare path patch, e.g. `@.features`, `#.hit_points.value`, or
- * `+@.attacks` — a leading `+` marks the write as an addition.
- */
+/** Path patch (`@.features`, `#.hit_points.value`); a leading `+` on the path
+ * marks the write as an addition. */
 export function isPathKey(key: string): boolean {
   const head = stripPlus(key)[0];
   return head === CURRENT || head === DOCUMENT || head === ACTOR || head === APP;
@@ -228,9 +219,8 @@ export function compileBody(body: string, paramNames: string[] = []) {
           .join('\n')}`
       : `return (${codes[0]?.code ?? 'undefined'});`;
 
-  // NOTE: no `math` (or other stdlib) free variable is bound here — the
-  // standard library is reachable only through `$lib.…`, so `$math` / `$.math`
-  // stay ordinary document refs that resolve to nothing.
+  // No stdlib free variable is bound here: `$lib.…` is the only way in, so
+  // `$math` stays an ordinary document ref that resolves to nothing.
   const fn = new Function('__resolve', '__assign', '__roll', ...paramNames, js) as (...args: unknown[]) => unknown;
 
   return (hooks: ResolveHooks, params: Record<string, unknown> = {}) => {

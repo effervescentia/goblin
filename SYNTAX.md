@@ -90,15 +90,25 @@ callable. Lookup matches `name` to the `name(params)` entry; calling evaluates
 the body per call with the arguments bound. Inside a body, `.` is the record
 holding the definition.
 
-The stdlib lives under `$lib`, implicitly loaded by the engine (native
-`math`: `floor`, `ceil`, `round`, `abs`, `min`, `max`, merged with
-`src/lib/lib.yaml` when present). A document defining its own top-level `lib`
-table takes precedence for `$lib.…` refs.
+The stdlib lives under `$lib`, implicitly loaded by the engine, merged with
+`src/lib/lib.yaml` when present. A document defining its own top-level `lib`
+table takes precedence for `$lib.…` refs. Native namespaces:
+
+- `math`: `floor`, `ceil`, `round`, `abs`, `min`, `max`.
+- `list`: `count(value, item)`, `has(value, item)` (1 or 0, for arithmetic),
+  `size(value)` — reading choices back out of a list, or out of a table of
+  `:param` choice records, where a record counts its `:value` and never its
+  `:options`. This is how picks become numbers: the 5e fighter's ability
+  score improvements are `:count: 2` pick lists, and each ability's score
+  counts its own name across them (`10 + $lib.list.count(@.improvements,
+  'strength')`), so the same ability twice is +2 and two abilities once each
+  is +1 apiece.
 
 ```yaml
 # Examples (examples/09-stdlib.yaml)
-floored: $lib.math.floor(2.9)      # → 2
-smallest: $lib.math.min(3, 9)      # → 3
+floored: $lib.math.floor(2.9)                 # → 2
+smallest: $lib.math.min(3, 9)                 # → 3
+athletics_picks: $lib.list.count(@.picks, 'athletics')
 ```
 
 ```yaml
