@@ -26,6 +26,8 @@ xp:
 
 level: '#.levels.level_for(@.xp)'
 
+point_buy: '#.abilities.point_buy'
+
 # Pick lists filled by the features that grant them; an ability counts its own
 # name across all of them, so twice is +2 and once each is +1 apiece.
 improvements:
@@ -33,24 +35,12 @@ improvements:
   :doc: Choices made at the levels that grant an improvement.
 
 abilities:
-  strength:
-    base: 10 + $lib.list.count(@.improvements, 'strength')
-    modifier: $.utils.ability_modifier(.base)
-  dexterity:
-    base: 10 + $lib.list.count(@.improvements, 'dexterity')
-    modifier: $.utils.ability_modifier(.base)
-  constitution:
-    base: 10 + $lib.list.count(@.improvements, 'constitution')
-    modifier: $.utils.ability_modifier(.base)
-  intelligence:
-    base: 10 + $lib.list.count(@.improvements, 'intelligence')
-    modifier: $.utils.ability_modifier(.base)
-  wisdom:
-    base: 10 + $lib.list.count(@.improvements, 'wisdom')
-    modifier: $.utils.ability_modifier(.base)
-  charisma:
-    base: 10 + $lib.list.count(@.improvements, 'charisma')
-    modifier: $.utils.ability_modifier(.base)
+  strength: "#.abilities.entry('strength')"
+  dexterity: "#.abilities.entry('dexterity')"
+  constitution: "#.abilities.entry('constitution')"
+  intelligence: "#.abilities.entry('intelligence')"
+  wisdom: "#.abilities.entry('wisdom')"
+  charisma: "#.abilities.entry('charisma')"
 
 utils:
   'ability_modifier(x)': $lib.math.floor((x - 10) / 2)

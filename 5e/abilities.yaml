@@ -1,0 +1,30 @@
+# Point buy and the shape of one ability entry, attached as `#.abilities` by
+# 5e/main.yaml and used by 5e/character.yaml.
+
+# 8 costs nothing, each point to 13 costs one, 14 and 15 cost two apiece.
+'point_cost(score)': (score - 8) + (score >= 14) + (score >= 15)
+
+point_buy:
+  :label: Point Buy
+  :doc: 27 points buy your six scores; each starts at 8 and tops out at 15.
+  '!validate':
+    - .spent <= .budget
+  budget: 27
+  spent: >-
+    #.abilities.point_cost(@.abilities.strength.bought) +
+    #.abilities.point_cost(@.abilities.dexterity.bought) +
+    #.abilities.point_cost(@.abilities.constitution.bought) +
+    #.abilities.point_cost(@.abilities.intelligence.bought) +
+    #.abilities.point_cost(@.abilities.wisdom.bought) +
+    #.abilities.point_cost(@.abilities.charisma.bought)
+
+# One ability: what you bought, plus the improvements that named it.
+'entry(ability)':
+  bought:
+    :label: Ability score
+    :doc: Point-buy score, 8 to 15 before improvements.
+    :param: true
+    :type: integer
+    :options: [8, 9, 10, 11, 12, 13, 14, 15]
+  base: .bought + $lib.list.count(@.improvements, ability)
+  modifier: $.utils.ability_modifier(.base)

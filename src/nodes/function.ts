@@ -2,6 +2,7 @@ import {
   DEPS_KEY,
   DOTLESS_SIGIL,
   FUNCTION_KEY,
+  META_PREFIX,
   PARAMS_KEY,
   SIGIL_REF,
   SOURCE_KEY,
@@ -11,6 +12,7 @@ import {
 import type { GoblinEngine } from '../engine';
 import type { EvalRoots } from '../utils';
 import { deepClone } from '../utils';
+import { ExpressionNode } from './expression';
 import { Node } from './node';
 
 /** Metadata attached to engine-created function closures for printing. */
@@ -105,7 +107,7 @@ export class FunctionNode extends Node<unknown> {
     if (FunctionNode.isRecordBody(body)) {
       // A fresh copy per call: two uses of one definition must not share
       // nodes, or a `:param` filled in one would show up in the other.
-      const fn = () => deepClone(body);
+      const fn = (...args: unknown[]) => bindParams(deepClone(body), this.params, args);
       return FunctionNode.tag(fn, {
         name: this.name,
         params: this.params,
@@ -126,4 +128,31 @@ export class FunctionNode extends Node<unknown> {
       deps: FunctionNode.detectDeps(text),
     });
   }
+}
+
+/**
+ * Bind a record body's parameters into the copy: each expression inside it
+ * takes the argument as a literal, so the node reads as written once placed.
+ * Metadata is left alone — prose is not an expression.
+ */
+function bindParams(node: unknown, params: string[], args: unknown[]): unknown {
+  if (params.length === 0) return node;
+  const bind = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(bind);
+    if (value !== null && typeof value === 'object') {
+      const record = value as Record<string, unknown>;
+      for (const [key, entry] of Object.entries(record)) {
+        if (!key.startsWith(META_PREFIX)) record[key] = bind(entry);
+      }
+      return record;
+    }
+    if (typeof value !== 'string' || !ExpressionNode.matches(value)) return value;
+    return params.reduce((text, param, i) => text.replace(identifier(param), JSON.stringify(args[i] ?? null)), value);
+  };
+  return bind(node);
+}
+
+/** The parameter as a standalone token — never a `.segment` of a ref. */
+function identifier(param: string): RegExp {
+  return new RegExp(`(?<![\\w.$])${param}(?![\\w])`, 'g');
 }

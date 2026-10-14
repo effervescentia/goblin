@@ -514,6 +514,33 @@ describe('parameters', () => {
     expect(out.taken).toBe(1);
   });
 
+  it('expands record calls written as plain document values', () => {
+    const engine = new GoblinEngine('.');
+    engine.appRoot.abilities = {
+      'entry(ability)': {
+        bought: { ':label': 'Ability score', ':param': true, ':type': 'integer' },
+        doubled: '.bought * 2',
+        named: '$lib.list.count(@.improvements, ability)',
+      },
+    };
+    const doc = {
+      improvements: ['wisdom', 'wisdom'],
+      strength: "#.abilities.entry('strength')",
+      wisdom: "#.abilities.entry('wisdom')",
+    };
+    engine.docs.set('sheet.yaml', doc);
+
+    // The call is a node by the time params are collected.
+    expect(engine.missingParams('sheet.yaml').map((p) => p.path)).toEqual(['strength.bought', 'wisdom.bought']);
+    const out = engine.evaluateDoc('sheet.yaml', { 'strength.bought': 8, 'wisdom.bought': 10 }) as Record<
+      string,
+      Record<string, unknown>
+    >;
+    expect(out.strength?.doubled).toBe(16);
+    expect(out.strength?.named).toBe(0);
+    expect(out.wisdom?.named).toBe(2);
+  });
+
   it('rejects unknown param types', () => {
     expect(() => RecordNode.collectParams({ x: { ':param': true, ':type': 'spell' } })).toThrow(
       'unknown param type: spell (at x)',

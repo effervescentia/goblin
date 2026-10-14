@@ -271,6 +271,18 @@ describe('cli', () => {
       '5e/main.yaml',
       '--compact',
       '--param',
+      'abilities.strength.bought=15',
+      '--param',
+      'abilities.dexterity.bought=14',
+      '--param',
+      'abilities.constitution.bought=13',
+      '--param',
+      'abilities.intelligence.bought=10',
+      '--param',
+      'abilities.wisdom.bought=10',
+      '--param',
+      'abilities.charisma.bought=8',
+      '--param',
       'name=Aria',
       '--param',
       'xp=6500',
@@ -316,10 +328,10 @@ describe('cli', () => {
     };
     visit(data);
     expect(metaKeys).toEqual([]);
-    expect(data.hit_points).toEqual({ current: 10, max: 10 });
+    expect(data.hit_points).toEqual({ current: 11, max: 11 }); // con 13 → +1
     expect(data.name).toBe('Aria');
     expect(data.level).toBe(5);
-    expect(data.initiative).toEqual({ base: 0, roll: '1d20 + .base' });
+    expect(data.initiative).toEqual({ base: 2, roll: '1d20 + .base' }); // dex 14 → +2
     expect((data.utils as Record<string, unknown>).ability_modifier).toBe('$lib.math.floor((x - 10) / 2)');
     expect((data.features as Record<string, unknown>).second_wind).toBeNull();
   });

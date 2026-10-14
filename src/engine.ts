@@ -369,6 +369,7 @@ export class GoblinEngine {
    */
   evaluate(raw: unknown, scope: EvalRoots): unknown {
     if (scope.path === undefined) {
+      if (this.expandCalls(raw, scope)) this.cache.clear();
       if (RecordNode.materializeParams(raw, scope.provided)) this.cache.clear();
       return this.evaluate(raw, { ...scope, path: [] });
     }
@@ -398,6 +399,7 @@ export class GoblinEngine {
   missingParams(file: string): MissingParam[] {
     const raw = this.docs.get(file);
     if (raw === undefined) throw new Error(`document not loaded: ${file}`);
+    this.expandCalls(raw, { doc: raw, actor: raw, app: this.appRoot, current: raw });
     return RecordNode.collectParams(raw);
   }
 
@@ -460,9 +462,10 @@ export class GoblinEngine {
     overrides: Record<string, unknown> = {},
   ): { data: unknown } | { query: MissingParam[] } {
     this.applyOverrides(actorRaw, overrides);
+    const scope: EvalRoots = { doc: actorRaw, actor: actorRaw, app: this.appRoot, current: actorRaw, provided };
+    this.expandCalls(actorRaw, scope);
     const outstanding = RecordNode.collectParams(actorRaw).filter((param) => provided[param.path] === undefined);
     if (outstanding.length > 0) return { query: outstanding };
-    const scope: EvalRoots = { doc: actorRaw, actor: actorRaw, app: this.appRoot, current: actorRaw, provided };
     return { data: serialize(this.evaluate(actorRaw, scope)) };
   }
 
@@ -573,6 +576,39 @@ export class GoblinEngine {
     } catch {
       return value; // not resolvable yet — leave the expression in place
     }
+  }
+
+  /** Expand calls written as plain document values, so the nodes they hand
+   * back — `:param` records included — are in the tree before anything looks
+   * for them. Anything that is not a record call is left as written. */
+  expandCalls(raw: unknown, scope: EvalRoots): boolean {
+    let wrote = false;
+    const visit = (node: unknown) => {
+      if (Array.isArray(node)) {
+        node.forEach((item, index) => {
+          const next = this.inlinePatchValue(item, scope);
+          if (next !== item) {
+            node[index] = next;
+            wrote = true;
+          }
+          visit(node[index]);
+        });
+        return;
+      }
+      if (node === null || typeof node !== 'object') return;
+      const record = node as Record<string, unknown>;
+      for (const [key, value] of Object.entries(record)) {
+        if (isMetaKey(key) || isValidateKey(key)) continue;
+        const next = this.inlinePatchValue(value, scope);
+        if (next !== value) {
+          record[key] = next;
+          wrote = true;
+        }
+        visit(record[key]);
+      }
+    };
+    visit(raw);
+    return wrote;
   }
 
   /**

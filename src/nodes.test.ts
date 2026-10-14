@@ -50,6 +50,31 @@ describe('FunctionNode', () => {
   });
 });
 
+describe('FunctionNode record bodies', () => {
+  it('binds arguments into the copy it hands back', () => {
+    const record = {
+      'entry(ability)': {
+        ':doc': 'ability text is prose, left alone',
+        bought: { ':param': true },
+        base: '.bought + $lib.list.count(@.improvements, ability)',
+      },
+    };
+    const fn = FunctionNode.match('entry(ability)', record['entry(ability)'], record);
+    const call = fn?.evaluate(null as never, { doc: {}, actor: {}, app: {}, current: record }) as (
+      ...args: unknown[]
+    ) => Record<string, unknown>;
+
+    const strength = call('strength');
+    const wisdom = call('wisdom');
+    expect(strength.base).toBe('.bought + $lib.list.count(@.improvements, "strength")');
+    expect(wisdom.base).toBe('.bought + $lib.list.count(@.improvements, "wisdom")');
+    // Metadata is prose, not an expression: the parameter name stays put.
+    expect(strength[':doc']).toBe('ability text is prose, left alone');
+    // Separate copies, so a value filled in one never shows up in the other.
+    expect(strength.bought).not.toBe(wisdom.bought);
+  });
+});
+
 describe('serialize', () => {
   it('delegates each kind to its node', () => {
     expect(serialize(new Die(2, 6, '2d6'))).toBe('2d6');

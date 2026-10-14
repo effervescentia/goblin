@@ -39,6 +39,14 @@ const script = `
 
   const baseMissing = e.missingParams('character.yaml').map((m) => m.path).sort();
 
+  const BOUGHT = {
+    'abilities.strength.bought': 15,
+    'abilities.dexterity.bought': 14,
+    'abilities.constitution.bought': 13,
+    'abilities.intelligence.bought': 10,
+    'abilities.wisdom.bought': 10,
+    'abilities.charisma.bought': 8,
+  };
   const fresh = () => structuredClone(e.docs.get('character.yaml'));
   const scopeOf = (actor, provided) => ({ doc: actor, actor, app: e.appRoot, current: actor, provided });
   const baseProvided = (xp) => ({
@@ -49,6 +57,8 @@ const script = `
     'skills.trained': ['athletics', 'perception'],
     // The level-4 feature's pick: the same ability twice is +2.
     'improvements.level_4': ['strength', 'strength'],
+    // Point buy: the classic 15/14/13/10/10/8 spread, 25 of 27 points.
+    ...BOUGHT,
   });
 
   // Derive the level from XP, then adopt the fighter: omitted maxLevel
@@ -110,17 +120,52 @@ const script = `
   }));
 `;
 
+// The classic 15/14/13/10/10/8 spread: 25 of the 27 points.
+const BOUGHT = [
+  '--param',
+  'abilities.strength.bought=15',
+  '--param',
+  'abilities.dexterity.bought=14',
+  '--param',
+  'abilities.constitution.bought=13',
+  '--param',
+  'abilities.intelligence.bought=10',
+  '--param',
+  'abilities.wisdom.bought=10',
+  '--param',
+  'abilities.charisma.bought=8',
+];
+
 describe('5e', () => {
   it('levels a fighter from 1 to 20 on XP', () => {
     const out = execFileSync('bun', ['-e', script], { cwd: root, encoding: 'utf8' });
     expect(JSON.parse(out)).toEqual({
-      baseMissing: ['name'],
-      mergedMissing: ['features.fighting_style', 'features.martial_archetype', 'name', 'skills.trained'],
-      ac: 10,
-      strength: 12,
-      strengthModifier: 1,
-      dexterity: 10,
-      hp: { value: 10, max: 10 },
+      baseMissing: [
+        'abilities.charisma.bought',
+        'abilities.constitution.bought',
+        'abilities.dexterity.bought',
+        'abilities.intelligence.bought',
+        'abilities.strength.bought',
+        'abilities.wisdom.bought',
+        'name',
+      ],
+      mergedMissing: [
+        'abilities.charisma.bought',
+        'abilities.constitution.bought',
+        'abilities.dexterity.bought',
+        'abilities.intelligence.bought',
+        'abilities.strength.bought',
+        'abilities.wisdom.bought',
+        'features.fighting_style',
+        'features.martial_archetype',
+        'name',
+        'skills.trained',
+      ],
+      ac: 12,
+      strength: 17,
+      strengthModifier: 3,
+      dexterity: 14,
+      hp: { value: 11, max: 11 },
       trained: ['athletics', 'perception'],
       surge: { value: 1, max: 1 },
       swMin: true,
@@ -151,6 +196,12 @@ describe('5e', () => {
   it('serves the composed fighter through the root entry', () => {
     const query = cli('5e/main.yaml') as { query: Array<{ path: string }> };
     expect(query.query.map((param) => param.path).sort()).toEqual([
+      'abilities.charisma.bought',
+      'abilities.constitution.bought',
+      'abilities.dexterity.bought',
+      'abilities.intelligence.bought',
+      'abilities.strength.bought',
+      'abilities.wisdom.bought',
       'features.fighting_style',
       'name',
       'skills.trained',
@@ -158,6 +209,7 @@ describe('5e', () => {
 
     const data = cli(
       '5e/main.yaml',
+      ...BOUGHT,
       '--param',
       'name=Aria',
       '--param',
@@ -179,7 +231,7 @@ describe('5e', () => {
       };
     };
     expect(data.data.level).toBe(5);
-    expect(data.data.armor_class).toBe(10);
+    expect(data.data.armor_class).toBe(12); // 10 + dex 14
     // A patched field carries the writes that produced it, in order — here
     // the Extra Attack feature adding to the character's single attack.
     expect(data.data.attacks).toEqual({
@@ -210,6 +262,7 @@ describe('5e', () => {
     const args = (picks: string): [string, ...string[]] => [
       '5e/main.yaml',
       '--strip-metadata',
+      ...BOUGHT,
       '--param',
       'name=Aria',
       '--param',
@@ -228,14 +281,15 @@ describe('5e', () => {
         data: { abilities: Record<string, { base: number; modifier: number }>; armor_class: number };
       };
 
+    // Bought 15/14/13: the improvement stacks on the point-buy score.
     const doubled = sheet('["strength","strength"]').data;
-    expect(doubled.abilities.strength).toEqual({ base: 12, modifier: 1 });
-    expect(doubled.abilities.dexterity).toEqual({ base: 10, modifier: 0 });
+    expect(doubled.abilities.strength).toEqual({ bought: 15, base: 17, modifier: 3 });
+    expect(doubled.abilities.dexterity).toEqual({ bought: 14, base: 14, modifier: 2 });
 
     const split = sheet('["dexterity","constitution"]').data;
-    expect(split.abilities.dexterity).toEqual({ base: 11, modifier: 0 });
-    expect(split.abilities.constitution).toEqual({ base: 11, modifier: 0 });
-    expect(split.abilities.strength).toEqual({ base: 10, modifier: 0 });
+    expect(split.abilities.dexterity).toEqual({ bought: 14, base: 15, modifier: 2 });
+    expect(split.abilities.constitution).toEqual({ bought: 13, base: 14, modifier: 2 });
+    expect(split.abilities.strength).toEqual({ bought: 15, base: 15, modifier: 2 });
 
     // A pick outside the six abilities is refused.
     expect(cliFails(...args('["luck","luck"]'))).toContain(
@@ -247,10 +301,52 @@ describe('5e', () => {
     );
   });
 
+  it('spends point buy within its budget, and refuses more', () => {
+    const spread = (...scores: number[]): string[] =>
+      ['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma'].flatMap((ability, i) => [
+        '--param',
+        `abilities.${ability}.bought=${scores[i]}`,
+      ]);
+    const rest = [
+      '--param',
+      'name=Aria',
+      '--param',
+      'xp=0',
+      '--param',
+      'features.fighting_style=dueling',
+      '--param',
+      'skills.trained=["athletics","perception"]',
+    ];
+
+    // 15/14/13/10/10/8 costs 9+7+5+2+2+0 = 25 of 27.
+    const data = cli('5e/main.yaml', '--strip-metadata', ...spread(15, 14, 13, 10, 10, 8), ...rest) as {
+      data: { point_buy: { budget: number; spent: number }; abilities: Record<string, { modifier: number }> };
+    };
+    expect(data.data.point_buy).toEqual({ budget: 27, spent: 25 });
+    expect(data.data.abilities.strength?.modifier).toBe(2);
+    expect(data.data.abilities.charisma?.modifier).toBe(-1);
+
+    // Every point spent exactly: 15/15/15/8/8/8 is 27.
+    const exact = cli('5e/main.yaml', '--strip-metadata', ...spread(15, 15, 15, 8, 8, 8), ...rest) as {
+      data: { point_buy: { spent: number } };
+    };
+    expect(exact.data.point_buy.spent).toBe(27);
+
+    // One point over the budget fails the rule.
+    expect(cliFails('5e/main.yaml', ...spread(15, 15, 15, 9, 8, 8), ...rest)).toContain(
+      '!validate failures:\n  .spent <= .budget',
+    );
+    // A score off the point-buy ladder is refused before any budget check.
+    expect(cliFails('5e/main.yaml', ...spread(16, 8, 8, 8, 8, 8), ...rest)).toContain(
+      'param options mismatch: abilities.strength.bought expected one of [8, 9, 10, 11, 12, 13, 14, 15], got 16',
+    );
+  });
+
   it('rejects a fighting style outside the options', () => {
     expect(
       cliFails(
         '5e/main.yaml',
+        ...BOUGHT,
         '--param',
         'name=Aria',
         '--param',
@@ -272,6 +368,7 @@ describe('5e', () => {
   it('rejects skill choices outside the options, duplicates, or wrong count', () => {
     const base: [string, ...string[]] = [
       '5e/main.yaml',
+      ...BOUGHT,
       '--param',
       'name=Aria',
       '--param',
@@ -295,7 +392,7 @@ describe('5e', () => {
   });
 
   it('overrides level explicitly without XP', () => {
-    const query = cli('5e/main.yaml', '--set', 'level=5', '--param', 'name=Aria') as {
+    const query = cli('5e/main.yaml', ...BOUGHT, '--set', 'level=5', '--param', 'name=Aria') as {
       query: Array<{ path: string }>;
     };
     // Adoption follows the overridden level (L5 features apply); xp has a
@@ -309,6 +406,7 @@ describe('5e', () => {
 
     const data = cli(
       '5e/main.yaml',
+      ...BOUGHT,
       '--set',
       'level=5',
       '--param',

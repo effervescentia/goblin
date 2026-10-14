@@ -18,7 +18,8 @@ export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set
 
 Resolves a goblin document and prints the result as JSON: either
 { "data": … } when all :param values are satisfied, or
-{ "query": […] } listing the outstanding parameters.
+{ "query": […] } listing the outstanding parameters. A resolved sheet must
+also pass its !validate rules; failures print to stderr and exit non-zero.
 
 Arguments:
   entry.yaml    Entry document (default: main from .goblin.yaml).
@@ -109,10 +110,17 @@ export async function resolveAppState(
   const engine = new GoblinEngine(root);
   await engine.loadFile(main);
   const raw = engine.docs.get(main);
-  if (raw !== null && typeof raw === 'object' && !Array.isArray(raw) && 'actor' in raw) {
-    return resolveComposed(engine, raw as Record<string, unknown>, provided, overrides);
+  const state =
+    raw !== null && typeof raw === 'object' && !Array.isArray(raw) && 'actor' in raw
+      ? await resolveComposed(engine, raw as Record<string, unknown>, provided, overrides)
+      : engine.resolve(main, provided, overrides);
+  // A resolved sheet must also hold: `!validate` rules are part of the answer,
+  // not a separate pass the caller might skip.
+  if ('data' in state) {
+    const failures = engine.validate(state.data);
+    if (failures.length > 0) throw new Error(`!validate failures:\n  ${failures.join('\n  ')}`);
   }
-  return engine.resolve(main, provided, overrides);
+  return state;
 }
 
 /**

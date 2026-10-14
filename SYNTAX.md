@@ -92,8 +92,26 @@ holding the definition.
 
 A **record body** defines a node instead of an expression: the call hands back
 a fresh copy, so two uses never share nodes and a `:param` filled in one does
-not show up in the other. `5e/features.yaml` keeps the ability score
-improvement this way, and each granting feature calls it.
+not show up in the other. Parameters bind into that copy — each expression
+inside it takes the argument as a literal, while metadata is left alone — so
+one definition covers a family of nodes:
+
+```yaml
+# 5e/abilities.yaml
+'entry(ability)':
+  bought: { :param: true, :type: integer, :options: [8, …, 15] }
+  base: .bought + $lib.list.count(@.improvements, ability)
+
+# 5e/character.yaml
+abilities:
+  strength: "#.abilities.entry('strength')"
+```
+
+A call written as a plain document value expands where it stands, so the
+`:param` nodes it brings are part of the tree before the query looks for
+them. The same holds in patches (`5e/features.yaml` keeps the ability score
+improvement that way, and each granting feature calls it); a call that yields
+anything but a record stays as written, and stays lazy.
 
 The stdlib lives under `$lib`, implicitly loaded by the engine, merged with
 `src/lib/lib.yaml` when present. A document defining its own top-level `lib`
@@ -171,8 +189,7 @@ record-bodied function — inlines on the way in, so a repeated node can live
 in one place and still be filled: `5e/fighter.yaml` writes
 `'@.improvements.level_4': '#.features.ability_improvement()'`, and the
 `:param` record it hands back lands in the actor tree where the query finds
-it. A call that yields anything but a record stays as written, and stays
-lazy.
+it.
 
 ```yaml
 # Examples (examples/05-templates.yaml, examples/05-greeting.yaml)
@@ -202,6 +219,11 @@ params (see Parameters). `--strip-metadata` drops all of it.
 failure messages (a throwing rule reports `"<rule> → <message>"`). Predicates
 evaluate with `.` bound to the containing node; use `.`-relative refs, since
 `$`/`@`/`#` inside validation resolve against shared globals, not the actor.
+
+The CLI runs them on every resolved sheet: a failing rule is an error, not a
+`{ data }` the caller might print anyway. `5e/character.yaml` budgets point
+buy this way — six `bought` params on the point-buy ladder, a `spent` total,
+and `.spent <= .budget` over them.
 
 ```yaml
 # Examples (examples/06-metadata-validation.yaml)
