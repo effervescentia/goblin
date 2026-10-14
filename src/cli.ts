@@ -19,7 +19,7 @@ export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set
 Resolves a goblin document and prints the result as JSON: either
 { "data": … } when all :param values are satisfied, or
 { "query": […] } listing the outstanding parameters. A resolved sheet must
-also pass its !validate rules; failures print to stderr and exit non-zero.
+also pass its !validate rules; failing rules print as { "errors": […] }.
 
 Arguments:
   entry.yaml    Entry document (default: main from .goblin.yaml).
@@ -84,12 +84,15 @@ export function parseArgs(argv: string[]): CliArgs {
   return args;
 }
 
+/** Resolution envelope plus `{ errors }` for sheets failing `!validate`. */
+export type AppState = ReturnType<GoblinEngine['resolve']> | { errors: string[] };
+
 export async function resolveAppState(
   cwd: string,
   entry?: string,
   provided: Record<string, unknown> = {},
   overrides: Record<string, unknown> = {},
-): Promise<ReturnType<GoblinEngine['resolve']>> {
+): Promise<AppState> {
   // Bun-only: the CLI entry point always runs under Bun (or compiled).
   const { YAML } = await import('bun');
   let root = cwd;
@@ -117,8 +120,8 @@ export async function resolveAppState(
   // A resolved sheet must also hold: `!validate` rules are part of the answer,
   // not a separate pass the caller might skip.
   if ('data' in state) {
-    const failures = engine.validate(state.data);
-    if (failures.length > 0) throw new Error(`!validate failures:\n  ${failures.join('\n  ')}`);
+    const errors = engine.validate(state.data);
+    if (errors.length > 0) return { errors };
   }
   return state;
 }

@@ -335,10 +335,10 @@ describe('apply', () => {
 
   it('inlines a call to a record-bodied definition, params and all', () => {
     const engine = new GoblinEngine('.');
-    engine.appRoot.features = { 'choice()': { ':label': 'Pick', ':param': true, ':type': 'string' } };
+    engine.appRoot.feature = { 'choice()': { ':label': 'Pick', ':param': true, ':type': 'string' } };
     engine.docs.set('grant.yaml', {
-      '@.choices.first': '#.features.choice()',
-      '@.choices.second': '#.features.choice()',
+      '@.choices.first': '#.feature.choice()',
+      '@.choices.second': '#.feature.choice()',
       // A call that yields a number stays an expression, lazy as written.
       '@.armor_class': '$lib.math.floor(12.9)',
     });
@@ -516,7 +516,7 @@ describe('parameters', () => {
 
   it('expands record calls written as plain document values', () => {
     const engine = new GoblinEngine('.');
-    engine.appRoot.abilities = {
+    engine.appRoot.ability = {
       'entry(ability)': {
         bought: { ':label': 'Ability score', ':param': true, ':type': 'integer' },
         doubled: '.bought * 2',
@@ -525,8 +525,8 @@ describe('parameters', () => {
     };
     const doc = {
       improvements: ['wisdom', 'wisdom'],
-      strength: "#.abilities.entry('strength')",
-      wisdom: "#.abilities.entry('wisdom')",
+      strength: "#.ability.entry('strength')",
+      wisdom: "#.ability.entry('wisdom')",
     };
     engine.docs.set('sheet.yaml', doc);
 
@@ -822,6 +822,37 @@ describe('parameters', () => {
     expect(() => engine.evaluateDoc('skills.yaml', { trained: ['a', 'b', 'c'] })).toThrow(
       'param count mismatch: trained expected 2 items, got 3',
     );
+  });
+
+  it('enforces :min/:max bounds inclusively, per item on arrays', () => {
+    const engine = new GoblinEngine('.');
+    engine.docs.set('bounds.yaml', {
+      score: { ':param': true, ':type': 'integer', ':min': 8, ':max': 15 },
+      rolls: { ':param': true, ':type': 'array', ':min': 1 },
+    });
+    const good = engine.evaluateDoc('bounds.yaml', { score: 8, rolls: [1, 6] }) as Record<
+      string,
+      Record<string, unknown>
+    >;
+    expect(good.score?.[':value']).toBe(8);
+    expect(() => engine.evaluateDoc('bounds.yaml', { score: 16, rolls: [1] })).toThrow(
+      'param range mismatch: score expected 8 to 15, got 16',
+    );
+    expect(() => engine.evaluateDoc('bounds.yaml', { score: 7, rolls: [1] })).toThrow(
+      'param range mismatch: score expected 8 to 15, got 7',
+    );
+    expect(() => engine.evaluateDoc('bounds.yaml', { score: 10, rolls: [3, 0] })).toThrow(
+      'param range mismatch: rolls[1] expected at least 1, got 0',
+    );
+    expect(() => RecordNode.checkParamConstraints({ ':max': 2 }, 3, 'x')).toThrow(
+      'param range mismatch: x expected at most 2, got 3',
+    );
+    expect(() => RecordNode.checkParamConstraints({ ':min': 'low' }, 3, 'x')).toThrow(
+      'invalid :min for x: expected number, got string',
+    );
+    expect(RecordNode.collectParams({ score: { ':param': true, ':type': 'integer', ':min': 8, ':max': 15 } })).toEqual([
+      { path: 'score', type: 'integer', min: 8, max: 15 },
+    ]);
   });
 
   it('validates constraint declarations and default values', () => {

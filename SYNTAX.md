@@ -98,24 +98,25 @@ string with no ref is plain data, and keeps its bare words), and `{param}`
 anywhere in a string — metadata included — is its text.
 
 ```yaml
-# 5e/abilities.yaml
+# 5e/ability.yaml
 'entry(ability, label)':
   bought:
     :label: '{label}'
-    :doc: Point-buy score for {label}, 8 to 15 before improvements.
+    :doc: Points bought for {label} above its base 8, 0 to 7 (a score of 8 to 15).
     :param: true
     :type: integer
-    :options: [8, …, 15]
-  base: .bought + $lib.list.count(@.improvements, ability)
+    :min: 0
+    :max: 7
+  base: 8 + .bought + $lib.list.count(@.improvements, ability)
 
 # 5e/character.yaml
 abilities:
-  strength: "#.abilities.entry('strength', 'Strength')"
+  strength: "#.ability.entry('strength', 'Strength')"
 ```
 
 A call written as a plain document value expands where it stands, so the
 `:param` nodes it brings are part of the tree before the query looks for
-them. The same holds in patches (`5e/features.yaml` keeps the ability score
+them. The same holds in patches (`5e/feature.yaml` keeps the ability score
 improvement that way, and each granting feature calls it); a call that yields
 anything but a record stays as written, and stays lazy.
 
@@ -193,7 +194,7 @@ level: '#.levels.level_for(@.xp.value)'
 A patch value that is a single call — `$tmpl('…')` or a call to a
 record-bodied function — inlines on the way in, so a repeated node can live
 in one place and still be filled: `5e/fighter.yaml` writes
-`'@.improvements.level_4': '#.features.ability_improvement()'`, and the
+`'@.improvements.level_4': '#.feature.ability_improvement()'`, and the
 `:param` record it hands back lands in the actor tree where the query finds
 it.
 
@@ -226,8 +227,9 @@ failure messages (a throwing rule reports `"<rule> → <message>"`). Predicates
 evaluate with `.` bound to the containing node; use `.`-relative refs, since
 `$`/`@`/`#` inside validation resolve against shared globals, not the actor.
 
-The CLI runs them on every resolved sheet: a failing rule is an error, not a
-`{ data }` the caller might print anyway. `5e/character.yaml` budgets point
+The CLI runs them on every resolved sheet: failing rules replace the `{ data }`
+envelope with `{ errors }`, listing each failure message, so a caller never
+receives data that breaks its own rules. `5e/character.yaml` budgets point
 buy this way — six `bought` params on the point-buy ladder, a `spent` total,
 and `.spent <= .budget` over them.
 
@@ -404,6 +406,10 @@ constraints, so a UI can prompt with a display name rather than a path.
 - `:options` lists the allowed values: a scalar must equal one entry, every
   array item must equal one (`param options mismatch: …`). Anything but an
   array throws (`invalid :options for …`).
+- `:min` / `:max` bound a number inclusively — every item, for an array
+  (`param range mismatch: …`); either may stand alone. Non-numeric values
+  skip the check (pair with `:type`); a non-number bound throws
+  (`invalid :min for …`). 5e point buy declares `:min: 0`, `:max: 7`.
 - `:count` requires an exact array length (`param count mismatch: …`);
   anything but a non-negative integer throws (`invalid :count for …`).
 - `:unique: true` requires distinct array items
@@ -458,8 +464,10 @@ envelope that is either satisfied or asking:
   evaluated document.
 - Otherwise → `{ query }` with **only** the outstanding params
   (satisfied ones are filtered out).
-- Provided values of the wrong `:type` — or violating `:options` / `:count`
-  / `:unique` — still throw instead of resolving.
+- The CLI then validates `{ data }`: any failing `!validate` rule turns it
+  into `{ errors }` (see Validation).
+- Provided values of the wrong `:type` — or violating `:options` / `:min` /
+  `:max` / `:count` / `:unique` — still throw instead of resolving.
 - `resolve(file, provided, overrides)` writes override values into the tree
   first (`.`/`$`/`@` target the actor, `#` the app; bare paths default to the
   actor). Overridden originals are ignored — derivations never run and

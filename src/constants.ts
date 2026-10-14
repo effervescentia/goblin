@@ -42,7 +42,7 @@ export const DOTLESS_SIGIL = /([#$@])(?=[A-Za-z_])/g;
 /** Quoted string literals, protected from ref/dice rewriting. */
 export const STRING_LITERAL = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g;
 
-/** Whole-string call to a definition: `$tmpl('x.yaml')`, `#.features.y()`. */
+/** Whole-string call to a definition: `$tmpl('x.yaml')`, `#.feature.y()`. */
 export const CALL_EXPR = /^[#$@.][\w.]*\([^()]*\)$/;
 
 /** Whole-string template call: `$tmpl('file.yaml')`. */
@@ -76,6 +76,10 @@ export const OPTIONS_KEY = ':options';
 
 /** Exact item count required of an array `:param` value. */
 export const COUNT_KEY = ':count';
+
+/** Inclusive numeric bounds for a `:param` value (array items each checked). */
+export const MIN_KEY = ':min';
+export const MAX_KEY = ':max';
 
 /** When `true`, array `:param` items must be distinct. */
 export const UNIQUE_KEY = ':unique';

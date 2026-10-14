@@ -5,7 +5,7 @@
 # Template paths resolve relative to their own file.
 #
 # Play: goblin 5e/main.yaml --param name=Aria --param xp=6500 \
-#         --param abilities.strength.bought=15 … (six scores, 27 points) \
+#         --param abilities.strength.bought=7 … (points over 8, 27 total) \
 #         --param features.fighting_style=dueling \
 #         --param features.martial_archetype=Champion \
 #         --param skills.trained='["athletics", "perception"]' \
@@ -15,8 +15,8 @@
 $: Character
 
 levels: $tmpl('levels.yaml')
-features: $tmpl('features.yaml')
-abilities: $tmpl('abilities.yaml')
+feature: $tmpl('feature.yaml')
+ability: $tmpl('ability.yaml')
 
 actor: $tmpl('character.yaml')
 adopt:

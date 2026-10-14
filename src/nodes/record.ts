@@ -7,6 +7,8 @@ import {
   FUNCTION_KEY,
   IF_KEY,
   LABEL_KEY,
+  MAX_KEY,
+  MIN_KEY,
   OPTIONS_KEY,
   PARAM_KEY,
   PARAM_VALUE_KEY,
@@ -35,6 +37,10 @@ export interface MissingParam {
   type?: string;
   /** The node's allowed values (`:options`), when declared. */
   options?: unknown[];
+  /** The node's inclusive lower bound (`:min`), when declared. */
+  min?: number;
+  /** The node's inclusive upper bound (`:max`), when declared. */
+  max?: number;
   /** The node's required item count (`:count`), when declared. */
   count?: number;
   /** Present when the node requires distinct array items (`:unique: true`). */
@@ -85,9 +91,10 @@ export class RecordNode extends Node<Record<string, unknown>> {
   /**
    * Enforce a `:param` record's choice constraints against a filled value.
    * `:options` restricts membership (scalar must equal one entry; every array
-   * item must equal one); `:unique: true` requires distinct array items;
-   * `:count` requires an exact array length. Malformed declarations throw
-   * even when the value is absent; `:unique`/`:count` ignore non-array values.
+   * item must equal one); `:min`/`:max` bound numbers inclusively (array
+   * items each); `:unique: true` requires distinct array items; `:count`
+   * requires an exact array length. Malformed declarations throw even when
+   * the value is absent; bounds skip non-numbers, `:unique`/`:count` non-arrays.
    */
   static checkParamConstraints(record: Record<string, unknown>, value: unknown, path: string): void {
     const options = record[OPTIONS_KEY];
@@ -97,6 +104,24 @@ export class RecordNode extends Node<Record<string, unknown>> {
     const count = record[COUNT_KEY];
     if (count !== undefined && (typeof count !== 'number' || !Number.isInteger(count) || count < 0)) {
       throw new Error(`invalid :count for ${path}: expected non-negative integer, got ${describeValue(count)}`);
+    }
+    for (const key of [MIN_KEY, MAX_KEY]) {
+      const bound = record[key];
+      if (bound !== undefined && (typeof bound !== 'number' || Number.isNaN(bound))) {
+        throw new Error(`invalid ${key} for ${path}: expected number, got ${describeValue(bound)}`);
+      }
+    }
+    const min = record[MIN_KEY] as number | undefined;
+    const max = record[MAX_KEY] as number | undefined;
+    if (min !== undefined || max !== undefined) {
+      const checkBounds = (item: unknown, at: string) => {
+        if (typeof item !== 'number') return;
+        if ((min !== undefined && item < min) || (max !== undefined && item > max)) {
+          throw new Error(`param range mismatch: ${at} expected ${formatRange(min, max)}, got ${item}`);
+        }
+      };
+      if (Array.isArray(value)) value.forEach((item, index) => checkBounds(item, `${path}[${index}]`));
+      else checkBounds(value, path);
     }
     if (Array.isArray(options)) {
       const list = `[${options.map(formatOption).join(', ')}]`;
@@ -144,6 +169,10 @@ export class RecordNode extends Node<Record<string, unknown>> {
       }
       const options = record[OPTIONS_KEY];
       if (Array.isArray(options)) entry.options = [...options];
+      const min = record[MIN_KEY];
+      if (typeof min === 'number') entry.min = min;
+      const max = record[MAX_KEY];
+      if (typeof max === 'number') entry.max = max;
       const count = record[COUNT_KEY];
       if (typeof count === 'number') entry.count = count;
       if (record[UNIQUE_KEY] === true) entry.unique = true;
@@ -253,6 +282,12 @@ function assertKnownParamType(type: string, path: string): void {
   if (!(PARAM_TYPES as readonly string[]).includes(type)) {
     throw new Error(`unknown param type: ${type} (at ${path})`);
   }
+}
+
+/** Render `:min`/`:max` for `param range mismatch` messages. */
+function formatRange(min: number | undefined, max: number | undefined): string {
+  if (min !== undefined && max !== undefined) return `${min} to ${max}`;
+  return min !== undefined ? `at least ${min}` : `at most ${max}`;
 }
 
 /** Render a value for `param options mismatch` messages (JSON, falling back to String). */

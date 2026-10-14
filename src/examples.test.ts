@@ -85,6 +85,7 @@ describe('examples', () => {
         count: 2,
         unique: true,
       },
+      { path: 'score', doc: 'Point-buy score.', type: 'integer', min: 8, max: 15 },
     ]);
 
     const data = cli(
@@ -93,6 +94,8 @@ describe('examples', () => {
       'style=dueling',
       '--param',
       'trained=["arcana","stealth"]',
+      '--param',
+      'score=15',
     ) as { data: Record<string, Record<string, unknown>> };
     expect(data.data.style).toEqual({
       ':label': 'Fighting Style',
@@ -103,6 +106,7 @@ describe('examples', () => {
       ':value': 'dueling',
     });
     expect(data.data.trained?.[':value']).toEqual(['arcana', 'stealth']);
+    expect(data.data.score?.[':value']).toBe(15);
   });
 
   it('09-stdlib.yaml resolves $lib with no attaching', () => {

@@ -40,12 +40,12 @@ const script = `
   const baseMissing = e.missingParams('character.yaml').map((m) => m.path).sort();
 
   const BOUGHT = {
-    'abilities.strength.bought': 15,
-    'abilities.dexterity.bought': 14,
-    'abilities.constitution.bought': 13,
-    'abilities.intelligence.bought': 10,
-    'abilities.wisdom.bought': 10,
-    'abilities.charisma.bought': 8,
+    'abilities.strength.bought': 7,
+    'abilities.dexterity.bought': 6,
+    'abilities.constitution.bought': 5,
+    'abilities.intelligence.bought': 2,
+    'abilities.wisdom.bought': 2,
+    'abilities.charisma.bought': 0,
   };
   const fresh = () => structuredClone(e.docs.get('character.yaml'));
   const scopeOf = (actor, provided) => ({ doc: actor, actor, app: e.appRoot, current: actor, provided });
@@ -123,17 +123,17 @@ const script = `
 // The classic 15/14/13/10/10/8 spread: 25 of the 27 points.
 const BOUGHT = [
   '--param',
-  'abilities.strength.bought=15',
+  'abilities.strength.bought=7',
   '--param',
-  'abilities.dexterity.bought=14',
+  'abilities.dexterity.bought=6',
   '--param',
-  'abilities.constitution.bought=13',
+  'abilities.constitution.bought=5',
   '--param',
-  'abilities.intelligence.bought=10',
+  'abilities.intelligence.bought=2',
   '--param',
-  'abilities.wisdom.bought=10',
+  'abilities.wisdom.bought=2',
   '--param',
-  'abilities.charisma.bought=8',
+  'abilities.charisma.bought=0',
 ];
 
 describe('5e', () => {
@@ -283,13 +283,13 @@ describe('5e', () => {
 
     // Bought 15/14/13: the improvement stacks on the point-buy score.
     const doubled = sheet('["strength","strength"]').data;
-    expect(doubled.abilities.strength).toEqual({ bought: 15, base: 17, modifier: 3 });
-    expect(doubled.abilities.dexterity).toEqual({ bought: 14, base: 14, modifier: 2 });
+    expect(doubled.abilities.strength).toEqual({ bought: 7, base: 17, modifier: 3 });
+    expect(doubled.abilities.dexterity).toEqual({ bought: 6, base: 14, modifier: 2 });
 
     const split = sheet('["dexterity","constitution"]').data;
-    expect(split.abilities.dexterity).toEqual({ bought: 14, base: 15, modifier: 2 });
-    expect(split.abilities.constitution).toEqual({ bought: 13, base: 14, modifier: 2 });
-    expect(split.abilities.strength).toEqual({ bought: 15, base: 15, modifier: 2 });
+    expect(split.abilities.dexterity).toEqual({ bought: 6, base: 15, modifier: 2 });
+    expect(split.abilities.constitution).toEqual({ bought: 5, base: 14, modifier: 2 });
+    expect(split.abilities.strength).toEqual({ bought: 7, base: 15, modifier: 2 });
 
     // A pick outside the six abilities is refused.
     expect(cliFails(...args('["luck","luck"]'))).toContain(
@@ -305,7 +305,7 @@ describe('5e', () => {
     const spread = (...scores: number[]): string[] =>
       ['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma'].flatMap((ability, i) => [
         '--param',
-        `abilities.${ability}.bought=${scores[i]}`,
+        `abilities.${ability}.bought=${(scores[i] ?? 8) - 8}`,
       ]);
     const rest = [
       '--param',
@@ -333,12 +333,10 @@ describe('5e', () => {
     expect(exact.data.point_buy.spent).toBe(27);
 
     // One point over the budget fails the rule.
-    expect(cliFails('5e/main.yaml', ...spread(15, 15, 15, 9, 8, 8), ...rest)).toContain(
-      '!validate failures:\n  .spent <= .budget',
-    );
+    expect(cli('5e/main.yaml', ...spread(15, 15, 15, 9, 8, 8), ...rest)).toEqual({ errors: ['.spent <= .budget'] });
     // A score off the point-buy ladder is refused before any budget check.
     expect(cliFails('5e/main.yaml', ...spread(16, 8, 8, 8, 8, 8), ...rest)).toContain(
-      'param options mismatch: abilities.strength.bought expected one of [8, 9, 10, 11, 12, 13, 14, 15], got 16',
+      'param range mismatch: abilities.strength.bought expected 0 to 7, got 8',
     );
   });
 

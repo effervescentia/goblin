@@ -563,7 +563,7 @@ export class GoblinEngine {
   }
 
   /** A patch value that is one call to a definition (`$tmpl('…')`,
-   * `#.features.x()`) inlines here, so `:param` nodes inside it land in the
+   * `#.feature.x()`) inlines here, so `:param` nodes inside it land in the
    * actor tree instead of staying an expression. Calls that yield anything
    * but a record stay as written, and so stay lazy. */
   private inlinePatchValue(value: unknown, scope: EvalRoots): unknown {

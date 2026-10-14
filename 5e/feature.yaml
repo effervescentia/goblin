@@ -1,4 +1,4 @@
-# Feature definitions shared across classes, attached as `#.features` by
+# Feature definitions shared across classes, attached as `#.feature` by
 # 5e/main.yaml and called from the feature that grants one.
 
 'ability_improvement(level)':

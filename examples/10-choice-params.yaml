@@ -1,6 +1,7 @@
-# Constrained choices (`:options`, `:count`, `:unique`).
+# Constrained choices (`:options`, `:min`/`:max`, `:count`, `:unique`).
 # `:options` lists the allowed values: a scalar must equal one entry, every
-# array item must equal one. `:count` requires an exact array length;
+# array item must equal one. `:min`/`:max` bound numbers inclusively.
+# `:count` requires an exact array length;
 # `:unique: true` requires distinct array items. Violations throw instead of
 # resolving; the `{ query }` report carries the constraints — and the node's
 # `:label`, so a UI can title the prompt.
@@ -19,3 +20,10 @@ trained:
   :options: [arcana, history, stealth]
   :count: 2
   :unique: true
+
+score:
+  :doc: Point-buy score.
+  :param: true
+  :type: integer
+  :min: 8
+  :max: 15
