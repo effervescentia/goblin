@@ -24,7 +24,7 @@ xp:
   :type: integer
   :default: 0
 
-level: '#.levels.level_for(@.xp)'
+level: '#.level.level_for(@.xp)'
 
 # How the six scores start; the matching patch (5e/point_buy.yaml,
 # 5e/standard_array.yaml, 5e/roll.yaml or 5e/roll_assign.yaml) adds that
@@ -53,7 +53,7 @@ abilities:
 utils:
   'ability_modifier(x)': $lib.math.floor((x - 10) / 2)
 
-proficiency_bonus: '#.levels.proficiency_for(@.level)'
+proficiency_bonus: '#.level.proficiency_for(@.level)'
 
 armor_class: '10 + $.abilities.dexterity.modifier'
 speed: 30

@@ -292,7 +292,7 @@ A tmpl'd document's functions stay callable through the inlined table, with
 `.` bound to the template root. Either attach the table under a key…
 
 ```yaml
-levels: $tmpl('levels.yaml')
+levels: $tmpl('level.yaml')
 level: $.levels.level_for(@.xp.value)
 ```
 
@@ -300,7 +300,7 @@ level: $.levels.level_for(@.xp.value)
 which keeps the calling document free of the table:
 
 ```yaml
-level: '#.levels.level_for(@.xp.value)'
+level: '#.level.level_for(@.xp.value)'
 ```
 
 A patch value that is a single call — `$tmpl('…')` or a call to a
@@ -437,7 +437,7 @@ patch touched print bare, as before.
   its text, evaluated where it landed. The latest `:set` is the field's own
   value, so a roll (`$lib.dice.keep_highest(4, 6, 3)`) logs the number the
   sheet shows; one a later write replaced still resolves (an overridden
-  `level` logs what `#.levels.level_for(@.xp)` gave). A plain list
+  `level` logs what `#.level.level_for(@.xp)` gave). A plain list
   (`- all_armor`) is the document stating the list itself, so it files as
   `:set` holding that list, each item resolved.
 - `:add` names what an addition added: the value a `+@.path` key added
@@ -520,8 +520,8 @@ root-relative; nested references resolve relative to their own file.
 $: Character
 
 # Shared binding: merged into the `#` namespace on load, so every document
-# calls #.levels.… without attaching the table itself.
-levels: $tmpl('levels.yaml')
+# calls #.level.… without attaching the table itself.
+level: $tmpl('level.yaml')
 
 actor: $tmpl('character.yaml')
 adopt:
