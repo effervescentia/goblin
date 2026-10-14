@@ -12,7 +12,8 @@
 #         --param skills.trained='["athletics", "perception"]' \
 #         --param improvements.level_4='["strength", "strength"]'
 #   (or ability_method=standard_array with abilities.<name>.assigned=15 …,
-#    or ability_method=roll to roll 4d6 drop lowest for each)
+#    or ability_method=roll to roll 4d6 drop lowest for each,
+#    or ability_method=roll_assign with abilities.<name>.roll=1..6)
 # Missing choices come back as { query }; a full sheet as { data }.
 
 $: Character
@@ -27,4 +28,5 @@ adopt:
   - $tmpl('point_buy.yaml')
   - $tmpl('standard_array.yaml')
   - $tmpl('roll.yaml')
+  - $tmpl('roll_assign.yaml')
   - $tmpl('fighter.yaml')

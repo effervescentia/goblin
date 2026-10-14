@@ -7,14 +7,10 @@ $: Character
   $if: "@.ability_method == 'standard_array'"
   :label: Standard Array
   :doc: Assign 15, 14, 13, 12, 10 and 8, one to each ability.
-  # Six scores over six slots: each used exactly once.
+  # Six picks covering all six scores: each used exactly once.
   '!validate':
-    - $lib.list.count(.assigned, 15) == 1
-    - $lib.list.count(.assigned, 14) == 1
-    - $lib.list.count(.assigned, 13) == 1
-    - $lib.list.count(.assigned, 12) == 1
-    - $lib.list.count(.assigned, 10) == 1
-    - $lib.list.count(.assigned, 8) == 1
+    - $lib.set.subset([15, 14, 13, 12, 10, 8], .assigned)
+    - $lib.list.size(.assigned) == 6
   assigned:
     - '@.abilities.strength.assigned'
     - '@.abilities.dexterity.assigned'

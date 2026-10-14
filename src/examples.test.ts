@@ -123,6 +123,15 @@ describe('examples', () => {
       athletics_picks: 2,
       picks_made: 2,
       trained_in_stealth: 0,
+      ranked: ['gold', 'silver', 'bronze'],
+      second_ranked: 'silver',
+      melee: ['athletics', 'intimidation'],
+      scouting: ['athletics', 'perception', 'survival'],
+      either: ['athletics', 'intimidation', 'perception', 'survival'],
+      both: ['athletics'],
+      melee_only: ['intimidation'],
+      melee_is_scouting: 0,
+      picked_athletics: 1,
     });
   });
 

@@ -381,9 +381,9 @@ describe('5e', () => {
     expect(data.data.point_buy).toBeUndefined();
     expect(data.data.standard_array).toEqual({ assigned: [8, 15, 14, 10, 13, 12] });
 
-    // Every score once: a repeat leaves another unused, and both rules say so.
+    // Every score once: a repeat leaves another unused.
     expect(cli('5e/main.yaml', ...assign(15, 15, 14, 10, 13, 12), ...rest)).toEqual({
-      errors: ['$lib.list.count(.assigned, 15) == 1', '$lib.list.count(.assigned, 8) == 1'],
+      errors: ['$lib.set.subset([15, 14, 13, 12, 10, 8], .assigned)'],
     });
     // A score off the array is refused outright.
     expect(cliFails('5e/main.yaml', ...assign(16, 15, 14, 10, 13, 12), ...rest)).toContain(
@@ -422,6 +422,59 @@ describe('5e', () => {
       expect(data.data.point_buy).toBeUndefined();
       expect(data.data.standard_array).toBeUndefined();
     }
+  });
+
+  it('rolls six scores and assigns each roll to an ability, each once', () => {
+    const rest = [
+      '--param',
+      'name=Aria',
+      '--param',
+      'xp=0',
+      '--param',
+      'ability_method=roll_assign',
+      '--param',
+      'features.fighting_style=dueling',
+      '--param',
+      'skills.trained=["athletics","perception"]',
+    ];
+    const abilities = ['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma'];
+    const take = (...rolls: number[]): string[] =>
+      abilities.flatMap((ability, i) => ['--param', `abilities.${ability}.roll=${rolls[i]}`]);
+
+    const query = cli('5e/main.yaml', ...rest) as {
+      query: Array<{ path: string; label?: string; options?: unknown[] }>;
+    };
+    expect(query.query.map((param) => param.path)).toEqual(abilities.map((ability) => `abilities.${ability}.roll`));
+    expect(query.query[0]).toMatchObject({ label: 'Strength', options: [1, 2, 3, 4, 5, 6] });
+
+    const data = cli('5e/main.yaml', '--strip-metadata', ...take(6, 5, 4, 3, 2, 1), ...rest) as {
+      data: Record<string, unknown> & {
+        roll_assign: { rolls: number[]; taken: number[] };
+        abilities: Record<string, { roll: number; start: number; base: number }>;
+      };
+    };
+    const { rolls, taken } = data.data.roll_assign;
+    expect(taken).toEqual([6, 5, 4, 3, 2, 1]);
+    expect(rolls).toHaveLength(6);
+    for (const roll of rolls) {
+      expect(roll).toBeGreaterThanOrEqual(3);
+      expect(roll).toBeLessThanOrEqual(18);
+    }
+    // Each ability starts at the pooled roll it took — the same roll the pool shows.
+    for (const entry of Object.values(data.data.abilities)) {
+      expect(entry.start).toBe(rolls[entry.roll - 1]);
+      expect(entry.base).toBe(entry.start);
+    }
+    expect(data.data.point_buy).toBeUndefined();
+    expect(data.data.standard_array).toBeUndefined();
+
+    // Every roll once: a repeat leaves another untaken.
+    expect(cli('5e/main.yaml', ...take(6, 5, 4, 3, 2, 6), ...rest)).toEqual({
+      errors: ['$lib.set.subset([1, 2, 3, 4, 5, 6], .taken)'],
+    });
+    expect(cliFails('5e/main.yaml', ...take(7, 5, 4, 3, 2, 1), ...rest)).toContain(
+      'param options mismatch: abilities.strength.roll expected one of [1, 2, 3, 4, 5, 6], got 7',
+    );
   });
 
   it('names each choice from the definition it was called with', () => {

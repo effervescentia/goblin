@@ -10,6 +10,9 @@ export class ListNode extends Node<unknown[]> {
 
   override evaluate(engine: GoblinEngine, scope: EvalRoots): unknown {
     const base = scope.path ?? [];
-    return this.raw.map((item, index) => engine.evaluate(item, { ...scope, path: [...base, String(index)] }));
+    // Items are fields too: a rolled item reads the same from every ref.
+    return this.raw.map((item, index) =>
+      engine.evaluateField(this.raw, String(index), item, { ...scope, path: [...base, String(index)] }),
+    );
   }
 }

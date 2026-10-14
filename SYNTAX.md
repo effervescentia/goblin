@@ -79,7 +79,8 @@ strong: $.strength > $.dexterity      # → true
 - A die used in arithmetic rolls (`hit_points + hit_die` rolls the die).
 - An expression field rolls **once per evaluation**: every ref to it, and the
   evaluated sheet itself, reads the same number (`base: .start` matches a
-  rolled `start`). Each new resolve rolls afresh; function calls
+  rolled `start`). List items count as fields, so a list of rolls holds
+  still too. Each new resolve rolls afresh; function calls
   (`'roll()': 1d20 + .base`) roll on every call.
 
 ```yaml
@@ -145,7 +146,10 @@ table takes precedence for `$lib.…` refs. Native namespaces:
   and sums the `keep` highest — 5e's rolled scores are
   `$lib.dice.keep_highest(4, 6, 3)` (4d6, drop the lowest). It takes numbers,
   since inline `NdM` rolls to a sum before a call could see each die.
-- `list`: `count(value, item)`, `has(value, item)` (1 or 0, for arithmetic),
+- `list`: `at(list, index)` — the item at `index`, from 0 (negative counts
+  from the end; `null` past either end). 5e's roll-and-assign picks a pooled
+  roll with `$lib.list.at(@.roll_assign.rolls, .roll - 1)`.
+  `count(value, item)`, `has(value, item)` (1 or 0, for arithmetic),
   `size(value)` — reading choices back out of a list, or out of a table of
   `:param` choice records, where a record counts its `:value` and never its
   `:options`. This is how picks become numbers: the 5e fighter's ability
@@ -153,6 +157,13 @@ table takes precedence for `$lib.…` refs. Native namespaces:
   counts its own name across them (`10 + $lib.list.count(@.improvements,
   'strength')`), so the same ability twice is +2 and two abilities once each
   is +1 apiece.
+- `set`: lists as sets, reading picks the way `list` does. `union(a, b)`,
+  `intersection(a, b)` and `difference(a, b)` (in `a`, not in `b`) return
+  lists without repeats, in order of first appearance; `subset(a, b)` is 1
+  when every item of `a` is in `b`, else 0. Paired with `list.size`, it says
+  "each exactly once": 5e's standard array checks
+  `$lib.set.subset([15, 14, 13, 12, 10, 8], .assigned)` and
+  `$lib.list.size(.assigned) == 6`.
 
 ```yaml
 # Examples (examples/09-stdlib.yaml)
@@ -160,6 +171,7 @@ floored: $lib.math.floor(2.9)                 # → 2
 smallest: $lib.math.min(3, 9)                 # → 3
 ability_roll: $lib.dice.keep_highest(4, 6, 3) # → 3..18
 athletics_picks: $lib.list.count(@.picks, 'athletics')
+second_ranked: $lib.list.at(@.ranked, 1)        # → silver
 ```
 
 ```yaml
@@ -253,8 +265,9 @@ envelope with `{ errors }`, listing each failure message, so a caller never
 receives data that breaks its own rules. `5e/point_buy.yaml` budgets point
 buy this way — six `bought` params on the point-buy ladder, a `spent` total,
 and `.spent <= .budget` over them — and `5e/standard_array.yaml` checks that
-its six `assigned` scores use each array value once
-(`$lib.list.count(.assigned, 15) == 1`, …).
+its six `assigned` scores use each array value once: they cover the array
+(`$lib.set.subset([15, 14, 13, 12, 10, 8], .assigned)`) and number six
+(`$lib.list.size(.assigned) == 6`).
 
 ```yaml
 # Examples (examples/06-metadata-validation.yaml)
@@ -293,7 +306,7 @@ syntax:
   truthy. A false condition applies nothing — not even `:meta` — so gated-out
   content leaves no residue. Gating on a `:param` turns a choice into
   alternative patches: 5e/main.yaml adopts `point_buy.yaml`,
-  `standard_array.yaml` and `roll.yaml`, each gated on `@.ability_method`, so only the chosen
+  `standard_array.yaml`, `roll.yaml` and `roll_assign.yaml`, each gated on `@.ability_method`, so only the chosen
   method's params reach the next `{ query }`. `$then` is itself a patch whose path keys are
   absolute; a bare `$then` without `$if` applies unconditionally.
   `$if`/`$then` are never serialized.

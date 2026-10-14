@@ -95,6 +95,22 @@ describe('dice', () => {
     expect(out.score.again).toBe(out.score.roll);
   });
 
+  it('rolls each list item once, however it is reached', () => {
+    const engine = new GoblinEngine('.');
+    const doc = {
+      rolls: ['1d1000000 + 0', '1d1000000 + 0'],
+      first: '$lib.list.at($.rolls, 0)',
+      last: '$lib.list.at($.rolls, -1)',
+    };
+    engine.docs.set('rolls.yaml', doc);
+    const out = engine.evaluateDoc('rolls.yaml') as { rolls: number[]; first: number; last: number };
+    expect(out.first).toBe(out.rolls[0]);
+    expect(out.last).toBe(out.rolls[1]);
+    expect(
+      engine.evalExpr('$lib.list.at($.rolls, 2)', { doc, actor: doc, app: engine.appRoot, current: doc }),
+    ).toBeNull();
+  });
+
   it('keeps the highest dice with $lib.dice.keep_highest', () => {
     const { engine, scope } = testEngine();
     for (let i = 0; i < 50; i++) {

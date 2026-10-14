@@ -1,4 +1,4 @@
-# Standard library: `$lib` is implicitly loaded — native `math`, `dice` and `list`,
+# Standard library: `$lib` is implicitly loaded — native `math`, `dice`, `list` and `set`,
 # plus anything in src/lib/lib.yaml. No attaching needed.
 
 floored: $lib.math.floor(2.9) # → 2
@@ -21,3 +21,16 @@ picks:
 athletics_picks: $lib.list.count(@.picks, 'athletics') # → 2
 picks_made: $lib.list.size(@.picks) # → 2
 trained_in_stealth: $lib.list.has(@.picks, 'stealth') # → 0
+
+# `at` reads one item by position, from 0.
+ranked: [gold, silver, bronze]
+second_ranked: $lib.list.at(@.ranked, 1) # → silver
+
+# `set` treats lists as sets: no repeats, first appearance first.
+melee: [athletics, intimidation]
+scouting: [athletics, perception, survival]
+either: $lib.set.union(@.melee, @.scouting) # → [athletics, intimidation, perception, survival]
+both: $lib.set.intersection(@.melee, @.scouting) # → [athletics]
+melee_only: $lib.set.difference(@.melee, @.scouting) # → [intimidation]
+melee_is_scouting: $lib.set.subset(@.melee, @.scouting) # → 0
+picked_athletics: $lib.set.subset(['athletics'], @.picks) # → 1
