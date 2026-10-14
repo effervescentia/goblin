@@ -57,6 +57,7 @@ import {
   joinPath,
   parentOf,
   parseRef,
+  parseWildcard,
   type ResolveHooks,
   sameValue,
   setPath,
@@ -240,6 +241,12 @@ export class GoblinEngine {
     if (segments.length === 0) {
       return this.evaluate(base, scope);
     }
+    // A wildcard ref reads as the list of its matches that resolve.
+    if (segments.some((segment) => parseWildcard(segment) !== null)) {
+      return this.expandPaths(base, segments, scope)
+        .map((path) => this.resolveRef(root === CURRENT ? `.${path.join('.')}` : `${root}.${path.join('.')}`, scope))
+        .filter((value) => value !== undefined);
+    }
 
     const key = this.cacheKey(ref, scope);
     if (this.cache.has(key)) return this.cache.get(key);
@@ -345,6 +352,17 @@ export class GoblinEngine {
         this.cache.clear();
         return value;
       },
+      assignEach: (ref: string, expr: string) => {
+        const { root, path } = parseRef(ref);
+        const base =
+          root === CURRENT ? scope.current : root === DOCUMENT ? scope.doc : root === ACTOR ? scope.actor : scope.app;
+        for (const target of this.expandPaths(base, path, scope)) {
+          const owner = getPath(base, target.slice(0, -1));
+          if (owner === null || typeof owner !== 'object') continue;
+          setPath(base, target, this.evalExpr(expr, { ...scope, current: owner }));
+          this.cache.clear();
+        }
+      },
     };
   }
 
@@ -415,15 +433,65 @@ export class GoblinEngine {
     return this.owners.get(record);
   }
 
+  /** Whether the expression being evaluated may reach `record[key]`: always,
+   * unless it is a `_` field another document wrote. */
+  private visible(record: object, key: string, scope: EvalRoots): boolean {
+    return !isPrivateKey(key) || (this.fieldSource(record, key) ?? '') === (scope.source ?? '');
+  }
+
   /** Throw unless the expression being evaluated was written by the document
    * that wrote the `_` field it reaches. */
   private assertVisible(record: object, key: string, path: string[], scope: EvalRoots): void {
+    if (this.visible(record, key, scope)) return;
     const owner = this.fieldSource(record, key) ?? '';
     const reader = scope.source ?? '';
-    if (owner === reader) return;
     const at = path.join('.');
     throw new Error(
       `private field: ${at} belongs to ${owner || 'an unnamed document'}, not ${reader || 'an unnamed document'}`,
+    );
+  }
+
+  /** Concrete paths for a raw `path`, each `*` swapped for every child it
+   * matches; segments after it are not checked. */
+  private expandPaths(base: unknown, path: string[], scope: EvalRoots): string[][] {
+    const star = path.findIndex((segment) => parseWildcard(segment) !== null);
+    if (star < 0) return [path];
+    const { predicate } = parseWildcard(path[star] ?? '') ?? {};
+    const prefix = path.slice(0, star);
+    const container = prefix.length === 0 ? base : getPath(base, prefix);
+    return this.childKeys(container, scope)
+      .filter((key) => predicate === undefined || this.holdsFor(predicate, getChild(container, key), scope))
+      .flatMap((key) => this.expandPaths(base, [...prefix, key, ...path.slice(star + 1)], scope));
+  }
+
+  /** A `{predicate}` test, with `.` bound to the child. A child missing what
+   * the predicate reads simply does not match. */
+  private holdsFor(predicate: string, child: unknown, scope: EvalRoots): boolean {
+    try {
+      return Boolean(this.evalExpr(predicate, { ...scope, current: child }));
+    } catch (err) {
+      if ((err as Error).message.startsWith('unresolvable reference')) return false;
+      throw err;
+    }
+  }
+
+  /** The data children a `*` matches: list items, or record fields — never
+   * metadata, rules, functions, patch keys or another document's `_` fields. */
+  private childKeys(container: unknown, scope: EvalRoots): string[] {
+    if (Array.isArray(container)) return container.map((_item, index) => String(index));
+    if (container === null || typeof container !== 'object' || RecordNode.isParam(container)) return [];
+    return Object.keys(container).filter(
+      (key) =>
+        !isMetaKey(key) &&
+        !isValidateKey(key) &&
+        !isBareSigil(key) &&
+        !isPathKey(key) &&
+        !FunctionNode.isKey(key) &&
+        key !== DOCUMENT &&
+        key !== IF_KEY &&
+        key !== THEN_KEY &&
+        !key.startsWith('+') &&
+        this.visible(container, key, scope),
     );
   }
 

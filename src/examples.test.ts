@@ -133,6 +133,21 @@ describe('examples', () => {
     });
   });
 
+  it('13-wildcards.yaml reads every match and refills by rule', () => {
+    const state = cli('examples/13-wildcards.yaml', '--strip-metadata') as { data: Record<string, unknown> };
+    expect(state.data).toMatchObject({ maxes: [2, 3], pools: 2, short_maxes: [2] });
+    const script = `
+      import { GoblinEngine } from './src/engine.ts';
+      const e = new GoblinEngine('examples');
+      await e.loadFile('13-wildcards.yaml');
+      const doc = e.docs.get('13-wildcards.yaml');
+      e.evaluateDoc('13-wildcards.yaml').rest.short();
+      console.log(JSON.stringify([doc.resources.surge.current, doc.resources.indomitable.current]));
+    `;
+    const out = execFileSync('bun', ['-e', script], { cwd: root, encoding: 'utf8' });
+    expect(JSON.parse(out)).toEqual([2, 0]);
+  });
+
   it('12-indexing.yaml picks list items by position', () => {
     const state = cli('examples/12-indexing.yaml') as { data: Record<string, unknown> };
     expect(state.data).toMatchObject({ first: 'gold', last: 'bronze', placed: 'silver', missing: null, corner: 3 });

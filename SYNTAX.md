@@ -32,6 +32,42 @@ Cross-namespace fallback: when a path is missing under `$` or `@`, the app
 root is tried next (so `@.utils.…` works when the app supplies `utils`); a
 missing `#` path falls back to the current document.
 
+## Wildcards
+
+A `*` path segment matches every child: list items, or record fields —
+never metadata, `!validate` rules, functions, patch keys, or another
+document's `_` fields. Read, a wildcard ref is the list of its matches that
+resolve, in order; a match missing the rest of the path is skipped
+(`$.flags.*.on` leaves out a flag with no `on`). Wildcards may repeat
+(`@.a.*.b.*`), giving nested lists.
+
+A `{predicate}` segment keeps only the children the predicate holds for,
+evaluated with `.` bound to each child; a child missing a field the
+predicate reads does not match (`@.resources.{.recover == 'short'}.current`).
+It is a wildcard with a filter: `*` is every child, `{…}` the ones that
+pass. Inside a record-body function, `{name}` alone is still that
+parameter's text (see Functions), so a predicate is never a bare parameter
+name.
+
+Assigned (see Statements and assignment), a wildcard ref writes every match,
+evaluating the right side once per match with `.` bound to the record being
+written — so each match reads its own siblings. Matches whose record does
+not exist are skipped.
+
+```yaml
+# Examples (examples/13-wildcards.yaml)
+maxes: $.resources.*.max                          # → [2, 3]
+short_maxes: $.resources.{.recover == 'short'}.max # → [2]
+rest:
+  'short()': $.resources.{.recover == 'short'}.current = .max
+```
+
+5e's rests work this way: every resource declares `recover: short` or
+`recover: long`, a short rest refills the `short` ones
+(`@.resources.{.recover == 'short'}.current = .max`) and a long rest
+refills them all (`@.resources.*.current = .max`), so a class adds a
+resource without touching the rest functions.
+
 ## Private fields
 
 A key starting with `_` is **private**: only expressions written by the same
@@ -444,7 +480,12 @@ it assigns 5 and passes truthy. Comparisons always use `==`.
 rest:
   short(): |
     @.hit_points.current = $lib.math.min(@.hit_points.current + @.hit_die, @.hit_points.max)
+    @.resources.{.recover == 'short'}.current = .max
 ```
+
+A wildcard target (`@.resources.*.current`) assigns each match, with the
+right side evaluated per match and `.` bound to that match's record (see
+Wildcards).
 
 ## Composition
 

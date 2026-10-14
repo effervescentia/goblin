@@ -16,6 +16,9 @@ export const APP = '#';
 
 export type Sigil = typeof CURRENT | typeof DOCUMENT | typeof ACTOR | typeof APP;
 
+/** Path segment matching every child (`@.resources.*.max`). */
+export const WILDCARD = '*';
+
 // -- expression patterns -------------------------------------------------
 
 /** Dice literal: `dN` / `NdM`. */

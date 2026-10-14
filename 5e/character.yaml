@@ -83,10 +83,15 @@ proficiencies:
   armor: []
   weapon: []
   saving_throws: []
+# Expendable uses: each entry has `current`, `max` and `recover` — `short`
+# (back on any rest) or `long` (back only on a long rest).
 resources: {}
 
+# A short rest refills the `short` resources; a long rest refills everything.
 rest:
   'short()': |
     @.hit_points.current = $lib.math.min(@.hit_points.current + @.hit_die, @.hit_points.max)
+    @.resources.{.recover == 'short'}.current = .max
   'long()': |
     @.hit_points.current = @.hit_points.max
+    @.resources.*.current = .max

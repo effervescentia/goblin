@@ -36,11 +36,24 @@ $: Character
   +second_wind:
     :label: Second Wind
     :doc: Regain hit points in a pinch, once per rest.
+    '@.resources':
+      +second_wind:
+        :label: Second Wind
+        :doc: Expend to regain hit points. Restores on a short or long rest.
+        current: .max
+        max: 1
+        recover: short
     '@.actions':
       +second_wind:
         :label: Second Wind
-        :doc: Regain 1d10 + fighter level hit points.
+        :doc: As a bonus action, regain 1d10 + fighter level hit points, up to your maximum.
+        type: bonus_action
         'heal()': 1d10 + @.level
+        # The heal counts only while a use remains (the comparison is 0 or 1),
+        # so with none left nothing changes.
+        'use()': |
+          @.hit_points.current = $lib.math.min(@.hit_points.current + .heal() * (@.resources.second_wind.current > 0), @.hit_points.max)
+          @.resources.second_wind.current = $lib.math.max(@.resources.second_wind.current - 1, 0)
   +action_surge:
     :label: Action Surge
     :doc: Take one additional action on your turn. Restores on a short rest.
@@ -48,9 +61,10 @@ $: Character
     '@.resources':
       +action_surge:
         :label: Action Surge
-        :doc: Expend to gain an additional action.
-        current: 1
+        :doc: Expend to gain an additional action. Restores on a short or long rest.
+        current: .max
         max: 1 + (@.level >= 17)
+        recover: short
   +martial_archetype:
     :label: Martial Archetype
     :doc: 'Choose a subclass: Champion, Battle Master, or Eldritch Knight.'
@@ -93,9 +107,10 @@ $: Character
     '@.resources':
       +indomitable_points:
         :label: Indomitable Uses
-        :doc: Expend to reroll a failed save.
-        value: 1
+        :doc: Expend to reroll a failed save. Restores on a long rest.
+        current: .max
         max: 1 + (@.level >= 13) + (@.level >= 17)
+        recover: long
   +subclass_feature_2:
     :label: Martial Archetype Feature
     :doc: Martial archetype feature (see your subclass).

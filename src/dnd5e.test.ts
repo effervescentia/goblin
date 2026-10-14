@@ -94,6 +94,42 @@ const script = `
   const v5 = r(6500);
   const sw = v5.actions.second_wind.heal();
 
+  // Second Wind: wounded to 1, one use heals and spends it; the next does nothing.
+  const a6 = fresh();
+  const provided6 = baseProvided(6500);
+  e.evaluate(a6, scopeOf(a6, provided6));
+  e.apply(a6, 'point_buy.yaml');
+  e.apply(a6, 'fighter.yaml');
+  a6.hit_points.current = 1;
+  const before = e.evaluate(a6, scopeOf(a6, provided6));
+  before.actions.second_wind.use();
+  const healed = e.evaluate(a6, scopeOf(a6, provided6));
+  healed.actions.second_wind.use();
+  const spent = e.evaluate(a6, scopeOf(a6, provided6));
+  // Rests: a level-17 fighter with every use spent. A short rest refills the
+  // \`short\` resources; Indomitable (\`long\`) waits for a long rest.
+  const a17 = fresh();
+  const provided17 = baseProvided(225000);
+  e.evaluate(a17, scopeOf(a17, provided17));
+  e.apply(a17, 'point_buy.yaml');
+  e.apply(a17, 'fighter.yaml');
+  const uses = (v) => Object.fromEntries(Object.entries(v.resources).map(([k, r]) => [k, val(r.current)]));
+  const fresh17 = uses(e.evaluate(a17, scopeOf(a17, provided17)));
+  for (const key of Object.keys(a17.resources)) a17.resources[key].current = 0;
+  e.evaluate(a17, scopeOf(a17, provided17)).rest.short();
+  const afterShort = uses(e.evaluate(a17, scopeOf(a17, provided17)));
+  e.evaluate(a17, scopeOf(a17, provided17)).rest.long();
+  const afterLong = uses(e.evaluate(a17, scopeOf(a17, provided17)));
+  const rests = { fresh17, afterShort, afterLong };
+
+  const secondWind = {
+    usesBefore: val(before.resources.second_wind.current),
+    healedInRange: val(healed.hit_points.current) >= 1 + 6 && val(healed.hit_points.current) <= Math.min(1 + 15, val(healed.hit_points.max)),
+    usesAfter: val(healed.resources.second_wind.current),
+    unchangedWhenSpent: val(spent.hit_points.current) === val(healed.hit_points.current),
+    usesSpent: val(spent.resources.second_wind.current),
+  };
+
   // Resolve envelope for a satisfied fighter.
   const a5 = fresh();
   const provided5 = { ...baseProvided(6500), name: 'Bram' };
@@ -115,6 +151,8 @@ const script = `
     surge: { value: val(v5.resources.action_surge.current), max: val(v5.resources.action_surge.max) },
     swMin: sw >= 6,
     swMax: sw <= 15,
+    secondWind,
+    rests,
     levels,
     attacks,
     prof,
@@ -170,6 +208,13 @@ describe('5e', () => {
       surge: { value: 1, max: 1 },
       swMin: true,
       swMax: true,
+      secondWind: { usesBefore: 1, healedInRange: true, usesAfter: 0, unchangedWhenSpent: true, usesSpent: 0 },
+      rests: {
+        // Uses start full: Action Surge has 2 at 17, Indomitable 3.
+        fresh17: { second_wind: 1, action_surge: 2, indomitable_points: 3 },
+        afterShort: { second_wind: 1, action_surge: 2, indomitable_points: 0 },
+        afterLong: { second_wind: 1, action_surge: 2, indomitable_points: 3 },
+      },
       levels: {
         0: 1,
         299: 1,

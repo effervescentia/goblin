@@ -11,7 +11,7 @@ import {
 } from '../constants';
 import type { GoblinEngine } from '../engine';
 import type { EvalRoots } from '../utils';
-import { deepClone } from '../utils';
+import { deepClone, markWildcards } from '../utils';
 import { ExpressionNode } from './expression';
 import { Node } from './node';
 
@@ -66,9 +66,12 @@ export class FunctionNode extends Node<unknown> {
 
   /** Sigil refs a body resolves, in order, outside string literals. */
   static detectDeps(body: string): string[] {
-    const code = body.replace(STRING_LITERAL, '').replace(DOTLESS_SIGIL, '$1.');
+    // Literals hide from the scan but come back inside wildcard predicates.
+    const literals: string[] = [];
+    const bare = body.replace(STRING_LITERAL, (m) => `__STR${literals.push(m) - 1}__`).replace(DOTLESS_SIGIL, '$1.');
+    const { code, unmark } = markWildcards(bare, literals);
     SIGIL_REF.lastIndex = 0;
-    const matches = code.match(SIGIL_REF) ?? [];
+    const matches = (code.match(SIGIL_REF) ?? []).map(unmark);
     SIGIL_REF.lastIndex = 0;
     // Omit $lib refs (stdlib is implicit).
     return [...new Set(matches)].filter((m) => !m.startsWith('$lib') && !m.startsWith('$.lib'));

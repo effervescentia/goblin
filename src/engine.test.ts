@@ -259,6 +259,65 @@ describe('indexing', () => {
   });
 });
 
+describe('wildcards', () => {
+  const pools = () => ({
+    resources: {
+      ':doc': 'uses',
+      surge: { current: 0, max: 2, recover: 'short' },
+      indomitable: { current: 0, max: 3, recover: 'long' },
+      'reset()': '1',
+    },
+    flags: [{ on: true }, { on: false }, {}],
+  });
+
+  it('reads every match as a list, skipping metadata, functions and misses', () => {
+    const engine = new GoblinEngine('.');
+    const doc = pools();
+    const scope: EvalRoots = { doc, actor: doc, app: {}, current: doc };
+    expect(engine.evalExpr('$.resources.*.max', scope)).toEqual([2, 3]);
+    expect(engine.evalExpr('$.flags.*.on', scope)).toEqual([true, false]);
+    expect(engine.evalExpr('$lib.list.size($.resources.*.max)', scope)).toBe(2);
+  });
+
+  it('filters matches with a predicate, skipping children it cannot read', () => {
+    const engine = new GoblinEngine('.');
+    const doc = pools();
+    const scope: EvalRoots = { doc, actor: doc, app: {}, current: doc };
+    expect(engine.evalExpr("$.resources.{.recover == 'short'}.max", scope)).toEqual([2]);
+    expect(engine.evalExpr('$.resources.{.max > 1 && .max < 3}.max', scope)).toEqual([2]);
+    expect(engine.evalExpr('$.resources.{.recover == "long"}.max', scope)).toEqual([3]);
+    // The third flag has no `on`: it does not match rather than throwing.
+    expect(engine.evalExpr('$.flags.{.on}.on', scope)).toEqual([true]);
+  });
+
+  it('assigns each match, with `.` bound to the record being written', () => {
+    const engine = new GoblinEngine('.');
+    const doc = pools();
+    const scope: EvalRoots = { doc, actor: doc, app: {}, current: doc };
+    engine.evalExpr("$.resources.{.recover == 'short'}.current = .max", scope);
+    expect(doc.resources.surge.current).toBe(2);
+    expect(doc.resources.indomitable.current).toBe(0);
+    engine.evalExpr('$.resources.*.current = .max', scope);
+    expect(doc.resources.indomitable.current).toBe(3);
+  });
+
+  it('lists wildcard refs among function deps', () => {
+    expect(FunctionNode.detectDeps('@.resources.*.current = .max')).toEqual(['@.resources.*.current', '.max']);
+    expect(FunctionNode.detectDeps("@.resources.{.recover == 'short'}.current = .max")).toEqual([
+      "@.resources.{.recover == 'short'}.current",
+      '.max',
+    ]);
+  });
+
+  it("skips another document's `_` fields", () => {
+    const engine = new GoblinEngine('.');
+    engine.register('a.yaml', { stats: { _hidden: 1, open: 2 } });
+    engine.register('b.yaml', { all: '#.stats.*' });
+    const out = engine.evaluateDoc('b.yaml') as { all: unknown };
+    expect(out.all).toEqual([2]);
+  });
+});
+
 describe('private fields', () => {
   // `register` records which document wrote each node, as loadFile does.
   const engineWith = (docs: Record<string, unknown>) => {

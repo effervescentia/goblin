@@ -15,6 +15,7 @@ import {
   type Sigil,
   STRING_LITERAL,
   VALIDATE_KEY,
+  WILDCARD,
 } from './constants';
 import { Die } from './nodes/die';
 
@@ -76,8 +77,30 @@ export function parseRef(ref: string): ParsedRef {
   let rest = ref.slice(1);
   if (rest.length && !rest.startsWith(CURRENT)) rest = CURRENT + rest;
   if (rest.startsWith(CURRENT)) rest = rest.slice(1);
-  const path = rest ? rest.split('.').filter(Boolean) : [];
-  return { root: sigil, path };
+  return { root: sigil, path: splitPath(rest) };
+}
+
+/** Split a path on `.`, keeping a `{predicate}` segment whole. */
+function splitPath(path: string): string[] {
+  const segments: string[] = [];
+  let depth = 0;
+  let quote = '';
+  let segment = '';
+  for (const c of path) {
+    if (quote) {
+      if (c === quote) quote = '';
+    } else if (c === "'" || c === '"') quote = c;
+    else if ('[({'.includes(c)) depth++;
+    else if (')]}'.includes(c)) depth--;
+    else if (c === '.' && depth === 0) {
+      if (segment) segments.push(segment);
+      segment = '';
+      continue;
+    }
+    segment += c;
+  }
+  if (segment) segments.push(segment);
+  return segments;
 }
 
 export function getPath(root: unknown, path: string[]): unknown {
@@ -179,28 +202,73 @@ function transpileStatement(stmt: string): { code: string; isAssign: boolean } {
     .replace(DOTLESS_SIGIL, '$1.')
     // Restore $lib refs.
     .replace(/__LIB(\d+)__/g, (_m, i: string) => libRefs[Number(i)]!);
+  // Wildcard segments become names, so refs carrying them match whole.
+  const { code: marked, unmark } = markWildcards(protected_, literals);
 
-  const assignIdx = protected_.search(ASSIGN_OP);
+  const assignIdx = marked.search(ASSIGN_OP);
   if (assignIdx >= 0) {
-    const lhs = protected_.slice(0, assignIdx).trim();
-    const rhs = protected_.slice(assignIdx + 1).trim();
+    const lhs = marked.slice(0, assignIdx).trim();
+    const rhs = marked.slice(assignIdx + 1).trim();
     SIGIL_REF.lastIndex = 0;
     if (SIGIL_REF.test(lhs) && lhs.replace(SIGIL_REF, '').trim() === '') {
-      const code = `__assign(${JSON.stringify(lhs)}, (${rewriteIndexing(rewriteExpr(rhs))}))`;
+      // A wildcard target assigns each match, evaluating the right side per
+      // match — so it travels as text, not as one computed value.
+      if (unmark(lhs) !== lhs) {
+        const text = restoreLiterals(unmark(rhs), literals);
+        return { code: `__assign_each(${JSON.stringify(unmark(lhs))}, ${JSON.stringify(text)})`, isAssign: true };
+      }
+      const code = `__assign(${JSON.stringify(lhs)}, (${rewriteExpr(rewriteIndexing(rhs), unmark)}))`;
       return { code: restoreLiterals(code, literals), isAssign: true };
     }
   }
-  return { code: restoreLiterals(rewriteIndexing(rewriteExpr(protected_)), literals), isAssign: false };
+  return { code: restoreLiterals(rewriteExpr(rewriteIndexing(marked), unmark), literals), isAssign: false };
 }
 
-function rewriteExpr(code: string): string {
+function rewriteExpr(code: string, unmark: (ref: string) => string): string {
   SIGIL_REF.lastIndex = 0;
   return code
     .replace(INLINE_DICE, (_m, count: string, sides: string) => {
       const n = count || '1';
       return `__roll(${n}, ${sides})`;
     })
-    .replace(SIGIL_REF, (m) => `__resolve(${JSON.stringify(m)})`);
+    .replace(SIGIL_REF, (m) => `__resolve(${JSON.stringify(unmark(m))})`);
+}
+
+/**
+ * Swap wildcard segments (`.*`, `.{predicate}`) for placeholder names while
+ * refs are matched — `*` alone reads as multiplication, `{` as an object.
+ * `unmark` puts them back, predicates with their string `literals` restored.
+ */
+export function markWildcards(
+  code: string,
+  literals: string[] = [],
+): { code: string; unmark: (text: string) => string } {
+  const predicates: string[] = [];
+  let out = '';
+  for (let i = 0; i < code.length; i++) {
+    if (code[i] === '.' && code[i + 1] === '{') {
+      const close = matchBracket(code, i + 1, 1);
+      predicates.push(restoreLiterals(code.slice(i + 2, close), literals));
+      out += `.__each${predicates.length}__`;
+      i = close;
+    } else if (code[i] === '.' && code[i + 1] === WILDCARD && /^$|[.\s),\]]/.test(code.charAt(i + 2))) {
+      out += '.__each__';
+      i += 1;
+    } else {
+      out += code.charAt(i);
+    }
+  }
+  const unmark = (text: string) =>
+    text.replace(/\.__each(\d*)__/g, (_m, n: string) => (n ? `.{${predicates[Number(n) - 1]}}` : `.${WILDCARD}`));
+  return { code: out, unmark };
+}
+
+/** A path segment's wildcard form: `*` matches every child, `{predicate}`
+ * those the predicate holds for; null for an ordinary segment. */
+export function parseWildcard(segment: string): { predicate?: string } | null {
+  if (segment === WILDCARD) return {};
+  if (segment.startsWith('{') && segment.endsWith('}')) return { predicate: segment.slice(1, -1) };
+  return null;
 }
 
 /** `x[i]` → `__index(x, i)`, leftmost first so chains (`x[0][1]`) nest. A `[`
@@ -234,7 +302,7 @@ function operandStart(code: string, end: number): number {
   let i = end;
   if (code[i] === ')' || code[i] === ']') i = matchBracket(code, i, -1);
   else i += 1;
-  while (i > 0 && /[\w.$]/.test(code.charAt(i - 1))) i--;
+  while (i > 0 && /[\w.$@#]/.test(code.charAt(i - 1))) i--;
   return i;
 }
 
@@ -254,6 +322,8 @@ function indexList(list: unknown, index: unknown): unknown {
 export interface ResolveHooks {
   resolve: (ref: string) => unknown;
   assign: (ref: string, value: unknown) => unknown;
+  /** Assign every match of a wildcard ref, evaluating `expr` with `.` bound to each match's record. */
+  assignEach: (ref: string, expr: string) => void;
 }
 
 /**
@@ -273,7 +343,7 @@ export function compileBody(body: string, paramNames: string[] = []) {
 
   // No stdlib free variable is bound here: `$lib.…` is the only way in, so
   // `$math` stays an ordinary document ref that resolves to nothing.
-  const fn = new Function('__resolve', '__assign', '__roll', '__index', ...paramNames, js) as (
+  const fn = new Function('__resolve', '__assign', '__assign_each', '__roll', '__index', ...paramNames, js) as (
     ...args: unknown[]
   ) => unknown;
 
@@ -283,7 +353,7 @@ export function compileBody(body: string, paramNames: string[] = []) {
       for (let i = 0; i < count; i++) total += 1 + Math.floor(Math.random() * sides);
       return total;
     };
-    const args = [hooks.resolve, hooks.assign, roll, indexList, ...paramNames.map((p) => params[p])];
+    const args = [hooks.resolve, hooks.assign, hooks.assignEach, roll, indexList, ...paramNames.map((p) => params[p])];
     return fn(...args);
   };
 }
