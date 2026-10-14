@@ -213,8 +213,14 @@ describe('evaluate', () => {
       app: engine.appRoot,
       current: engine.appRoot,
     }) as Record<string, any>;
-    expect((appView.hit_points as Record<string, unknown>).current).toBeGreaterThanOrEqual(3);
-    expect((appView.hit_points as Record<string, unknown>).current).toBeLessThanOrEqual(5);
+    const current = (appView.hit_points as Record<string, unknown>).current;
+    expect(fieldValue(current)).toBeGreaterThanOrEqual(3);
+    expect(fieldValue(current)).toBeLessThanOrEqual(5);
+    // The assignment files a `:set` over the prior value, like a patch write.
+    expect((current as { ':events': unknown[] })[':events']).toEqual([
+      { ':set': 3 },
+      { ':source': 'main.yaml', ':set': fieldValue(current) },
+    ]);
   });
 });
 
@@ -299,6 +305,44 @@ describe('wildcards', () => {
     expect(doc.resources.indomitable.current).toBe(0);
     engine.evalExpr('$.resources.*.current = .max', scope);
     expect(doc.resources.indomitable.current).toBe(3);
+  });
+
+  it('files `+=` as `:add` and `-=` as `:subtract`, after the prior value', () => {
+    const engine = new GoblinEngine('.');
+    engine.register('hp.yaml', {
+      hp: { current: 5, max: 10 },
+      'heal()': '@.hp.current += 1d1 + 2',
+      'hurt()': '@.hp.current -= 4',
+    });
+    const doc = engine.docs.get('hp.yaml') as { hp: { current: number } };
+    const scope: EvalRoots = { doc, actor: doc, app: {}, current: doc, source: 'hp.yaml' };
+    (engine.evaluateDoc('hp.yaml') as { heal: () => void }).heal();
+    (engine.evaluate(doc, scope) as { hurt: () => void }).hurt();
+    expect(doc.hp.current).toBe(4);
+    const out = engine.evaluateDoc('hp.yaml') as { hp: { current: unknown } };
+    expect(out.hp.current).toEqual({
+      ':value': 4,
+      ':events': [
+        { ':source': 'hp.yaml', ':set': 5 },
+        { ':source': 'hp.yaml', ':add': 3 },
+        { ':source': 'hp.yaml', ':subtract': 4 },
+      ],
+    });
+  });
+
+  it('adds and takes with `+=` / `-=`, per match on a wildcard', () => {
+    const engine = new GoblinEngine('.');
+    const doc = pools();
+    const scope: EvalRoots = { doc, actor: doc, app: {}, current: doc };
+    engine.evalExpr('$.resources.surge.current += 2 * 3', scope);
+    expect(doc.resources.surge.current).toBe(6);
+    engine.evalExpr('$.resources.surge.current -= 1 + 1', scope);
+    expect(doc.resources.surge.current).toBe(4);
+    engine.evalExpr('$.resources.*.current += .max', scope);
+    expect(doc.resources.surge.current).toBe(6);
+    expect(doc.resources.indomitable.current).toBe(3);
+    engine.evalExpr("$.resources.{.recover == 'long'}.current -= 1", scope);
+    expect(doc.resources.indomitable.current).toBe(2);
   });
 
   it('lists wildcard refs among function deps', () => {

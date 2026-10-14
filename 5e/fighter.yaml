@@ -48,12 +48,11 @@ $: Character
         :label: Second Wind
         :doc: As a bonus action, regain 1d10 + fighter level hit points, up to your maximum.
         type: bonus_action
-        'heal()': 1d10 + @.level
-        # The heal counts only while a use remains (the comparison is 0 or 1),
-        # so with none left nothing changes.
+        # Adds 1d10 + level, no more than is missing, only while a use remains
+        # (the comparison is 0 or 1) — so with none left nothing changes.
         'use()': |
-          @.hit_points.current = $lib.math.min(@.hit_points.current + .heal() * (@.resources.second_wind.current > 0), @.hit_points.max)
-          @.resources.second_wind.current = $lib.math.max(@.resources.second_wind.current - 1, 0)
+          @.hit_points.current += $lib.math.min(1d10 + @.level, @.hit_points.max - @.hit_points.current) * (@.resources.second_wind.current > 0)
+          @.resources.second_wind.current -= @.resources.second_wind.current > 0
   +action_surge:
     :label: Action Surge
     :doc: Take one additional action on your turn. Restores on a short rest.

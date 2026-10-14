@@ -28,6 +28,7 @@ import {
   PARAM_VALUE_KEY,
   SET_KEY,
   SOURCE_KEY,
+  SUBTRACT_KEY,
   TEMPLATE_CALL,
   TEMPLATE_SCAN,
   THEN_KEY,
@@ -43,6 +44,7 @@ import { parse } from './nodes/parse';
 import { type MissingParam, RecordNode } from './nodes/record';
 import { serialize } from './nodes/serialize';
 import {
+  type AssignOp,
   compileBody,
   deepClone,
   type EvalRoots,
@@ -344,26 +346,52 @@ export class GoblinEngine {
         if (value === undefined) throw new Error(`unresolvable reference: ${ref}`);
         return value;
       },
-      assign: (ref: string, value: unknown) => {
+      assign: (ref: string, value: unknown, op: AssignOp) => {
         const { root, path } = parseRef(ref);
         const base =
           root === CURRENT ? scope.current : root === DOCUMENT ? scope.doc : root === ACTOR ? scope.actor : scope.app;
-        setPath(base, path, value);
-        this.cache.clear();
-        return value;
+        return this.write(base, root, path, value, op, scope);
       },
-      assignEach: (ref: string, expr: string) => {
+      assignEach: (ref: string, expr: string, op: AssignOp) => {
         const { root, path } = parseRef(ref);
         const base =
           root === CURRENT ? scope.current : root === DOCUMENT ? scope.doc : root === ACTOR ? scope.actor : scope.app;
         for (const target of this.expandPaths(base, path, scope)) {
           const owner = getPath(base, target.slice(0, -1));
           if (owner === null || typeof owner !== 'object') continue;
-          setPath(base, target, this.evalExpr(expr, { ...scope, current: owner }));
-          this.cache.clear();
+          this.write(base, root, target, this.evalExpr(expr, { ...scope, current: owner }), op, scope);
         }
       },
     };
+  }
+
+  /** One assignment, filed like a patch write under the document whose
+   * expression made it: `=` as `:set`, `+=` as `:add`, `-=` as `:subtract`. */
+  private write(base: unknown, root: string, path: string[], value: unknown, op: AssignOp, scope: EvalRoots): unknown {
+    // Dice roll once here, so the event and the field hold the same number.
+    const amount = op === '=' ? value : Number(value);
+    let next = amount;
+    if (op !== '=') {
+      const held = Number(
+        this.resolveRef(root === CURRENT ? `.${path.join('.')}` : `${root}.${path.join('.')}`, scope),
+      );
+      next = op === '+' ? held + (amount as number) : held - (amount as number);
+    }
+    const slot = this.ownerOf(base, path);
+    if (slot) {
+      const kind = op === '=' ? SET_KEY : op === '+' ? ADD_KEY : SUBTRACT_KEY;
+      this.recordEvent(
+        slot.owner,
+        slot.key,
+        kind,
+        deepClone(amount),
+        scope.source,
+        this.fieldSource(slot.owner, slot.key),
+      );
+    }
+    setPath(base, path, next);
+    this.cache.clear();
+    return next;
   }
 
   evalExpr(expr: string, scope: EvalRoots): unknown {
@@ -659,13 +687,20 @@ export class GoblinEngine {
   }
 
   /** Note a patch write, in application order. Call before writing. */
-  private recordEvent(target: Record<string, unknown>, key: string, kind: string, value: unknown): void {
-    this.seedEvents(target, key).push(this.event(this.applySource, kind, value));
+  private recordEvent(
+    target: Record<string, unknown>,
+    key: string,
+    kind: string,
+    value: unknown,
+    source = this.applySource,
+    origin = this.actorSource,
+  ): void {
+    this.seedEvents(target, key, origin).push(this.event(source, kind, value));
   }
 
   /** Open a field's log, recording what it already holds as the first event.
    * Call before mutating in place, so that origin is the prior value. */
-  private seedEvents(target: Record<string, unknown>, key: string): unknown[] {
+  private seedEvents(target: Record<string, unknown>, key: string, origin = this.actorSource): unknown[] {
     let fields = this.fieldEvents.get(target);
     if (fields === undefined) {
       fields = new Map();
@@ -673,7 +708,7 @@ export class GoblinEngine {
     }
     let log = fields.get(key);
     if (log === undefined) {
-      log = key in target ? [this.event(this.actorSource, SET_KEY, deepClone(target[key]))] : [];
+      log = key in target ? [this.event(origin, SET_KEY, deepClone(target[key]))] : [];
       fields.set(key, log);
     }
     return log;
@@ -695,7 +730,7 @@ export class GoblinEngine {
     if (log === undefined) return undefined;
     return log.map((entry, i) => {
       const event = entry as Record<string, unknown>;
-      const kind = SET_KEY in event ? SET_KEY : ADD_KEY;
+      const kind = [SET_KEY, ADD_KEY, SUBTRACT_KEY].find((k) => k in event) ?? SET_KEY;
       if (i === log.length - 1 && kind === SET_KEY) return { ...event, [kind]: value };
       return { ...event, [kind]: this.resolveWritten(event, kind, event[kind], scope) };
     });

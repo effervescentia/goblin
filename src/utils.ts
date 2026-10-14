@@ -207,17 +207,24 @@ function transpileStatement(stmt: string): { code: string; isAssign: boolean } {
 
   const assignIdx = marked.search(ASSIGN_OP);
   if (assignIdx >= 0) {
-    const lhs = marked.slice(0, assignIdx).trim();
+    let lhs = marked.slice(0, assignIdx).trim();
     const rhs = marked.slice(assignIdx + 1).trim();
+    // `+=` / `-=` add to or take from what the target holds.
+    const compound = lhs.match(/[+-]$/)?.[0];
+    if (compound) lhs = lhs.slice(0, -1).trim();
+    const op = JSON.stringify(compound ?? '=');
     SIGIL_REF.lastIndex = 0;
     if (SIGIL_REF.test(lhs) && lhs.replace(SIGIL_REF, '').trim() === '') {
       // A wildcard target assigns each match, evaluating the right side per
       // match — so it travels as text, not as one computed value.
       if (unmark(lhs) !== lhs) {
         const text = restoreLiterals(unmark(rhs), literals);
-        return { code: `__assign_each(${JSON.stringify(unmark(lhs))}, ${JSON.stringify(text)})`, isAssign: true };
+        return {
+          code: `__assign_each(${JSON.stringify(unmark(lhs))}, ${JSON.stringify(text)}, ${op})`,
+          isAssign: true,
+        };
       }
-      const code = `__assign(${JSON.stringify(lhs)}, (${rewriteExpr(rewriteIndexing(rhs), unmark)}))`;
+      const code = `__assign(${JSON.stringify(lhs)}, (${rewriteExpr(rewriteIndexing(rhs), unmark)}), ${op})`;
       return { code: restoreLiterals(code, literals), isAssign: true };
     }
   }
@@ -319,11 +326,14 @@ function indexList(list: unknown, index: unknown): unknown {
   return list.at(index) ?? null;
 }
 
+/** How an assignment writes: `=` replaces, `+` adds, `-` takes away. */
+export type AssignOp = '=' | '+' | '-';
+
 export interface ResolveHooks {
   resolve: (ref: string) => unknown;
-  assign: (ref: string, value: unknown) => unknown;
+  assign: (ref: string, value: unknown, op: AssignOp) => unknown;
   /** Assign every match of a wildcard ref, evaluating `expr` with `.` bound to each match's record. */
-  assignEach: (ref: string, expr: string) => void;
+  assignEach: (ref: string, expr: string, op: AssignOp) => void;
 }
 
 /**

@@ -92,7 +92,6 @@ const script = `
   const attacks = { 0: val(r(0).attacks), 6500: val(r(6500).attacks), 85000: val(r(85000).attacks), 355000: val(r(355000).attacks) };
   const prof = { 0: r(0).proficiency_bonus, 6500: r(6500).proficiency_bonus, 48000: r(48000).proficiency_bonus, 225000: r(225000).proficiency_bonus };
   const v5 = r(6500);
-  const sw = v5.actions.second_wind.heal();
 
   // Second Wind: wounded to 1, one use heals and spends it; the next does nothing.
   const a6 = fresh();
@@ -149,8 +148,6 @@ const script = `
     hp: { value: val(v5.hit_points.current), max: val(v5.hit_points.max) },
     trained: v5.skills.trained[':value'],
     surge: { value: val(v5.resources.action_surge.current), max: val(v5.resources.action_surge.max) },
-    swMin: sw >= 6,
-    swMax: sw <= 15,
     secondWind,
     rests,
     levels,
@@ -206,8 +203,6 @@ describe('5e', () => {
       hp: { value: 11, max: 11 },
       trained: ['athletics', 'perception'],
       surge: { value: 1, max: 1 },
-      swMin: true,
-      swMax: true,
       secondWind: { usesBefore: 1, healedInRange: true, usesAfter: 0, unchangedWhenSpent: true, usesSpent: 0 },
       rests: {
         // Uses start full: Action Surge has 2 at 17, Indomitable 3.

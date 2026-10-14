@@ -440,9 +440,15 @@ patch touched print bare, as before.
   the items a `+item` list appended, or the key a `+key` record addition
   introduced. A `+key` holding a scalar or a
   list records that value instead, so nothing is logged twice.
+- Assignments in statement bodies file events too, under the document whose
+  expression made them: `=` as `:set` (the new value), `+=` as `:add` and
+  `-=` as `:subtract` (the amount, with any dice rolled once — so the event
+  and the field agree). Using Second Wind logs
+  `{ ":source": "fighter.yaml", ":add": 7 }` on `hit_points.current` and
+  `{ ":source": "fighter.yaml", ":subtract": 1 }` on its uses.
 - The first event is the value the field already held when the first patch
-  landed, so a history reads base-then-patch. A field a patch creates has no
-  such origin event.
+  or assignment landed, so a history reads base-then-patch. A field a patch
+  creates has no such origin event.
 - Metadata (`:doc`, `:label`, …) and function definitions are never wrapped.
 
 ```ts
@@ -482,6 +488,12 @@ rest:
     @.hit_points.current = $lib.math.min(@.hit_points.current + @.hit_die, @.hit_points.max)
     @.resources.{.recover == 'short'}.current = .max
 ```
+
+`+=` and `-=` add to or take from what the target holds: `x += y` is
+`x = x + (y)`, logged as an `:add` / `:subtract` of `y` rather than a `:set`
+(see Change events), so 5e's Second Wind heals with
+`@.hit_points.current += $lib.math.min(1d10 + @.level, @.hit_points.max - @.hit_points.current) * …`.
+On a wildcard target each match adds to its own value.
 
 A wildcard target (`@.resources.*.current`) assigns each match, with the
 right side evaluated per match and `.` bound to that match's record (see

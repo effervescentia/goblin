@@ -115,6 +115,8 @@ export const OVERRIDE_SOURCE = 'override';
 
 /** Event: the items a patch appended to an array field. */
 export const ADD_KEY = ':add';
+/** Event: the amount a `-=` assignment took from a field. */
+export const SUBTRACT_KEY = ':subtract';
 
 /** Printed function descriptor keys (see `FunctionNode.serialize`). */
 export const PARAMS_KEY = ':params';
