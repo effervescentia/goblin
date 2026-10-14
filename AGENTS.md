@@ -54,6 +54,10 @@ apart. Treat a missing spec update as an incomplete change.
   (`goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--help]`) that prints
   the resolution envelope (`{ data }`, `{ query }`, or `{ errors }` for failing `!validate` rules) as JSON to stdout. `src/cli.ts` is Bun-only; keep `parseArgs` pure
   so `src/cli.test.ts` stays runtime-agnostic.
+- `bun run ui` serves the inspector (`ui/`, Bun-only) at localhost:3000: it
+  resolves an entry via `resolveApp` in `src/cli.ts`, answers `{ query }`
+  turns with a form, and renders `inspect()` (`src/inspect.ts`, pure) —
+  fields, what each reads and is read by, and their `:events`.
 - `src/engine.ts` transpiles goblin expressions with `new Function` — every
   `.name` token is treated as a goblin ref, so avoid introducing bare JS
   property access in expression strings.

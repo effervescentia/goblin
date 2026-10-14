@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Goblin Inspector</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <h1>Goblin Inspector</h1>
+      <label class="field">
+        <span>Entry</span>
+        <select id="entry"></select>
+      </label>
+      <button id="resolve" type="button">Resolve</button>
+      <button id="reset" type="button" class="ghost">Clear choices</button>
+      <span id="status" class="status"></span>
+    </header>
+
+    <section id="choices" class="choices" hidden>
+      <h2>Choices so far</h2>
+      <div id="choice-list" class="chips"></div>
+    </section>
+
+    <main id="main">
+      <p class="empty">Pick an entry and resolve it.</p>
+    </main>
+
+    <script type="module" src="./app.ts"></script>
+  </body>
+</html>

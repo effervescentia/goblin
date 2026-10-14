@@ -93,6 +93,17 @@ export async function resolveAppState(
   provided: Record<string, unknown> = {},
   overrides: Record<string, unknown> = {},
 ): Promise<AppState> {
+  return (await resolveApp(cwd, entry, provided, overrides)).state;
+}
+
+/** `resolveAppState`, plus the merged raw actor it resolved — what the
+ * inspector reads expressions and dependencies from. */
+export async function resolveApp(
+  cwd: string,
+  entry?: string,
+  provided: Record<string, unknown> = {},
+  overrides: Record<string, unknown> = {},
+): Promise<{ state: AppState; actor: unknown }> {
   // Bun-only: the CLI entry point always runs under Bun (or compiled).
   const { YAML } = await import('bun');
   let root = cwd;
@@ -113,17 +124,18 @@ export async function resolveAppState(
   const engine = new GoblinEngine(root);
   await engine.loadFile(main);
   const raw = engine.docs.get(main);
-  const state =
+  const actor =
     raw !== null && typeof raw === 'object' && !Array.isArray(raw) && 'actor' in raw
-      ? await resolveComposed(engine, raw as Record<string, unknown>, provided, overrides)
-      : engine.resolve(main, provided, overrides);
+      ? composeActor(engine, raw as Record<string, unknown>, provided, overrides)
+      : raw;
+  const state = engine.resolveRaw(actor, provided, overrides);
   // A resolved sheet must also hold: `!validate` rules are part of the answer,
   // not a separate pass the caller might skip.
   if ('data' in state) {
     const errors = engine.validate(state.data);
-    if (errors.length > 0) return { errors };
+    if (errors.length > 0) return { state: { errors }, actor };
   }
-  return state;
+  return { state, actor };
 }
 
 /**
@@ -140,6 +152,16 @@ export async function resolveComposed(
   provided: Record<string, unknown> = {},
   overrides: Record<string, unknown> = {},
 ): Promise<ReturnType<GoblinEngine['resolve']>> {
+  return engine.resolveRaw(composeActor(engine, entry, provided, overrides), provided, overrides);
+}
+
+/** The merged raw actor of an `actor` + `adopt` entry, ready to resolve. */
+export function composeActor(
+  engine: GoblinEngine,
+  entry: Record<string, unknown>,
+  provided: Record<string, unknown> = {},
+  overrides: Record<string, unknown> = {},
+): unknown {
   const scope = { doc: entry, actor: entry, app: engine.appRoot, current: entry, provided };
   const actorRaw = typeof entry.actor === 'string' ? engine.evalExpr(entry.actor, scope) : structuredClone(entry.actor);
   const adopt = Array.isArray(entry.adopt) ? entry.adopt : [entry.adopt];
@@ -156,7 +178,7 @@ export async function resolveComposed(
     provided,
   });
   for (const patch of patches) engine.applyRaw(actorRaw, patch);
-  return engine.resolveRaw(actorRaw, provided, overrides);
+  return actorRaw;
 }
 
 // Entry point only — no-op when imported (e.g. by tests).
