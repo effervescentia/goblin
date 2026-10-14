@@ -3,40 +3,25 @@
 # as #.levels.level_for(@.xp). Inside the body, `.` is this document's
 # root and `xp` is the call argument.
 
+# XP needed for each level, from level 1 at index 0 to level 20 at index 19.
 # Private: only level_for (defined here) reads them.
 _thresholds:
-  l2: 300
-  l3: 900
-  l4: 2700
-  l5: 6500
-  l6: 14000
-  l7: 23000
-  l8: 34000
-  l9: 48000
-  l10: 64000
-  l11: 85000
-  l12: 100000
-  l13: 120000
-  l14: 140000
-  l15: 165000
-  l16: 195000
-  l17: 225000
-  l18: 265000
-  l19: 305000
-  l20: 355000
+  [0, 300, 900, 2700, 6500, 14000, 23000, 34000, 48000, 64000, 85000, 100000,
+   120000, 140000, 165000, 195000, 225000, 265000, 305000, 355000]
 
-# Each met threshold adds 1 (comparisons coerce to 0/1 — no conditionals).
+# Each met threshold adds 1 (comparisons coerce to 0/1 — no conditionals);
+# level 1's is 0, so it always counts.
 level_for(xp): >-
-  1 + (xp >= ._thresholds.l2) + (xp >= ._thresholds.l3) +
-  (xp >= ._thresholds.l4) + (xp >= ._thresholds.l5) +
-  (xp >= ._thresholds.l6) + (xp >= ._thresholds.l7) +
-  (xp >= ._thresholds.l8) + (xp >= ._thresholds.l9) +
-  (xp >= ._thresholds.l10) + (xp >= ._thresholds.l11) +
-  (xp >= ._thresholds.l12) + (xp >= ._thresholds.l13) +
-  (xp >= ._thresholds.l14) + (xp >= ._thresholds.l15) +
-  (xp >= ._thresholds.l16) + (xp >= ._thresholds.l17) +
-  (xp >= ._thresholds.l18) + (xp >= ._thresholds.l19) +
-  (xp >= ._thresholds.l20)
+  (xp >= ._thresholds[0]) + (xp >= ._thresholds[1]) +
+  (xp >= ._thresholds[2]) + (xp >= ._thresholds[3]) +
+  (xp >= ._thresholds[4]) + (xp >= ._thresholds[5]) +
+  (xp >= ._thresholds[6]) + (xp >= ._thresholds[7]) +
+  (xp >= ._thresholds[8]) + (xp >= ._thresholds[9]) +
+  (xp >= ._thresholds[10]) + (xp >= ._thresholds[11]) +
+  (xp >= ._thresholds[12]) + (xp >= ._thresholds[13]) +
+  (xp >= ._thresholds[14]) + (xp >= ._thresholds[15]) +
+  (xp >= ._thresholds[16]) + (xp >= ._thresholds[17]) +
+  (xp >= ._thresholds[18]) + (xp >= ._thresholds[19])
 
 # Proficiency climbs +1 at levels 5, 9, 13, 17.
 'proficiency_for(level)': 2 + $lib.math.floor((level - 1) / 4)
