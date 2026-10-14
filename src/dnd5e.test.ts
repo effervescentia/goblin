@@ -62,19 +62,16 @@ const script = `
     ...BOUGHT,
   });
 
-  // Derive the level from XP, then adopt the fighter: omitted maxLevel
-  // applies exactly the earned levels automatically.
+  // The character document includes Fighter through its class mixin.
   const run = (xp) => {
     const a = fresh();
     const provided = baseProvided(xp);
     const lv = e.evaluate(a, scopeOf(a, provided)).level;
-    e.apply(a, 'fighter/fighter.yaml');
     return { lv, v: e.evaluate(a, scopeOf(a, provided)) };
   };
 
   const a3 = fresh();
   e.evaluate(a3, scopeOf(a3, { name: 'X', xp: 900, ability_method: 'point_buy' }));
-  e.apply(a3, 'fighter/fighter.yaml');
   const mergedMissing = RecordNode.collectParams(a3).map((m) => m.path).sort();
 
   const levels = {};
@@ -95,7 +92,6 @@ const script = `
   const a6 = fresh();
   const provided6 = baseProvided(6500);
   e.evaluate(a6, scopeOf(a6, provided6));
-  e.apply(a6, 'fighter/fighter.yaml');
   a6.hit_points.current = 1;
   const before = e.evaluate(a6, scopeOf(a6, provided6));
   before.actions.second_wind.use();
@@ -110,7 +106,6 @@ const script = `
   const a17 = fresh();
   const provided17 = baseProvided(225000);
   e.evaluate(a17, scopeOf(a17, provided17));
-  e.apply(a17, 'fighter/fighter.yaml');
   const uses = (v) => Object.fromEntries(Object.entries(v.resources).map(([k, r]) => [k, val(r.current)]));
   const fresh17 = uses(e.evaluate(a17, scopeOf(a17, provided17)));
   for (const key of Object.keys(a17.resources)) a17.resources[key].current = 0;
@@ -132,7 +127,6 @@ const script = `
   const a5 = fresh();
   const provided5 = { ...baseProvided(6500), name: 'Bram' };
   e.evaluate(a5, scopeOf(a5, provided5));
-  e.apply(a5, 'fighter/fighter.yaml');
   e.docs.set('fighter5.yaml', a5);
   const resolved = e.resolve('fighter5.yaml', provided5);
 
@@ -180,7 +174,7 @@ describe('5e', () => {
     const out = execFileSync('bun', ['-e', script], { cwd: root, encoding: 'utf8' });
     expect(JSON.parse(out)).toEqual({
       // Each ability's choice waits on the method that adds it.
-      baseMissing: ['ability_method', 'name'],
+      baseMissing: ['ability_method', 'features.fighting_style', 'name', 'skills.trained'],
       mergedMissing: [
         'abilities.charisma.bought',
         'abilities.constitution.bought',
