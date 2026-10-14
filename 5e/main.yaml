@@ -8,7 +8,7 @@
 #         --param ability_method=point_buy \
 #         --param abilities.strength.bought=7 … (points over 8, 27 total) \
 #         --param features.fighting_style=dueling \
-#         --param features.martial_archetype=Champion \
+#         --param features.martial_archetype=champion \
 #         --param skills.trained='["athletics", "perception"]' \
 #         --param improvements.level_4='["strength", "strength"]'
 #   (or ability_method=standard_array with abilities.<name>.assigned=15 …,
@@ -30,3 +30,7 @@ adopt:
   - $tmpl('roll.yaml')
   - $tmpl('roll_assign.yaml')
   - $tmpl('fighter.yaml')
+  # Subclasses: only the one `features.martial_archetype` names applies.
+  - $tmpl('champion.yaml')
+  - $tmpl('battle_master.yaml')
+  - $tmpl('eldritch_knight.yaml')

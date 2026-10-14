@@ -58,6 +58,8 @@ proficiency_bonus: '#.level.proficiency_for(@.level)'
 armor_class: '10 + $.abilities.dexterity.modifier'
 speed: 30
 attacks: 1
+# The lowest d20 roll that scores a critical hit; a Champion widens it.
+critical_hit: 20
 
 initiative:
   base: $.abilities.dexterity.modifier

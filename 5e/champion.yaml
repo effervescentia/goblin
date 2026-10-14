@@ -1,0 +1,41 @@
+# Champion martial archetype, applied when the fighter picks
+# `features.martial_archetype: champion` (5e/main.yaml adopts every subclass;
+# only the chosen one applies). Raw power: wider criticals and endurance.
+
+$: Character
+
+'@.features':
+  # Level first: below 3 the choice doesn't exist yet, and `&&` never reads it.
+  $if: "@.level >= 3 && @.features.martial_archetype == 'champion'"
+  +improved_critical:
+    :label: Improved Critical
+    :doc: Your weapon attacks score a critical hit on a roll of 19 or 20.
+    $if: '@.level >= 3'
+    '@.critical_hit': 19
+  +remarkable_athlete:
+    :label: Remarkable Athlete
+    :doc: >-
+      Add half your proficiency bonus (rounded up) to Strength, Dexterity and
+      Constitution checks that don't already use it; running long jumps reach
+      further by your Strength modifier in feet.
+    $if: '@.level >= 7'
+    bonus: $lib.math.ceil(@.proficiency_bonus / 2)
+  +additional_fighting_style:
+    :label: Additional Fighting Style
+    :doc: Choose a second fighting style, different from your first.
+    :param: true
+    :type: string
+    :options: [archery, defense, dueling, great_weapon_fighting, protection, two_weapon_fighting]
+    $if: '@.level >= 10'
+  +superior_critical:
+    :label: Superior Critical
+    :doc: Your weapon attacks score a critical hit on a roll of 18 to 20.
+    $if: '@.level >= 15'
+    '@.critical_hit': 18
+  +survivor:
+    :label: Survivor
+    :doc: >-
+      At the start of each of your turns, regain hit points while you are at
+      half your maximum or below (but not at 0).
+    $if: '@.level >= 18'
+    regain: 5 + @.abilities.constitution.modifier

@@ -1,0 +1,71 @@
+# Eldritch Knight martial archetype, applied when the fighter picks
+# `features.martial_archetype: eldritch_knight`: Intelligence-based spellcasting
+# with slots that come back on a long rest.
+
+$: Character
+
+'@.features':
+  # Level first: below 3 the choice doesn't exist yet, and `&&` never reads it.
+  $if: "@.level >= 3 && @.features.martial_archetype == 'eldritch_knight'"
+  +spellcasting:
+    :label: Spellcasting
+    :doc: >-
+      Cast wizard spells using Intelligence. Counts below are how many cantrips
+      and spells you know at your level.
+    $if: '@.level >= 3'
+    ability: intelligence
+    save_dc: 8 + @.proficiency_bonus + @.abilities.intelligence.modifier
+    attack_bonus: '@.proficiency_bonus + @.abilities.intelligence.modifier'
+    cantrips_known: 2 + (@.level >= 10)
+    spells_known: >-
+      3 + (@.level >= 4) + (@.level >= 7) + (@.level >= 8) + (@.level >= 10) +
+      (@.level >= 11) + (@.level >= 13) + (@.level >= 14) + (@.level >= 16) +
+      (@.level >= 19) + (@.level >= 20)
+    '@.resources':
+      +spell_slots_1:
+        :label: 1st-level Spell Slots
+        :doc: Expend to cast a 1st-level spell. Restores on a long rest.
+        current: .max
+        max: 2 + (@.level >= 4) + (@.level >= 7)
+        recover: long
+      +spell_slots_2:
+        :label: 2nd-level Spell Slots
+        :doc: Expend to cast a spell of 2nd level or lower. Restores on a long rest.
+        $if: '@.level >= 7'
+        current: .max
+        max: 2 + (@.level >= 10)
+        recover: long
+      +spell_slots_3:
+        :label: 3rd-level Spell Slots
+        :doc: Expend to cast a spell of 3rd level or lower. Restores on a long rest.
+        $if: '@.level >= 13'
+        current: .max
+        max: 2 + (@.level >= 16)
+        recover: long
+      +spell_slots_4:
+        :label: 4th-level Spell Slots
+        :doc: Expend to cast a spell of 4th level or lower. Restores on a long rest.
+        $if: '@.level >= 19'
+        current: .max
+        max: 1
+        recover: long
+  +weapon_bond:
+    :label: Weapon Bond
+    :doc: Bond with up to two weapons; you can't be disarmed of them and can summon one to your hand.
+    $if: '@.level >= 3'
+  +war_magic:
+    :label: War Magic
+    :doc: After casting a cantrip with your action, make one weapon attack as a bonus action.
+    $if: '@.level >= 7'
+  +eldritch_strike:
+    :label: Eldritch Strike
+    :doc: A creature you hit with a weapon has disadvantage on its next save against your spells.
+    $if: '@.level >= 10'
+  +arcane_charge:
+    :label: Arcane Charge
+    :doc: When you use Action Surge, you can also teleport up to 30 feet.
+    $if: '@.level >= 15'
+  +improved_war_magic:
+    :label: Improved War Magic
+    :doc: After casting any spell with your action, make one weapon attack as a bonus action.
+    $if: '@.level >= 18'

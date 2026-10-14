@@ -66,7 +66,7 @@ $: Character
         recover: short
   +martial_archetype:
     :label: Martial Archetype
-    :doc: 'Choose a subclass: Champion, Battle Master, or Eldritch Knight.'
+    :doc: 'Choose a subclass: Champion, Battle Master, or Eldritch Knight. Its features come from 5e/<subclass>.yaml.'
     :param: true
     :type: string
     :options: [champion, battle_master, eldritch_knight]
@@ -90,10 +90,6 @@ $: Character
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 6'
     '@.improvements.level_6': '#.feature.ability_improvement(6)'
-  +subclass_feature_1:
-    :label: Martial Archetype Feature
-    :doc: Martial archetype feature (see your subclass).
-    $if: '@.level >= 7'
   +ability_score_improvement_3:
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
@@ -110,10 +106,6 @@ $: Character
         current: .max
         max: 1 + (@.level >= 13) + (@.level >= 17)
         recover: long
-  +subclass_feature_2:
-    :label: Martial Archetype Feature
-    :doc: Martial archetype feature (see your subclass).
-    $if: '@.level >= 10'
   +ability_score_improvement_4:
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
@@ -124,19 +116,11 @@ $: Character
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 14'
     '@.improvements.level_14': '#.feature.ability_improvement(14)'
-  +subclass_feature_3:
-    :label: Martial Archetype Feature
-    :doc: Martial archetype feature (see your subclass).
-    $if: '@.level >= 15'
   +ability_score_improvement_6:
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 16'
     '@.improvements.level_16': '#.feature.ability_improvement(16)'
-  +subclass_feature_4:
-    :label: Martial Archetype Feature
-    :doc: Martial archetype feature (see your subclass).
-    $if: '@.level >= 18'
   +ability_score_improvement_7:
     :label: Epic Boon
     :doc: Add +2 to one ability score or +1 to two, or take an epic boon feat.

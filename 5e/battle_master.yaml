@@ -1,0 +1,96 @@
+# Battle Master martial archetype, applied when the fighter picks
+# `features.martial_archetype: battle_master`: maneuvers fuelled by a pool of
+# superiority dice that comes back on a short rest.
+
+$: Character
+
+'@.features':
+  # Level first: below 3 the choice doesn't exist yet, and `&&` never reads it.
+  $if: "@.level >= 3 && @.features.martial_archetype == 'battle_master'"
+  +combat_superiority:
+    :label: Combat Superiority
+    :doc: >-
+      Learn maneuvers and spend superiority dice to use them. Creatures resist
+      a maneuver's effect against your maneuver save DC.
+    $if: '@.level >= 3'
+    save_dc: 8 + @.proficiency_bonus + $lib.math.max(@.abilities.strength.modifier, @.abilities.dexterity.modifier)
+    '@.resources':
+      +superiority_dice:
+        :label: Superiority Dice
+        :doc: Expend one to fuel a maneuver. Restores on a short or long rest.
+        current: .max
+        max: 4 + (@.level >= 7) + (@.level >= 15)
+        die: d8
+        recover: short
+    # Maneuvers come in batches by level; no maneuver may be learned twice.
+    '@.maneuvers':
+      :label: Maneuvers
+      '!validate':
+        - $lib.list.size(.*) == $lib.list.size($lib.set.union(.*, []))
+      level_3:
+        :label: Maneuvers (level 3)
+        :doc: Learn three maneuvers.
+        :param: true
+        :type: array
+        :options: &maneuvers
+          [commanders_strike, disarming_attack, distracting_strike, evasive_footwork, feinting_attack,
+           goading_attack, lunging_attack, maneuvering_attack, menacing_attack, parry, precision_attack,
+           pushing_attack, rally, riposte, sweeping_attack, trip_attack]
+        :count: 3
+        :unique: true
+    '@.maneuvers.level_7':
+      $if: '@.level >= 7'
+      :label: Maneuvers (level 7)
+      :doc: Learn two more maneuvers.
+      :param: true
+      :type: array
+      :options: *maneuvers
+      :count: 2
+      :unique: true
+    '@.maneuvers.level_10':
+      $if: '@.level >= 10'
+      :label: Maneuvers (level 10)
+      :doc: Learn two more maneuvers.
+      :param: true
+      :type: array
+      :options: *maneuvers
+      :count: 2
+      :unique: true
+    '@.maneuvers.level_15':
+      $if: '@.level >= 15'
+      :label: Maneuvers (level 15)
+      :doc: Learn two more maneuvers.
+      :param: true
+      :type: array
+      :options: *maneuvers
+      :count: 2
+      :unique: true
+  +student_of_war:
+    :label: Student of War
+    :doc: Gain proficiency with one type of artisan's tools.
+    $if: '@.level >= 3'
+    '@.proficiencies.tools':
+      :label: Artisan's Tools
+      :doc: The artisan's tools you trained with.
+      :param: true
+      :type: string
+      :options:
+        [alchemists_supplies, brewers_supplies, calligraphers_supplies, carpenters_tools, cartographers_tools,
+         cobblers_tools, cooks_utensils, glassblowers_tools, jewelers_tools, leatherworkers_tools, masons_tools,
+         painters_supplies, potters_tools, smiths_tools, tinkers_tools, weavers_tools, woodcarvers_tools]
+  +know_your_enemy:
+    :label: Know Your Enemy
+    :doc: Study a creature for a minute to learn how it compares to you in a couple of capabilities.
+    $if: '@.level >= 7'
+  +improved_combat_superiority:
+    :label: Improved Combat Superiority
+    :doc: Your superiority dice become d10s, and d12s at 18th level.
+    $if: '@.level >= 10'
+    '@.resources.superiority_dice.die': d10
+    '@.resources.superiority_dice':
+      $if: '@.level >= 18'
+      die: d12
+  +relentless:
+    :label: Relentless
+    :doc: When you roll initiative with no superiority dice left, regain one.
+    $if: '@.level >= 15'

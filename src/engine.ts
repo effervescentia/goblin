@@ -314,7 +314,9 @@ export class GoblinEngine {
    * filled param and predicates see through a field's event history. */
   private derefValue(rawTarget: unknown): unknown {
     if (RecordNode.isParam(rawTarget)) {
-      const slot = rawTarget[VALUE_KEY];
+      // Raw records hold the fill in `value`; evaluated ones (what `!validate`
+      // rules read) print it as `:value`.
+      const slot = rawTarget[VALUE_KEY] !== undefined ? rawTarget[VALUE_KEY] : rawTarget[PARAM_VALUE_KEY];
       return slot !== undefined ? slot : null;
     }
     if (RecordNode.isEvented(rawTarget)) return rawTarget[PARAM_VALUE_KEY];

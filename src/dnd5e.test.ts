@@ -525,6 +525,110 @@ describe('5e', () => {
     );
   });
 
+  describe('subclasses', () => {
+    const base = [
+      '--strip-metadata',
+      '--param',
+      'name=Aria',
+      '--param',
+      'ability_method=roll',
+      '--param',
+      'features.fighting_style=dueling',
+      '--param',
+      'skills.trained=["athletics","perception"]',
+    ];
+    // Every improvement up to 20th level, so high levels resolve.
+    const improvements = [4, 6, 8, 12, 14, 16, 19].flatMap((level) => [
+      '--param',
+      `improvements.level_${level}=["strength","strength"]`,
+    ]);
+    // biome-ignore lint/suspicious/noExplicitAny: assertions walk loose JSON sheets
+    type Sheet = { data: Record<string, any>; errors?: string[] };
+    const sheet = (xp: number, archetype: string, ...extra: string[]) =>
+      cli(
+        '5e/main.yaml',
+        ...base,
+        ...improvements,
+        '--param',
+        `xp=${xp}`,
+        '--param',
+        `features.martial_archetype=${archetype}`,
+        ...extra,
+      ) as Sheet;
+
+    it('applies only the chosen subclass, from 3rd level', () => {
+      const early = cli('5e/main.yaml', ...base, '--param', 'xp=899') as Sheet;
+      expect(early.data.features.improved_critical).toBeUndefined();
+      const champion = sheet(900, 'champion').data;
+      expect(champion.critical_hit).toBe(19);
+      expect(champion.features.spellcasting).toBeUndefined();
+      expect(champion.resources.superiority_dice).toBeUndefined();
+    });
+
+    it('widens the champion critical range and adds its later features', () => {
+      const champion = sheet(265000, 'champion', '--param', 'features.additional_fighting_style=defense').data;
+      expect(champion.critical_hit).toBe(18);
+      expect(champion.features.remarkable_athlete).toEqual({ bonus: 3 }); // half of +6, rounded up
+      expect(champion.features.additional_fighting_style).toBe('defense');
+      expect(Object.keys(champion.features.survivor)).toEqual(['regain']);
+    });
+
+    it('gives the battle master superiority dice and maneuvers, each learned once', () => {
+      const learned = [
+        '--param',
+        'proficiencies.tools=smiths_tools',
+        '--param',
+        'maneuvers.level_3=["parry","riposte","trip_attack"]',
+        '--param',
+        'maneuvers.level_7=["rally","feinting_attack"]',
+        '--param',
+        'maneuvers.level_10=["menacing_attack","lunging_attack"]',
+      ];
+      const early = cli(
+        '5e/main.yaml',
+        ...base,
+        '--param',
+        'xp=900',
+        '--param',
+        'features.martial_archetype=battle_master',
+      ) as {
+        query: Array<{ path: string; count?: number }>;
+      };
+      expect(early.query.map((param) => [param.path, param.count])).toEqual([
+        ['proficiencies.tools', undefined],
+        ['maneuvers.level_3', 3],
+      ]);
+      const master = sheet(
+        265000,
+        'battle_master',
+        ...learned,
+        '--param',
+        'maneuvers.level_15=["pushing_attack","sweeping_attack"]',
+      ).data;
+      expect(master.resources.superiority_dice).toEqual({ current: 6, max: 6, die: 'd12', recover: 'short' });
+      expect(master.proficiencies.tools).toBe('smiths_tools');
+      // A maneuver learned again at a later level breaks the sheet's rule.
+      expect(
+        sheet(265000, 'battle_master', ...learned, '--param', 'maneuvers.level_15=["pushing_attack","rally"]'),
+      ).toEqual({
+        errors: ['$lib.list.size(.*) == $lib.list.size($lib.set.union(.*, []))'],
+      });
+    });
+
+    it('casts as an eldritch knight, with slots that grow by level', () => {
+      const knight = sheet(305000, 'eldritch_knight').data;
+      expect(knight.features.spellcasting).toMatchObject({
+        ability: 'intelligence',
+        cantrips_known: 3,
+        spells_known: 12,
+      });
+      expect([1, 2, 3, 4].map((tier) => knight.resources[`spell_slots_${tier}`]?.max)).toEqual([4, 3, 3, 1]);
+      const novice = sheet(900, 'eldritch_knight').data;
+      expect(novice.resources.spell_slots_1).toEqual({ current: 2, max: 2, recover: 'long' });
+      expect(novice.resources.spell_slots_2).toBeUndefined();
+    });
+  });
+
   it('names each choice from the definition it was called with', () => {
     const query = cli(
       '5e/main.yaml',

@@ -512,7 +512,12 @@ of patches (each a `$tmpl('…')` expression or an inline object). A top-level
 composition entry, so never use `actor` as ordinary data. The runner
 resolves the base, applies each patch in order, then resolves the merged
 result — gate per-level content with `$if` on actor state so choices declared
-by adopted patches surface in the `{ query }` envelope. Template paths are
+by adopted patches surface in the `{ query }` envelope. Provided values fill in
+before each patch applies, so a later patch can gate on a choice an earlier
+one declared: 5e/main.yaml adopts `champion.yaml`, `battle_master.yaml` and
+`eldritch_knight.yaml` after `fighter.yaml`, each gated on
+`@.level >= 3 && @.features.martial_archetype == '…'` (level first, since
+`&&` never reads the choice before the fighter declares it). Template paths are
 root-relative; nested references resolve relative to their own file.
 
 ```yaml
@@ -569,7 +574,10 @@ constraints, so a UI can prompt with a display name rather than a path.
   patch files can declare params reported against the merged actor.
 - Filled values are readable as `<path>` from other expressions — a bare ref
   to a `:param` node dereferences its filled value (provided, default, or
-  `null` when missing), so `@.xp` just works. Descending into a `:param`
+  `null` when missing), so `@.xp` just works. `!validate` rules, which read the
+  evaluated sheet, see the filled value the same way: 5e's Battle Master
+  checks its maneuver picks with
+  `$lib.list.size(.*) == $lib.list.size($lib.set.union(.*, []))`. Descending into a `:param`
   node's `value` slot does not resolve; data records like `hit_points.value`
   are unaffected.
 - The CLI `--strip-metadata` flag collapses `:param` records (and
