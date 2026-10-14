@@ -73,7 +73,9 @@ strong: $.strength > $.dexterity      # → true
 
 - Standalone, a die is a **spec**: it serializes back to its text (`"2d6"`)
   and is *not* rolled.
-- Inline in a larger expression, dice are **rolled immediately**.
+- Inline in a larger expression, dice are **rolled immediately**. The string
+  must contain a sigil ref to be an expression (see above): `1d20 + 2` alone
+  is plain text, `1d20 + $.dex_bonus` rolls.
 - A die used in arithmetic rolls (`hit_points + hit_die` rolls the die).
 - An expression field rolls **once per evaluation**: every ref to it, and the
   evaluated sheet itself, reads the same number (`base: .start` matches a
@@ -83,7 +85,8 @@ strong: $.strength > $.dexterity      # → true
 ```yaml
 # Examples (examples/03-dice.yaml)
 hit_die: d8          # → "d8" (spec)
-initiative: 1d20 + 2 # → a rolled number between 3 and 22
+dex_bonus: 2
+initiative: 1d20 + $.dex_bonus # → a rolled number between 3 and 22
 heal: $.hit_die + 0  # Die in arithmetic rolls → 1..8
 ```
 
