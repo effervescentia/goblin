@@ -91,7 +91,7 @@ const script = `
   const prof = { 0: r(0).proficiency_bonus, 6500: r(6500).proficiency_bonus, 48000: r(48000).proficiency_bonus, 225000: r(225000).proficiency_bonus };
   const v5 = r(6500);
 
-  // Second Wind: wounded to 1, one use heals and spends it; the next does nothing.
+  // Second Wind: at level 5 there are three uses; after they run out it does nothing.
   const a6 = fresh();
   const provided6 = baseProvided(6500);
   e.evaluate(a6, scopeOf(a6, provided6));
@@ -101,6 +101,9 @@ const script = `
   before.actions.second_wind.use();
   const healed = e.evaluate(a6, scopeOf(a6, provided6));
   healed.actions.second_wind.use();
+  e.evaluate(a6, scopeOf(a6, provided6)).actions.second_wind.use();
+  const exhausted = e.evaluate(a6, scopeOf(a6, provided6));
+  exhausted.actions.second_wind.use();
   const spent = e.evaluate(a6, scopeOf(a6, provided6));
   // Rests: a level-17 fighter with every use spent. A short rest refills the
   // \`short\` resources; Indomitable (\`long\`) waits for a long rest.
@@ -198,12 +201,12 @@ describe('5e', () => {
       hp: { value: 11, max: 11 },
       trained: ['athletics', 'perception'],
       surge: { value: 1, max: 1 },
-      secondWind: { usesBefore: 1, healedInRange: true, usesAfter: 0, unchangedWhenSpent: true, usesSpent: 0 },
+      secondWind: { usesBefore: 3, healedInRange: true, usesAfter: 2, unchangedWhenSpent: true, usesSpent: 0 },
       rests: {
         // Uses start full: Action Surge has 2 at 17, Indomitable 3.
-        fresh17: { second_wind: 1, action_surge: 2, indomitable_points: 3 },
-        afterShort: { second_wind: 1, action_surge: 2, indomitable_points: 0 },
-        afterLong: { second_wind: 1, action_surge: 2, indomitable_points: 3 },
+        fresh17: { second_wind: 4, action_surge: 2, indomitable_points: 3 },
+        afterShort: { second_wind: 4, action_surge: 2, indomitable_points: 0 },
+        afterLong: { second_wind: 4, action_surge: 2, indomitable_points: 3 },
       },
       levels: {
         0: 1,
@@ -271,14 +274,14 @@ describe('5e', () => {
       ':events': [
         // Each write cites the key behind it: `attacks: 1`, then `'+@.attacks'`.
         { ':source': 'character.yaml', ':line': 67, ':column': 1, ':set': 1 },
-        { ':source': 'fighter/fighter.yaml', ':line': 83, ':column': 5, ':add': 1 },
+        { ':source': 'fighter/fighter.yaml', ':line': 99, ':column': 5, ':add': 1 },
       ],
     });
     // A `+key` addition is itself a change: the feature records who added it.
     expect(data.data.features.extra_attack).toEqual({
       ':label': 'Extra Attack',
       ':doc': 'Strike twice whenever you take the Attack action.',
-      ':events': [{ ':source': 'fighter/fighter.yaml', ':line': 79, ':column': 3, ':add': 'extra_attack' }],
+      ':events': [{ ':source': 'fighter/fighter.yaml', ':line': 95, ':column': 3, ':add': 'extra_attack' }],
     });
     expect(data.data.features.fighting_style).toEqual({
       ':label': 'Fighting Style',
@@ -532,8 +535,8 @@ describe('5e', () => {
       '--param',
       'skills.trained=["athletics","perception"]',
     ];
-    // Every improvement up to 20th level, so high levels resolve.
-    const improvements = [4, 6, 8, 12, 14, 16, 19].flatMap((level) => [
+    // Every fighter ability improvement, so high levels resolve.
+    const improvements = [4, 6, 8, 12, 14, 16].flatMap((level) => [
       '--param',
       `improvements.level_${level}=["strength","strength"]`,
     ]);
