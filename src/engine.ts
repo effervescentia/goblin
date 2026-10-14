@@ -563,16 +563,11 @@ export class GoblinEngine {
     const raw = this.docs.get(file);
     if (raw === undefined) throw new Error(`document not loaded: ${file}`);
     this.claim(raw, file);
+    const scope: EvalRoots = { doc: raw, actor: raw, app: this.appRoot, current: raw, provided };
+    // Calls (and mixins) expand before params fill, so their params fill too.
+    if (this.expandCalls(raw, scope)) this.cache.clear();
     if (RecordNode.materializeParams(raw, provided)) this.cache.clear();
-    const scope: EvalRoots = {
-      doc: raw,
-      actor: raw,
-      app: this.appRoot,
-      current: raw,
-      path: [],
-      provided,
-    };
-    return this.evaluate(raw, scope);
+    return this.evaluate(raw, { ...scope, path: [] });
   }
 
   /**
@@ -580,8 +575,13 @@ export class GoblinEngine {
    * — paths needing user-provided values plus each node's attached `:doc`.
    */
   missingParams(file: string): MissingParam[] {
-    const raw = this.docs.get(file);
-    if (raw === undefined) throw new Error(`document not loaded: ${file}`);
+    const loaded = this.docs.get(file);
+    if (loaded === undefined) throw new Error(`document not loaded: ${file}`);
+    // A query must not change the document: expanding calls on it in place
+    // would also consume its mixins before anything resolves.
+    const raw = this.clone(loaded);
+    if (loaded !== null && typeof loaded === 'object')
+      this.origins.set(raw as object, this.origins.get(loaded) ?? file);
     this.expandCalls(raw, { doc: raw, actor: raw, app: this.appRoot, current: raw });
     return RecordNode.collectParams(raw);
   }
@@ -903,7 +903,11 @@ export class GoblinEngine {
           record[key] = this.claim(next, this.fieldSource(record, key) ?? '');
           wrote = true;
         }
-        visit(record[key]);
+        const child = record[key];
+        const mixins = child !== null && typeof child === 'object' && !Array.isArray(child) && hasMixin(child);
+        visit(child);
+        // A record that only held mixin calls leaves nothing behind.
+        if (mixins && Object.keys(child as object).length === 0) delete record[key];
       }
     };
     visit(raw);

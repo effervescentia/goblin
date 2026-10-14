@@ -129,7 +129,7 @@ $: Character
 
 # Subclasses mix into the character this file is applied to; each gates on
 # `features.martial_archetype`, so only the chosen one adds anything.
-subclass:
+_subclasses:
   champion: $mixin('champion.yaml')
   battle_master: $mixin('battle_master.yaml')
   eldritch_knight: $mixin('eldritch_knight.yaml')

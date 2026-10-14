@@ -385,10 +385,12 @@ syntax:
   null, or `""` the block is unconditional; otherwise `$if` must evaluate
   truthy. A false condition applies nothing — not even `:meta` — so gated-out
   content leaves no residue. Gating on a `:param` turns a choice into
-  alternative patches: 5e/main.yaml adopts `ability/point_buy.yaml`,
-  `ability/standard_array.yaml`, `ability/roll.yaml` and `ability/roll_assign.yaml`, each gated on `@.ability_method`, so only the chosen
-  method's params reach the next `{ query }`. `$then` is itself a patch whose path keys are
-  absolute; a bare `$then` without `$if` applies unconditionally.
+  alternative patches: `5e/character.yaml` mixes in `ability/point_buy.yaml`,
+  `ability/standard_array.yaml`, `ability/roll.yaml` and
+  `ability/roll_assign.yaml` (see Mixins), each gated on `@.ability_method`,
+  so only the chosen method's params reach the next `{ query }`. `$then` is
+  itself a patch whose path keys are absolute; a bare `$then` without `$if`
+  applies unconditionally.
   `$if`/`$then` are never serialized.
 - **Type tags**: a bare `$` key (e.g. `$: Player`) declares the expected actor
   type and is ignored by the engine, as are all bare sigils. `$type: X` (as
@@ -553,13 +555,17 @@ declared.
   as does one whose type no document up the chain declares
   (`$mixin('…'): no parent document defines actor type …`).
 
-5e's fighter mixes in its subclasses this way; each gates on
-`@.features.martial_archetype`, so only the chosen one adds anything:
+5e mixes alternatives in this way: the character document mixes in its
+ability-score methods (each gated on `@.ability_method`), and the fighter
+patch its subclasses (each gated on `@.features.martial_archetype`), so only
+the chosen one adds anything. A mixin called from an actor document applies
+when the document first evaluates, so place it after the fields it merges
+into (`_ability_methods` follows `abilities`):
 
 ```yaml
 # 5e/fighter/fighter.yaml
 $: Character
-subclass:
+_subclasses:
   champion: $mixin('champion.yaml')
   battle_master: $mixin('battle_master.yaml')
   eldritch_knight: $mixin('eldritch_knight.yaml')

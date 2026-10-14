@@ -435,6 +435,16 @@ describe('mixins', () => {
     expect(fieldValue(state.data.gold)).toBe(6);
   });
 
+  it('drops a record in an actor document that only held mixin calls', () => {
+    const engine = engineWith({
+      'boon.yaml': boon,
+      'hero.yaml': { $: 'Hero', speed: 30, gold: 1, gifts: { first: "$mixin('boon.yaml')" } },
+    });
+    const state = engine.resolve('hero.yaml') as { data: Record<string, unknown> };
+    expect(state.data).not.toHaveProperty('gifts');
+    expect(fieldValue(state.data.speed)).toBe(40);
+  });
+
   it('merges into the actor a patch applies to, leaving no empty record behind', () => {
     const engine = engineWith({
       'boon.yaml': boon,

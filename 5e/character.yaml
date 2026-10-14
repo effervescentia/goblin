@@ -26,9 +26,8 @@ xp:
 
 level: '#.level.level_for(@.xp)'
 
-# How the six scores start; the matching patch (5e/ability/point_buy.yaml,
-# 5e/ability/standard_array.yaml, 5e/ability/roll.yaml or 5e/ability/roll_assign.yaml) adds that
-# method's choice to each ability.
+# How the six scores start; the method mixed in below adds its choice to
+# each ability.
 ability_method:
   :label: Ability Score Method
   :doc: 'point_buy: spend 27 points on scores from 8 to 15. standard_array: assign 15, 14, 13, 12, 10 and 8. roll: roll 4d6 per ability, dropping the lowest die. roll_assign: roll six scores that way, then assign each to an ability.'
@@ -49,6 +48,14 @@ abilities:
   intelligence: "#.ability.entry('intelligence', 'Intelligence')"
   wisdom: "#.ability.entry('wisdom', 'Wisdom')"
   charisma: "#.ability.entry('charisma', 'Charisma')"
+
+# Every method mixes in; each gates on `ability_method`, so only the chosen one
+# adds anything. After `abilities`, whose entries the methods merge into.
+_ability_methods:
+  point_buy: $mixin('ability/point_buy.yaml')
+  standard_array: $mixin('ability/standard_array.yaml')
+  roll: $mixin('ability/roll.yaml')
+  roll_assign: $mixin('ability/roll_assign.yaml')
 
 utils:
   'ability_modifier(x)': $lib.math.floor((x - 10) / 2)

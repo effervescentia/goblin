@@ -24,9 +24,4 @@ ability: $tmpl('ability/ability.yaml')
 
 actor: $tmpl('character.yaml')
 adopt:
-  # Only the one matching `ability_method` applies.
-  - $tmpl('ability/point_buy.yaml')
-  - $tmpl('ability/standard_array.yaml')
-  - $tmpl('ability/roll.yaml')
-  - $tmpl('ability/roll_assign.yaml')
   - $tmpl('fighter/fighter.yaml')
