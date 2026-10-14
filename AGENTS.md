@@ -46,8 +46,8 @@ apart. Treat a missing spec update as an incomplete change.
 
 ## Project notes
 
-- `bun src/main.ts` (or `bun run dev`) runs the demo CLI, which loads
-  `.goblin.yaml` → `wip/main.yaml` and logs evaluated output via pino.
+- `src/main.ts` exports `GoblinEngine`. The CLI uses `.goblin.yaml` from the
+  current directory when no entry is provided.
   The final evaluated state always logs; diagnostics need `--debug`
   (validation failures always log as errors).
 - `bun run build` compiles `src/cli.ts` to a `build/goblin` binary
@@ -61,9 +61,8 @@ apart. Treat a missing spec update as an incomplete change.
 - `src/engine.ts` transpiles goblin expressions with `new Function` — every
   `.name` token is treated as a goblin ref, so avoid introducing bare JS
   property access in expression strings.
-- `src/main.ts` is Bun-only (`Bun.file`, top-level await). Keep test fixtures
-  in `src/engine.test.ts` runtime-agnostic by seeding `engine.docs` directly
-  instead of using `loadFile`.
+- Keep test fixtures in `src/engine.test.ts` runtime-agnostic by seeding
+  `engine.docs` directly instead of using `loadFile`.
 
 ## Code layout
 

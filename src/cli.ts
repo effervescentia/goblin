@@ -5,7 +5,7 @@
  * Usage:
  *   goblin [entry.yaml] [--compact] [--help]
  *
- * With no entry file, the main document from `.goblin.yaml` is used.
+ * With no entry file, `.goblin.yaml` in the current directory is required.
  * An entry containing a directory (`examples/foo.yaml`) is resolved with
  * that directory as the root, so `$tmpl('…')` paths are relative to it.
  * Resolved state goes to stdout (always valid JSON); errors go to stderr
@@ -109,12 +109,16 @@ export async function resolveApp(
   let root = cwd;
   let main = entry;
   if (main === undefined) {
-    const opts = (await Bun.file(`${cwd}/.goblin.yaml`)
-      .text()
-      .then((t) => YAML.parse(t))) as { root: string; main: string };
-    root = `${cwd}/${opts.root}`;
-    main = opts.main;
-  } else if (main.includes('/')) {
+    const config = Bun.file(`${cwd}/.goblin.yaml`);
+    if (await config.exists()) {
+      const opts = YAML.parse(await config.text()) as { root: string; main: string };
+      root = `${cwd}/${opts.root}`;
+      main = opts.main;
+    } else {
+      throw new Error(`no entry provided and .goblin.yaml was not found in ${cwd}`);
+    }
+  }
+  if (entry !== undefined && main.includes('/')) {
     // Resolve relative to the entry's own directory so `$tmpl('…')`
     // references stay local to it.
     const slash = main.lastIndexOf('/');

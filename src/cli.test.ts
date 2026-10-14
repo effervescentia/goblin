@@ -1,4 +1,6 @@
 import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -236,6 +238,25 @@ function runCli(...args: string[]): { stdout: string; stderr: string; status: nu
 }
 
 describe('cli', () => {
+  it('uses .goblin.yaml from cwd when no entry is supplied', async () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'goblin-cli-'));
+    mkdirSync(join(cwd, 'docs', 'nested'), { recursive: true });
+    writeFileSync(join(cwd, '.goblin.yaml'), 'root: docs\nmain: nested/actor.yaml\n');
+    writeFileSync(join(cwd, 'docs', 'nested', 'actor.yaml'), 'name: Config actor\n');
+    try {
+      const stdout = execFileSync('bun', [join(root, 'src/cli.ts')], { cwd, encoding: 'utf8' });
+      expect(JSON.parse(stdout)).toEqual({ data: { name: 'Config actor' } });
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('errors when no entry or .goblin.yaml is available', () => {
+    const res = runCli();
+    expect(res.status).toBe(1);
+    expect(res.stderr).toContain('no entry provided and .goblin.yaml was not found');
+  });
+
   it('--help prints usage and exits 0', () => {
     const res = runCli('--help');
     expect(res.status).toBe(0);
