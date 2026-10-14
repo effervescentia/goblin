@@ -201,9 +201,17 @@ syntax:
 
 - **Path keys** (`'@.features'`, `'#.hit_points.value'`) target a node by
   absolute ref. In plain evaluation they are skipped, never serialized.
+  A `+` in front of the path (`'+@.attacks': 1`) adds to the value already
+  there instead of replacing it: two numbers sum, and anything else composes
+  an expression, so an added expression stays lazy (`attacks: 1` plus
+  `1 + (@.level >= 11)` becomes `(1) + (1 + (@.level >= 11))`). A field
+  holding a record or a list has no scalar to add to and is rejected
+  (`cannot add to …`). A missing field is simply written.
 - **`+` additions**: `+name:` sets/adds `name` (merging into objects,
-  stripping the prefix). In arrays, `+item` entries append deduplicated;
-  other items append raw.
+  stripping the prefix). A plain list replaces the target list — the patch
+  states what the list is. A list of `+item` entries adds to it instead,
+  appending deduplicated. The two readings are incompatible, so a list that
+  mixes them is rejected when the patch applies (`mixed list patch: …`).
 - **`$if` / `$then` conditions** gate a whole node: when `$if` is absent,
   null, or `""` the block is unconditional; otherwise `$if` must evaluate
   truthy. A false condition applies nothing — not even `:meta` — so gated-out
@@ -249,10 +257,12 @@ patch touched print bare, as before.
   apply both before and after the patches, so one that re-writes the value
   already in place is not recorded twice.
 - `:set` is the raw value written: the expression as written, not its result.
-- `:add` names what an addition added: the items an array patch appended
-  (deduplicated `+item` entries included), or the key a `+key` record
-  addition introduced. A `+key` holding a scalar or an array records that
-  value instead, so nothing is logged twice.
+  A plain list (`- all_armor`) is the document stating the list itself, so it
+  files as `:set` holding that list.
+- `:add` names what an addition added: the value a `+@.path` key added,
+  the items a `+item` list appended, or the key a `+key` record addition
+  introduced. A `+key` holding a scalar or a
+  list records that value instead, so nothing is logged twice.
 - The first event is the value the field already held when the first patch
   landed, so a history reads base-then-patch. A field a patch creates has no
   such origin event.

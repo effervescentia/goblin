@@ -52,9 +52,12 @@ export function isValidateKey(key: string): boolean {
   return key === VALIDATE_KEY;
 }
 
-/** Quoted or bare path patch, e.g. `@.features`, `#.hit_points.value`. */
+/**
+ * Quoted or bare path patch, e.g. `@.features`, `#.hit_points.value`, or
+ * `+@.attacks` — a leading `+` marks the write as an addition.
+ */
 export function isPathKey(key: string): boolean {
-  const head = key[0];
+  const head = stripPlus(key)[0];
   return head === CURRENT || head === DOCUMENT || head === ACTOR || head === APP;
 }
 

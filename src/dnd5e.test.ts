@@ -170,12 +170,13 @@ describe('5e', () => {
     };
     expect(data.data.level).toBe(5);
     expect(data.data.armor_class).toBe(10);
-    // A patched field carries the writes that produced it, in order.
+    // A patched field carries the writes that produced it, in order — here
+    // the Extra Attack feature adding to the character's single attack.
     expect(data.data.attacks).toEqual({
       ':value': 2,
       ':events': [
         { ':source': 'character.yaml', ':set': 1 },
-        { ':source': 'fighter.yaml', ':set': '1 + (@.level >= 5) + (@.level >= 11) + (@.level >= 20)' },
+        { ':source': 'fighter.yaml', ':add': '1 + (@.level >= 11) + (@.level >= 20)' },
       ],
     });
     // A `+key` addition is itself a change: the feature records who added it.

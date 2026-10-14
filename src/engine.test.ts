@@ -201,6 +201,7 @@ describe('apply', () => {
       $: 'Player',
       '@.monk': {},
       '@.monk.martial_arts_die': '1d6',
+      '@.proficiencies.armor': ['all_armor'],
       '@.features': {
         '+martial_arts': {
           ':doc': 'martial arts mastery',
@@ -256,9 +257,14 @@ describe('apply', () => {
       ':value': expect.anything(),
       ':events': [{ ':source': 'monk.yaml', ':set': '1d6' }],
     });
+    // A list of `+item` entries is an addition; a plain list files as `:set`.
     expect((out.proficiencies as Record<string, unknown>).weapon).toEqual({
       ':value': ['simple_melee', 'light_martial_melee'],
       ':events': [{ ':set': [] }, { ':source': 'monk.yaml', ':add': ['simple_melee', 'light_martial_melee'] }],
+    });
+    expect((out.proficiencies as Record<string, unknown>).armor).toEqual({
+      ':value': ['all_armor'],
+      ':events': [{ ':source': 'monk.yaml', ':set': ['all_armor'] }],
     });
     // A `+key` addition records who added it, even when the added record is
     // nothing but metadata. A record takes `:events` in place — no wrapper.
@@ -284,6 +290,59 @@ describe('apply', () => {
       ':value': expect.anything(),
       ':events': [{ ':set': 'd4' }, { ':source': 'monk.yaml', ':set': '1d8' }],
     });
+  });
+
+  it('replaces a list, unless the patch carries `+item` entries', () => {
+    const engine = new GoblinEngine('.');
+    const actor = () => ({ proficiencies: { armor: ['leather', 'shields'] } });
+    engine.docs.set('plain.yaml', { '@.proficiencies.armor': ['plate'] });
+    engine.docs.set('additive.yaml', { '@.proficiencies.armor': ['+plate'] });
+
+    const replaced = engine.apply(actor(), 'plain.yaml') as { proficiencies: { armor: string[] } };
+    expect(replaced.proficiencies.armor).toEqual(['plate']);
+
+    const appended = engine.apply(actor(), 'additive.yaml') as { proficiencies: { armor: string[] } };
+    expect(appended.proficiencies.armor).toEqual(['leather', 'shields', 'plate']);
+
+    // `+item` is deduplicated against what is already there.
+    engine.docs.set('dupe.yaml', { '@.proficiencies.armor': ['+leather'] });
+    const deduped = engine.apply(actor(), 'dupe.yaml') as { proficiencies: { armor: string[] } };
+    expect(deduped.proficiencies.armor).toEqual(['leather', 'shields']);
+  });
+
+  it('adds to a field with a `+` in front of the path', () => {
+    const engine = new GoblinEngine('.');
+    engine.docs.set('bump.yaml', { '+@.attacks': 1, '+@.speed': 5 });
+    const actor = engine.apply({ attacks: 1, speed: 30 }, 'bump.yaml') as Record<string, number>;
+    expect(actor).toEqual({ attacks: 2, speed: 35 });
+
+    // An added expression stays lazy: it composes with what is there.
+    engine.docs.set('gated.yaml', { '+@.attacks': '1 + (@.level >= 11)' });
+    const lazy = engine.apply({ attacks: 1, level: 11 }, 'gated.yaml');
+    const out = engine.evaluate(lazy, { doc: lazy, actor: lazy, app: engine.appRoot, current: lazy }) as Record<
+      string,
+      unknown
+    >;
+    expect(fieldValue(out.attacks)).toBe(3);
+
+    // A missing field is simply written; a record has no scalar to add to.
+    expect(engine.apply({}, 'bump.yaml')).toEqual({ attacks: 1, speed: 5 });
+    engine.docs.set('bad.yaml', { '+@.hit_points': 1 });
+    expect(() => engine.apply({ hit_points: { max: 5 } }, 'bad.yaml')).toThrow(
+      'cannot add to +@.hit_points: a record or list is not a value to add to',
+    );
+  });
+
+  it('rejects a list that mixes `+item` additions with plain items', () => {
+    const engine = new GoblinEngine('.');
+    const actor = () => ({ proficiencies: { armor: [] as string[] } });
+    engine.docs.set('mixed.yaml', { '@.proficiencies.armor': ['+plate', 'leather'] });
+    expect(() => engine.apply(actor(), 'mixed.yaml')).toThrow(
+      "mixed list patch: @.proficiencies.armor combines '+item' additions with plain items",
+    );
+    // Nested under a path key, the field's own key names the offender.
+    engine.docs.set('nested.yaml', { '@.proficiencies': { armor: ['plate', '+leather'] } });
+    expect(() => engine.apply(actor(), 'nested.yaml')).toThrow('mixed list patch: armor combines');
   });
 
   it('respects a false $if condition', () => {

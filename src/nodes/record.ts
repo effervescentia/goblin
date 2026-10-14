@@ -230,12 +230,12 @@ export class RecordNode extends Node<Record<string, unknown>> {
         out[fn.name] = fn.evaluate(engine, scope);
         continue;
       }
+      if (isPathKey(key)) continue; // patch instruction (incl. `+@.x`) — handled by apply()
       if (key.startsWith('+')) {
         const added = key.slice(1);
         out[added] = engine.evaluate(value, { ...scope, current: record, path: [...base, added] });
         continue;
       }
-      if (isPathKey(key)) continue; // patch instruction — handled by apply()
       const evaluated = engine.evaluate(value, { ...scope, current: record, path: [...base, key] });
       // A field a patch wrote prints with its history (see `GoblinEngine.apply`).
       out[key] = RecordNode.withEvents(evaluated, engine.eventsFor(record, key));

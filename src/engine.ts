@@ -61,6 +61,34 @@ import {
   stripPlus,
 } from './utils';
 
+/**
+ * `+field` on a scalar: add to the value already there. Two numbers sum;
+ * anything else composes an expression, so an added expression stays lazy
+ * (`attacks: 1` + `1 + (@.level >= 11)` → `(1) + (1 + (@.level >= 11))`).
+ * A field holding a record or a list has no scalar to add to.
+ */
+function addRaw(existing: unknown, value: unknown, label: string): unknown {
+  if (existing === undefined || existing === null) return deepClone(value);
+  if (typeof existing === 'number' && typeof value === 'number') return existing + value;
+  if (typeof existing === 'object' || typeof value === 'object') {
+    throw new Error(`cannot add to ${label}: a record or list is not a value to add to`);
+  }
+  return `(${String(existing)}) + (${String(value)})`;
+}
+
+/**
+ * How a patch list applies: `+item` entries add to the target, a plain list
+ * replaces it. The two readings are incompatible, so a list that mixes them
+ * is rejected rather than silently picking one.
+ */
+function isAdditiveList(items: unknown[], label = 'list'): boolean {
+  const additions = items.filter((item) => typeof item === 'string' && item.startsWith('+'));
+  if (additions.length > 0 && additions.length < items.length) {
+    throw new Error(`mixed list patch: ${label} combines '+item' additions with plain items — use one or the other`);
+  }
+  return additions.length > 0;
+}
+
 export class GoblinEngine {
   /** Raw (unevaluated) documents by file name. */
   readonly docs = new Map<string, unknown>();
@@ -585,7 +613,9 @@ export class GoblinEngine {
   }
 
   private applyAtPath(pathKey: string, value: unknown, scope: EvalRoots): void {
-    const { root, path } = parseRef(pathKey);
+    // A path key written `+@.attacks` adds to what is there.
+    const adds = pathKey.startsWith('+');
+    const { root, path } = parseRef(stripPlus(pathKey));
     const base =
       root === ACTOR ? scope.actor : root === DOCUMENT ? scope.doc : root === APP ? scope.app : scope.current;
     if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -606,11 +636,16 @@ export class GoblinEngine {
         setPath(base, path, []);
         target = getPath(base, path);
       }
-      const added = this.applyArray(target as unknown[], value);
-      if (slot && added.length > 0) this.recordEvent(slot.owner, slot.key, ADD_KEY, added);
+      this.applyArrayWrite(target as unknown[], value, slot, pathKey);
       return;
     }
     const slot = this.ownerOf(base, path);
+    if (adds) {
+      const sum = addRaw(slot ? slot.owner[slot.key] : undefined, value, pathKey);
+      if (slot) this.recordEvent(slot.owner, slot.key, ADD_KEY, deepClone(value));
+      setPath(base, path, sum);
+      return;
+    }
     if (slot) this.recordEvent(slot.owner, slot.key, SET_KEY, deepClone(value));
     setPath(base, path, deepClone(value));
   }
@@ -685,8 +720,7 @@ export class GoblinEngine {
     if (Array.isArray(value)) {
       this.seedEvents(target, k); // before the append, not after
       if (!Array.isArray(target[k])) target[k] = [];
-      const added = this.applyArray(target[k] as unknown[], value);
-      if (added.length > 0) this.recordEvent(target, k, ADD_KEY, added);
+      this.applyArrayWrite(target[k] as unknown[], value, { owner: target, key: k }, key);
       return;
     }
     this.recordEvent(target, k, SET_KEY, deepClone(value));
@@ -694,10 +728,36 @@ export class GoblinEngine {
   }
 
   /**
-   * Array patch: `+item` entries append (deduped), others append raw.
-   * Returns what was actually appended, for the field's event log.
+   * Apply an array patch and file the write. A list carrying `+item` entries
+   * is an addition (`:add`, holding what was appended); a plain list is the
+   * document stating the list itself, so it files as `:set`.
    */
-  private applyArray(target: unknown[], items: unknown[]): unknown[] {
+  private applyArrayWrite(
+    target: unknown[],
+    items: unknown[],
+    slot: { owner: Record<string, unknown>; key: string } | null,
+    label = slot?.key,
+  ): void {
+    const additive = isAdditiveList(items, label);
+    const added = this.applyArray(target, items, label);
+    if (slot === null) return;
+    if (!additive) this.recordEvent(slot.owner, slot.key, SET_KEY, deepClone(items));
+    else if (added.length > 0) this.recordEvent(slot.owner, slot.key, ADD_KEY, added);
+  }
+
+  /**
+   * Array patch. A plain list replaces the target list — the patch states
+   * what the list is. A list carrying `+item` entries adds to it instead:
+   * `+item` appends deduplicated, and plain items alongside them append raw.
+   * Returns the items written, for the field's event log.
+   */
+  private applyArray(target: unknown[], items: unknown[], label?: string): unknown[] {
+    if (!isAdditiveList(items, label)) {
+      const replacement = items.map(deepClone);
+      target.length = 0;
+      target.push(...replacement);
+      return replacement;
+    }
     const added: unknown[] = [];
     for (const item of items) {
       if (typeof item === 'string' && item.startsWith('+')) {
