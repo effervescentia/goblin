@@ -30,7 +30,3 @@ adopt:
   - $tmpl('ability/roll.yaml')
   - $tmpl('ability/roll_assign.yaml')
   - $tmpl('fighter/fighter.yaml')
-  # Subclasses: only the one `features.martial_archetype` names applies.
-  - $tmpl('fighter/champion.yaml')
-  - $tmpl('fighter/battle_master.yaml')
-  - $tmpl('fighter/eldritch_knight.yaml')

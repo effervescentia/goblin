@@ -133,6 +133,11 @@ describe('examples', () => {
     });
   });
 
+  it('14-mixin-actor.yaml merges its typed mixin and drops the call', () => {
+    const state = cli('examples/14-mixin-actor.yaml', '--strip-metadata') as { data: unknown };
+    expect(state.data).toEqual({ speed: 40, gold: 15 });
+  });
+
   it('13-wildcards.yaml reads every match and refills by rule', () => {
     const state = cli('examples/13-wildcards.yaml', '--strip-metadata') as { data: Record<string, unknown> };
     expect(state.data).toMatchObject({ maxes: [2, 3], pools: 2, short_maxes: [2] });

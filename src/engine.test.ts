@@ -410,6 +410,68 @@ describe('event locations', () => {
   });
 });
 
+describe('mixins', () => {
+  const boon = { $: 'Hero', '@.speed': 40, '+@.gold': 5 };
+  const engineWith = (docs: Record<string, unknown>) => {
+    const engine = new GoblinEngine('.');
+    for (const [file, doc] of Object.entries(docs)) engine.register(file, doc);
+    return engine;
+  };
+
+  it('merges into the actor document that calls it, consuming the key', () => {
+    const engine = engineWith({
+      'boon.yaml': boon,
+      'hero.yaml': { $: 'Hero', speed: 30, gold: 1, boon: "$mixin('boon.yaml')" },
+    });
+    const state = engine.resolve('hero.yaml') as { data: Record<string, unknown> };
+    expect(state.data.boon).toBeUndefined();
+    expect(state.data.speed).toEqual({
+      ':value': 40,
+      ':events': [
+        { ':source': 'hero.yaml', ':set': 30 },
+        { ':source': 'boon.yaml', ':set': 40 },
+      ],
+    });
+    expect(fieldValue(state.data.gold)).toBe(6);
+  });
+
+  it('merges into the actor a patch applies to, leaving no empty record behind', () => {
+    const engine = engineWith({
+      'boon.yaml': boon,
+      'hero.yaml': { $: 'Hero', speed: 30, gold: 1 },
+      'class.yaml': { $: 'Hero', '@.hp': 10, extras: { blessing: "$mixin('boon.yaml')" } },
+    });
+    const actor = engine.evalExpr("$tmpl('hero.yaml')", { doc: {}, actor: {}, app: engine.appRoot, current: {} });
+    engine.apply(actor, 'class.yaml');
+    expect(actor).toMatchObject({ speed: 40, gold: 6, hp: 10 });
+    expect(actor).not.toHaveProperty('extras');
+  });
+
+  it('walks up the template chain to the nearest document of its type', () => {
+    const engine = engineWith({ 'boon.yaml': boon, 'kit.yaml': { blessing: "$mixin('boon.yaml')" } });
+    const hero: Record<string, unknown> = { $: 'Hero', speed: 30, gold: 1 };
+    const scope: EvalRoots = { doc: hero, actor: hero, app: engine.appRoot, current: hero };
+    // `kit.yaml` declares no type: its mixin lands on the Hero that pulled it in.
+    const kit = engine.evalExpr("$tmpl('kit.yaml')", scope);
+    engine.applyRaw(hero, kit);
+    expect(hero).toMatchObject({ speed: 40, gold: 6 });
+  });
+
+  it('requires a typed mixin and a parent document of the same type', () => {
+    const untyped = engineWith({
+      'loose.yaml': { '@.speed': 1 },
+      'hero.yaml': { $: 'Hero', x: "$mixin('loose.yaml')" },
+    });
+    expect(() => untyped.resolve('hero.yaml')).toThrow(
+      'mixin loose.yaml must declare its actor type with a top-level `$`',
+    );
+    const stranger = engineWith({ 'boon.yaml': boon, 'pet.yaml': { $: 'Pet', x: "$mixin('boon.yaml')" } });
+    expect(() => stranger.resolve('pet.yaml')).toThrow(
+      "$mixin('boon.yaml'): no parent document defines actor type Hero",
+    );
+  });
+});
+
 describe('private fields', () => {
   // `register` records which document wrote each node, as loadFile does.
   const engineWith = (docs: Record<string, unknown>) => {

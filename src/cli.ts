@@ -181,7 +181,7 @@ export function composeActor(
     // A patch may gate on a choice an earlier one declared (a subclass file
     // on the fighter's `martial_archetype`), so fill provided values first.
     RecordNode.materializeParams(actorRaw, provided);
-    engine.applyRaw(actorRaw, patch);
+    engine.applyRaw(actorRaw, patch, undefined, provided);
   }
   return actorRaw;
 }

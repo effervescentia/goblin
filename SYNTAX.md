@@ -514,10 +514,9 @@ resolves the base, applies each patch in order, then resolves the merged
 result — gate per-level content with `$if` on actor state so choices declared
 by adopted patches surface in the `{ query }` envelope. Provided values fill in
 before each patch applies, so a later patch can gate on a choice an earlier
-one declared: 5e/main.yaml adopts `fighter/champion.yaml`, `fighter/battle_master.yaml` and
-`fighter/eldritch_knight.yaml` after `fighter/fighter.yaml`, each gated on
-`@.level >= 3 && @.features.martial_archetype == '…'` (level first, since
-`&&` never reads the choice before the fighter declares it). Template paths are
+one declared: `fighter/fighter.yaml` mixes in its subclasses (see Mixins),
+each gated on `@.level >= 3 && @.features.martial_archetype == '…'` (level
+first, since `&&` never reads the choice before the fighter declares it). Template paths are
 root-relative; nested references resolve relative to their own file.
 
 ```yaml
@@ -531,6 +530,46 @@ level: $tmpl('level.yaml')
 actor: $tmpl('character.yaml')
 adopt:
   - $tmpl('fighter/fighter.yaml')
+```
+
+## Mixins
+
+`$mixin('file.yaml')` merges another document into an actor. The mixin must
+declare the actor type it targets with a top-level `$` (`$: Character`);
+the engine walks up the template chain — the document holding the call,
+then whichever document pulled that one in with `$tmpl` or `adopt` — to the
+nearest one declaring the same type, and applies the mixin to the actor that
+document builds (an actor document) or patches (an applied one). Provided
+choices fill in first, so a mixin can gate on a choice an earlier patch
+declared.
+
+- The key holding the call is consumed, and a record left empty by its
+  mixin calls goes with it.
+- The mixin's writes are patch writes: `:events` cite its file and lines.
+- Paths resolve relative to the calling file, like `$tmpl`, and mixins are
+  discovered on load the same way (textually — keep the call shape out of
+  comments).
+- A mixin without a `$` type throws (`mixin … must declare its actor type…`),
+  as does one whose type no document up the chain declares
+  (`$mixin('…'): no parent document defines actor type …`).
+
+5e's fighter mixes in its subclasses this way; each gates on
+`@.features.martial_archetype`, so only the chosen one adds anything:
+
+```yaml
+# 5e/fighter/fighter.yaml
+$: Character
+subclass:
+  champion: $mixin('champion.yaml')
+  battle_master: $mixin('battle_master.yaml')
+  eldritch_knight: $mixin('eldritch_knight.yaml')
+```
+
+```yaml
+# Examples (examples/14-mixin-actor.yaml, examples/14-mixin-boon.yaml)
+$: Adventurer
+speed: 30
+boon: $mixin('14-mixin-boon.yaml') # → gone; '@.speed': 40 lands on this actor
 ```
 
 ## Parameters

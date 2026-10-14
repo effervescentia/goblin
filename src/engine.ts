@@ -25,6 +25,7 @@ import {
   DOCUMENT,
   IF_KEY,
   LINE_KEY,
+  MIXIN_CALL,
   OVERRIDE_SOURCE,
   PARAM_KEY,
   PARAM_VALUE_KEY,
@@ -101,6 +102,11 @@ export class GoblinEngine {
   private readonly fieldEvents = new WeakMap<object, Map<string, unknown[]>>();
   /** Source document of a raw tree: loaded documents and `$tmpl('…')` clones. */
   private readonly origins = new WeakMap<object, string>();
+  /** The document each `$tmpl` / `$mixin` clone was pulled in by: the
+   * template chain a mixin walks up to find its actor. */
+  private readonly parents = new WeakMap<object, unknown>();
+  /** The actor each patch document is being applied to. */
+  private readonly actorOf = new WeakMap<object, unknown>();
   /** Where each key was written in its source document. */
   private readonly locations: Locations = new WeakMap();
   /** Location of the patch key being applied; events cite it. */
@@ -424,7 +430,10 @@ export class GoblinEngine {
       if (doc === undefined) throw new Error(`template not loaded: ${file}`);
       const clone = this.clone(doc);
       // The clone keeps the document's name so patch events can cite it.
-      if (clone && typeof clone === 'object') this.origins.set(clone, file);
+      if (clone && typeof clone === 'object') {
+        this.origins.set(clone, file);
+        if (scope.doc !== null && typeof scope.doc === 'object') this.parents.set(clone, scope.doc);
+      }
       return this.claim(clone, file);
     }
     const run = compileBody(trimmed, Object.keys(scope.params ?? {}));
@@ -651,21 +660,23 @@ export class GoblinEngine {
    * state (e.g. `@.level >= 5`). Evaluate with provided values first so
    * conditions read materialized params.
    */
-  apply(actorRaw: unknown, patchFile: string): unknown {
+  apply(actorRaw: unknown, patchFile: string, provided?: Record<string, unknown>): unknown {
     const patch = this.docs.get(patchFile);
     if (patch === undefined) throw new Error(`patch document not loaded: ${patchFile}`);
-    return this.applyRaw(actorRaw, patch, patchFile);
+    return this.applyRaw(actorRaw, patch, patchFile, provided);
   }
 
   /** Apply an in-memory patch (e.g. a `$tmpl('…')` clone) onto an actor.
    * `source` names it in the event logs; defaults to the document it came from. */
-  applyRaw(actorRaw: unknown, patch: unknown, source?: string): unknown {
+  applyRaw(actorRaw: unknown, patch: unknown, source?: string, provided?: Record<string, unknown>): unknown {
     const scope: EvalRoots = {
       doc: patch,
       actor: actorRaw,
       app: this.appRoot,
       current: actorRaw,
+      provided,
     };
+    if (patch !== null && typeof patch === 'object') this.actorOf.set(patch, actorRaw);
     const patchSource = source ?? this.sourceOf(patch);
     this.claim(actorRaw, this.sourceOf(actorRaw) ?? '');
     this.asSource(patchSource, actorRaw, () => this.applyNode(actorRaw, patch, { ...scope, source: patchSource }));
@@ -825,6 +836,41 @@ export class GoblinEngine {
     }
   }
 
+  /**
+   * Merge `$mixin('file')` into the actor of the nearest document up the
+   * template chain — the calling document first — whose `$` type matches the
+   * mixin's. Choices fill in first, so the mixin can gate on one an earlier
+   * patch just declared.
+   */
+  private mixin(call: string, scope: EvalRoots): void {
+    const file = call.trim().match(MIXIN_CALL)?.[1] ?? '';
+    const doc = this.docs.get(file);
+    if (doc === null || typeof doc !== 'object') throw new Error(`mixin not loaded: ${file}`);
+    const type = (doc as Record<string, unknown>)[DOCUMENT];
+    if (typeof type !== 'string') throw new Error(`mixin ${file} must declare its actor type with a top-level \`$\``);
+    const actor = this.mixinTarget(type, scope);
+    if (actor === undefined) throw new Error(`$mixin('${file}'): no parent document defines actor type ${type}`);
+    // Cite the document by its loaded path, so its events open the right file.
+    const source = this.origins.get(doc) ?? file;
+    const patch = this.claim(this.clone(doc as object), source);
+    this.origins.set(patch, source);
+    if (scope.doc !== null && typeof scope.doc === 'object') this.parents.set(patch, scope.doc);
+    RecordNode.materializeParams(actor, scope.provided);
+    this.applyRaw(actor, patch, source, scope.provided);
+  }
+
+  /** The actor built (or patched) by the nearest document of `type`. */
+  private mixinTarget(type: string, scope: EvalRoots): unknown {
+    const seen = new Set<unknown>();
+    for (let doc = scope.doc; doc !== null && typeof doc === 'object' && !seen.has(doc); doc = this.parents.get(doc)) {
+      seen.add(doc);
+      if ((doc as Record<string, unknown>)[DOCUMENT] !== type) continue;
+      const actor = this.actorOf.get(doc) ?? (doc === scope.actor ? doc : undefined);
+      if (actor !== undefined) return actor;
+    }
+    return undefined;
+  }
+
   /** Expand calls written as plain document values, so the nodes they hand
    * back — `:param` records included — are in the tree before anything looks
    * for them. Anything that is not a record call is left as written. */
@@ -846,6 +892,12 @@ export class GoblinEngine {
       const record = node as Record<string, unknown>;
       for (const [key, value] of Object.entries(record)) {
         if (isMetaKey(key) || isValidateKey(key)) continue;
+        if (typeof value === 'string' && MIXIN_CALL.test(value.trim())) {
+          delete record[key]; // consumed: the mixin merges into the actor instead
+          this.mixin(value, scope);
+          wrote = true;
+          continue;
+        }
         const next = this.inlinePatchValue(value, scope);
         if (next !== value) {
           record[key] = this.claim(next, this.fieldSource(record, key) ?? '');
@@ -970,6 +1022,10 @@ export class GoblinEngine {
   }
 
   private mergeEntry(target: Record<string, unknown>, key: string, rawValue: unknown, scope: EvalRoots): void {
+    if (typeof rawValue === 'string' && MIXIN_CALL.test(rawValue.trim())) {
+      this.mixin(rawValue, scope); // the key holding the call is consumed
+      return;
+    }
     const value = this.inlinePatchValue(rawValue, scope);
     if (isMetaKey(key) || isValidateKey(key)) {
       target[key] = deepClone(value);
@@ -987,10 +1043,11 @@ export class GoblinEngine {
       if (key !== k) this.recordEvent(target, k, ADD_KEY, k);
       // Always merge through mergeInto so nested `+`, path keys and
       // `$if`/`$then` wrappers are consumed rather than stored raw.
-      if (typeof target[k] !== 'object' || target[k] === null || Array.isArray(target[k])) {
-        target[k] = {};
-      }
+      const created = typeof target[k] !== 'object' || target[k] === null || Array.isArray(target[k]);
+      if (created) target[k] = {};
       this.mergeInto(target[k], value, { ...scope, current: target[k] });
+      // A record that only held mixin calls leaves nothing behind.
+      if (created && Object.keys(target[k] as object).length === 0 && hasMixin(value)) delete target[k];
       return;
     }
     if (Array.isArray(value)) {
@@ -1092,4 +1149,11 @@ export class GoblinEngine {
     });
     return failures;
   }
+}
+
+/** Whether a patch value holds a `$mixin('…')` call anywhere inside. */
+function hasMixin(value: unknown): boolean {
+  if (typeof value === 'string') return MIXIN_CALL.test(value.trim());
+  if (value === null || typeof value !== 'object') return false;
+  return Object.values(value).some(hasMixin);
 }

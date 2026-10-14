@@ -1,6 +1,6 @@
 # Champion martial archetype, applied when the fighter picks
-# `features.martial_archetype: champion` (5e/main.yaml adopts every subclass;
-# only the chosen one applies). Raw power: wider criticals and endurance.
+# `features.martial_archetype: champion` (5e/fighter/fighter.yaml mixes in every
+# subclass; only the chosen one applies). Raw power: wider criticals and endurance.
 
 $: Character
 

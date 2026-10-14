@@ -126,3 +126,10 @@ $: Character
     :doc: Add +2 to one ability score or +1 to two, or take an epic boon feat.
     $if: '@.level >= 19'
     '@.improvements.level_19': '#.feature.ability_improvement(19)'
+
+# Subclasses mix into the character this file is applied to; each gates on
+# `features.martial_archetype`, so only the chosen one adds anything.
+subclass:
+  champion: $mixin('champion.yaml')
+  battle_master: $mixin('battle_master.yaml')
+  eldritch_knight: $mixin('eldritch_knight.yaml')

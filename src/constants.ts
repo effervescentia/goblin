@@ -52,7 +52,11 @@ export const CALL_EXPR = /^[#$@.][\w.]*\([^()]*\)$/;
 export const TEMPLATE_CALL = /^\$tmpl\(\s*['"]([^'"]+)['"]\s*\)$/;
 
 /** Template references anywhere in file text (discovery scan). */
-export const TEMPLATE_SCAN = /\$tmpl\(\s*['"]([^'"]+)['"]\s*\)/g;
+export const TEMPLATE_SCAN = /\$(?:tmpl|mixin)\(\s*['"]([^'"]+)['"]\s*\)/g;
+
+/** `$mixin('file.yaml')`: merge an actor-typed document into the actor of
+ * the nearest document up the template chain declaring the same `$` type. */
+export const MIXIN_CALL = /^\$mixin\(\s*['"]([^'"]+)['"]\s*\)$/;
 
 // -- recognized keys -------------------------------------------------------
 

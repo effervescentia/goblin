@@ -1,0 +1,11 @@
+# Mixins: a mixin call (below) merges an actor-typed document into the actor
+# of the nearest document up the template chain declaring the same `$` type —
+# here this one. The key holding the call is consumed; the mixin's writes land
+# like a patch's, with `:events` citing it (see 14-mixin-boon.yaml). Keep
+# call shapes out of comments: discovery scans the text.
+
+$: Adventurer
+
+speed: 30
+gold: 10
+boon: $mixin('14-mixin-boon.yaml') # → gone; speed 40, gold 15
