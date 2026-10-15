@@ -57,9 +57,6 @@ _ability_methods:
   roll: $mixin('ability/roll.yaml')
   roll_assign: $mixin('ability/roll_assign.yaml')
 
-utils:
-  'ability_modifier(x)': $lib.math.floor((x - 10) / 2)
-
 proficiency_bonus: '#.level.proficiency_for(@.level)'
 
 armor_class: '10 + $.abilities.dexterity.modifier'

@@ -355,7 +355,6 @@ describe('cli', () => {
     expect(data.name).toBe('Aria');
     expect(data.level).toBe(5);
     expect(data.initiative).toEqual({ base: 2, roll: '1d20 + .base' }); // dex 14 → +2
-    expect((data.utils as Record<string, unknown>).ability_modifier).toBe('$lib.math.floor((x - 10) / 2)');
     expect((data.features as Record<string, unknown>).second_wind).toBeNull();
   });
 });

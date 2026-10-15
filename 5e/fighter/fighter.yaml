@@ -3,7 +3,7 @@
 
 $: Character
 
-'@.fighter': {}
+'@.class': fighter
 
 '@.hit_die': d10
 '@.hit_points':

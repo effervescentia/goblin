@@ -267,7 +267,7 @@ describe('5e', () => {
       ':value': 2,
       ':events': [
         // Each write cites the key behind it: `attacks: 1`, then `'+@.attacks'`.
-        { ':source': 'character.yaml', ':line': 67, ':column': 1, ':set': 1 },
+        { ':source': 'character.yaml', ':line': 64, ':column': 1, ':set': 1 },
         { ':source': 'fighter/fighter.yaml', ':line': 99, ':column': 5, ':add': 1 },
       ],
     });

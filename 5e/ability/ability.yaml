@@ -7,11 +7,13 @@
 'point_cost(bought)': bought + (bought >= 6) + (bought >= 7)
 
 # One ability: its starting score, plus the improvements that named it.
+'modifier(x)': $lib.math.floor((x - 10) / 2)
+
 'entry(ability, label)':
   start:
     :doc: Starting {label} score, filled in by the chosen ability score method.
   base: .start + $lib.list.count(@.improvements, ability)
-  modifier: $.utils.ability_modifier(.base)
+  modifier: '#.ability.modifier(.base)'
 
 # Point buy: 8, plus the points bought for it.
 'bought(label)':
