@@ -154,6 +154,25 @@ describe('expressions', () => {
     expect(() => engine.evalExpr('math.min(3, 5)', scope)).toThrow();
   });
 
+  it('never falls back from a missing `.` path to the app root', () => {
+    const engine = new GoblinEngine('.');
+    engine.appRoot.abilities = { dexterity: { modifier: 2 } };
+    const initiative = { base: '.abilities.dexterity.modifier' };
+    const doc = { initiative };
+    const scope: EvalRoots = { doc, actor: doc, app: engine.appRoot, current: initiative };
+    expect(() => engine.evalExpr(initiative.base, scope)).toThrow(
+      'unresolvable reference: .abilities.dexterity.modifier',
+    );
+  });
+
+  it('never falls back from a missing `$` path to the document', () => {
+    const engine = new GoblinEngine('.');
+    const doc = { only_here: 1 };
+    const scope: EvalRoots = { doc, actor: doc, app: engine.appRoot, current: doc };
+    expect(engine.evalExpr('#.only_here', scope)).toBe(1);
+    expect(() => engine.evalExpr('$.only_here', scope)).toThrow('unresolvable reference: $.only_here');
+  });
+
   it('merges yaml helpers into $lib, natives winning on name clashes', () => {
     const engine = new GoblinEngine('.');
     engine.mergeLib({ 'double(x)': 'x * 2', math: { 'floor(x)': '0', 'sign(x)': '1' } });

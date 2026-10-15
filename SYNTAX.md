@@ -36,8 +36,9 @@ another tree — so `5e/ability/ability.yaml`'s `entry()` can write
 inside the character. (Private `_` ownership is separate: see Private fields.)
 
 Cross-namespace fallback: when a path is missing under `#` or `@`, the app
-root is tried next (so `@.utils.…` works when the app supplies `utils`); a
-missing `$` path falls back to the current document.
+root is tried next (so `@.utils.…` works when the app supplies `utils`).
+`$` and `.` paths never fall back: a missing one is an unresolvable
+reference.
 
 ## Wildcards
 

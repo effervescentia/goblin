@@ -16,4 +16,4 @@ demo:
   from_current: .base # → 4
   from_document: '#.base' # → 10
   from_actor: '@.demo.base' # → 4
-  from_app: '$.demo.base' # → 4 (via fallback to this document)
+  from_app: '$.demo.base' # → 4 (loading this file merged `demo` into the app root)

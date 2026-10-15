@@ -317,11 +317,10 @@ export class GoblinEngine {
       }
       const rawTarget = this.derefValue(found?.value);
       if (rawTarget === undefined) {
-        // Cross-namespace fallback into shared globals: `#`/`@` fall back
-        // to the app root (e.g. `player.yaml` uses `@.utils.…` supplied by
-        // the app), `$` falls back to the current document.
-        const fallbackRoot = root === APP ? (scope.home ?? scope.doc) : scope.app;
-        const fallbackFound = this.walkScoped(fallbackRoot, segments, scope);
+        // Only `#`/`@` fall back, into shared globals (e.g. `@.utils.…`
+        // supplied by the app); `.` and `$` name exactly one tree.
+        if (root === CURRENT || root === APP) return undefined;
+        const fallbackFound = this.walkScoped(scope.app, segments, scope);
         if (fallbackFound !== null) {
           const fn = this.entryCallable(fallbackFound, scope);
           if (fn !== undefined) return fn;

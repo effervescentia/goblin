@@ -24,7 +24,7 @@ xp:
   :type: integer
   :default: 0
 
-level: '$.level.level_for(@.xp)'
+level: '$.level.level_for(.xp)'
 
 # How the six scores start; the method mixed in below adds its choice to
 # each ability.
@@ -57,16 +57,16 @@ _ability_methods:
   roll: $mixin('ability/roll.yaml')
   roll_assign: $mixin('ability/roll_assign.yaml')
 
-proficiency_bonus: '$.level.proficiency_for(@.level)'
+proficiency_bonus: '$.level.proficiency_for(.level)'
 
-armor_class: '10 + #.abilities.dexterity.modifier'
+armor_class: '10 + .abilities.dexterity.modifier'
 speed: 30
 attacks: 1
 # The lowest d20 roll that scores a critical hit; a Champion widens it.
 critical_hit: 20
 
 initiative:
-  base: '#.abilities.dexterity.modifier'
+  base: '@.abilities.dexterity.modifier'
   'roll()': 1d20 + .base
 
 hit_die:
