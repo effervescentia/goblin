@@ -119,7 +119,7 @@ const script = `
     usesBefore: val(before.resources.second_wind.current),
     healedInRange: val(healed.hit_points.current) >= 1 + 6 && val(healed.hit_points.current) <= Math.min(1 + 15, val(healed.hit_points.max)),
     usesAfter: val(healed.resources.second_wind.current),
-    unchangedWhenSpent: val(spent.hit_points.current) === val(healed.hit_points.current),
+    unchangedWhenSpent: val(spent.hit_points.current) === val(exhausted.hit_points.current),
     usesSpent: val(spent.resources.second_wind.current),
   };
 
