@@ -1,7 +1,7 @@
 # Rolled scores, applied when the character picks `ability_method: roll`:
 # 4d6 per ability, dropping the lowest die.
 
-$: Character
+'@': Character
 $if: "@.ability_method == 'roll'"
 
 '@.abilities':

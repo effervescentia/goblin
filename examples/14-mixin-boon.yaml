@@ -1,8 +1,8 @@
-# Mixin side of 14-mixin-actor.yaml: it must declare the actor type it
-# targets with a top-level `$`, and writes through `@.` like any patch.
+# Mixin side of 14-mixin-actor.yaml: it must name the actor it attaches to
+# with a top-level `@`, and writes through `@.` like any patch.
 # A root `$if` gates the whole document — this one holds.
 
-$: Adventurer
+'@': Adventurer
 $if: '@.speed >= 30'
 
 '@.speed': 40

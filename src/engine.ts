@@ -16,6 +16,7 @@
 
 import {
   ACTOR,
+  ACTOR_KEY,
   ADD_KEY,
   APP,
   CALL_EXPR,
@@ -36,7 +37,6 @@ import {
   TEMPLATE_SCAN,
   THEN_KEY,
   TYPE_KEY,
-  TYPE_TAG,
   VALIDATE_KEY,
   VALUE_KEY,
 } from './constants';
@@ -561,7 +561,7 @@ export class GoblinEngine {
         !isBareSigil(key) &&
         !isPathKey(key) &&
         !FunctionNode.isKey(key) &&
-        key !== TYPE_TAG &&
+        key !== ACTOR_KEY &&
         key !== IF_KEY &&
         key !== THEN_KEY &&
         !key.startsWith('+') &&
@@ -869,18 +869,19 @@ export class GoblinEngine {
 
   /**
    * Merge `$mixin('file')` into the actor of the nearest document up the
-   * template chain — the calling document first — whose `$` type matches the
-   * mixin's. Choices fill in first, so the mixin can gate on one an earlier
+   * template chain — the calling document first — declaring the actor the
+   * mixin's `@` names (`$actor: X`, or `@: X` on an applied document). Choices fill in first, so the mixin can gate on one an earlier
    * patch just declared.
    */
   private mixin(call: string, scope: EvalRoots): void {
     const file = call.trim().match(MIXIN_CALL)?.[1] ?? '';
     const doc = this.docs.get(file);
     if (doc === null || typeof doc !== 'object') throw new Error(`mixin not loaded: ${file}`);
-    const type = (doc as Record<string, unknown>)[TYPE_TAG];
-    if (typeof type !== 'string') throw new Error(`mixin ${file} must declare its actor type with a top-level \`$\``);
+    const type = (doc as Record<string, unknown>)[ACTOR];
+    if (typeof type !== 'string')
+      throw new Error(`mixin ${file} must name the actor it attaches to with a top-level \`@\``);
     const actor = this.mixinTarget(type, scope);
-    if (actor === undefined) throw new Error(`$mixin('${file}'): no parent document defines actor type ${type}`);
+    if (actor === undefined) throw new Error(`$mixin('${file}'): no parent document defines actor ${type}`);
     // Cite the document by its loaded path, so its events open the right file.
     const source = this.origins.get(doc) ?? file;
     const patch = this.claim(this.clone(doc as object), source);
@@ -890,12 +891,13 @@ export class GoblinEngine {
     this.applyRaw(actor, patch, source, scope.provided);
   }
 
-  /** The actor built (or patched) by the nearest document of `type`. */
+  /** The actor built (`$actor: type`) or patched (`@: type`) by the nearest such document. */
   private mixinTarget(type: string, scope: EvalRoots): unknown {
     const seen = new Set<unknown>();
     for (let doc = scope.doc; doc !== null && typeof doc === 'object' && !seen.has(doc); doc = this.parents.get(doc)) {
       seen.add(doc);
-      if ((doc as Record<string, unknown>)[TYPE_TAG] !== type) continue;
+      const record = doc as Record<string, unknown>;
+      if ((record[ACTOR_KEY] ?? record[ACTOR]) !== type) continue;
       const actor = this.actorOf.get(doc) ?? (doc === scope.actor ? doc : undefined);
       if (actor !== undefined) return actor;
     }
@@ -968,7 +970,7 @@ export class GoblinEngine {
     if (THEN_KEY in rec) this.applyPatchObject(rec[THEN_KEY], scope);
     const target = actorRaw as Record<string, unknown>;
     for (const [key, value] of Object.entries(rec)) {
-      if (isBareSigil(key) || key === TYPE_TAG) continue;
+      if (isBareSigil(key) || key === ACTOR_KEY) continue;
       if (isMetaKey(key) || isValidateKey(key)) {
         target[key] = deepClone(value);
         continue;
@@ -1048,7 +1050,7 @@ export class GoblinEngine {
     if (Array.isArray(patch)) return;
     if (!patch || typeof patch !== 'object') return;
     for (const [k, v] of Object.entries(patch as Record<string, unknown>)) {
-      if (isBareSigil(k) || k === TYPE_TAG || k === IF_KEY || k === THEN_KEY) continue;
+      if (isBareSigil(k) || k === ACTOR_KEY || k === IF_KEY || k === THEN_KEY) continue;
       if (isMetaKey(k) || isValidateKey(k)) continue;
       const record = patch as Record<string, unknown>;
       if (isPathKey(k)) {

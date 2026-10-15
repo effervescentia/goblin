@@ -2,7 +2,7 @@
 # `features.martial_archetype: eldritch_knight`: Intelligence-based spellcasting
 # with slots that come back on a long rest.
 
-$: Character
+'@': Character
 $if: "@.level >= 3 && @.features.martial_archetype == 'eldritch_knight'"
 
 '@.features':

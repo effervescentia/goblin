@@ -5,6 +5,9 @@
 # `$then` holds absolute patches applied when the condition holds.
 # Patched fields carry `:events` — who wrote them, in order — and a `+key`
 # addition records itself, so even a `:doc`-only feature shows its source.
+# A bare `@` names the actor this document attaches to (07-actor.yaml's `$actor`).
+
+'@': Adventurer
 
 '@.monk': {}
 '@.monk.martial_arts_die': 1d6

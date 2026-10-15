@@ -1,7 +1,7 @@
 # Standard array, applied when the character picks
 # `ability_method: standard_array`: 15, 14, 13, 12, 10 and 8, one per ability.
 
-$: Character
+'@': Character
 $if: "@.ability_method == 'standard_array'"
 
 '@.standard_array':

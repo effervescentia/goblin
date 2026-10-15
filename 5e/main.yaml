@@ -15,8 +15,6 @@
 #    or ability_method=roll_assign with abilities.<name>.roll=1..6)
 # Missing choices come back as { query }; a full sheet as { data }.
 
-$: Character
-
 level: $tmpl('level.yaml')
 feature: $tmpl('feature.yaml')
 ability: $tmpl('ability/ability.yaml')

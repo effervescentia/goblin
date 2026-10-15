@@ -9,7 +9,7 @@
 # to read its derived level, then engine.apply(actor, 'fighter/fighter.yaml', level).
 # XP thresholds follow the standard progression (L2 at 300 … L20 at 355000).
 
-$: Character
+$actor: Character
 
 # Identity — provided by the player.
 name:

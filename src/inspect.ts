@@ -5,6 +5,7 @@
  * actor and the `{ data }` the engine printed for it.
  */
 import {
+  ACTOR_KEY,
   ASSIGN_OP,
   DOC_KEY,
   EVENTS_KEY,
@@ -13,7 +14,6 @@ import {
   PARAM_KEY,
   PARAM_VALUE_KEY,
   THEN_KEY,
-  TYPE_TAG,
   VALIDATE_KEY,
 } from './constants';
 import { Die } from './nodes/die';
@@ -54,7 +54,7 @@ function fieldKeys(record: Record<string, unknown>): string[] {
       !isValidateKey(key) &&
       !isBareSigil(key) &&
       !isPathKey(key) &&
-      key !== TYPE_TAG &&
+      key !== ACTOR_KEY &&
       key !== IF_KEY &&
       key !== THEN_KEY,
   );

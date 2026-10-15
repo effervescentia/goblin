@@ -2,7 +2,7 @@
 # `features.martial_archetype: champion` (5e/fighter/fighter.yaml mixes in every
 # subclass; only the chosen one applies). Raw power: wider criticals and endurance.
 
-$: Character
+'@': Character
 $if: "@.level >= 3 && @.features.martial_archetype == 'champion'"
 
 '@.features':

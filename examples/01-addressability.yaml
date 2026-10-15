@@ -8,7 +8,7 @@
 # NOTE: quote any expression containing ` #` — unquoted, YAML reads `#`
 # as a comment and truncates the expression.
 
-$: Character # bare-sigil type tag: not data, never serialized
+$actor: Character # declares this document an actor: not data, never serialized
 
 base: 10
 demo:

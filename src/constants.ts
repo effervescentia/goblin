@@ -14,8 +14,8 @@ export const ACTOR = '@';
 /** App root. */
 export const APP = '$';
 
-/** Actor type tag key (`$: Character`); `#:` would be a YAML comment. */
-export const TYPE_TAG = '$';
+/** Actor declaration key (`$actor: Character`); a mixin names its target with a bare `@`. */
+export const ACTOR_KEY = '$actor';
 
 export type Sigil = typeof CURRENT | typeof DOCUMENT | typeof ACTOR | typeof APP;
 
@@ -57,8 +57,8 @@ export const TEMPLATE_CALL = /^\$tmpl\(\s*['"]([^'"]+)['"]\s*\)$/;
 /** Template references anywhere in file text (discovery scan). */
 export const TEMPLATE_SCAN = /\$(?:tmpl|mixin)\(\s*['"]([^'"]+)['"]\s*\)/g;
 
-/** `$mixin('file.yaml')`: merge an actor-typed document into the actor of
- * the nearest document up the template chain declaring the same `$` type. */
+/** `$mixin('file.yaml')`: merge a document into the actor of the nearest
+ * document up the template chain declaring the actor its `@` names. */
 export const MIXIN_CALL = /^\$mixin\(\s*['"]([^'"]+)['"]\s*\)$/;
 
 // -- recognized keys -------------------------------------------------------

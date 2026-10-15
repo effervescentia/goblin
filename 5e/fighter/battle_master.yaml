@@ -2,7 +2,7 @@
 # `features.martial_archetype: battle_master`: maneuvers fuelled by a pool of
 # superiority dice that comes back on a short rest.
 
-$: Character
+'@': Character
 $if: "@.level >= 3 && @.features.martial_archetype == 'battle_master'"
 
 '@.features':

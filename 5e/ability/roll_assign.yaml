@@ -2,7 +2,7 @@
 # `ability_method: roll_assign`: six 4d6-drop-lowest rolls, each assigned to
 # one ability by its position.
 
-$: Character
+'@': Character
 $if: "@.ability_method == 'roll_assign'"
 
 '@.roll_assign':

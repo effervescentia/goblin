@@ -2,7 +2,7 @@
 # Patch files are applied with `engine.apply(actor, '07-class.yaml')`;
 # gated content keys off `level`, covered end-to-end in src/examples.test.ts.
 
-$: Adventurer
+$actor: Adventurer
 
 level: 1
 abilities:

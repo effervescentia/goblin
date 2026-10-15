@@ -403,13 +403,18 @@ syntax:
   applies unconditionally. At a document's root, `$if` gates the whole
   applied document (or mixin): false applies none of it.
   `$if`/`$then` are never serialized.
-- **Type tags**: a bare `$` key (e.g. `$: Player`) declares the expected actor
-  type and is ignored by the engine, as are all bare sigils. `$type: X` (as
-  in `wip/player.yaml`) is the legacy spelling: skipped on evaluation, never
-  rely on it.
+- **Actor declarations**: a document that defines an actor declares itself
+  with `$actor: <name>` (`$actor: Adventurer`); an applied document or mixin
+  names the actor it attaches to with a bare `@` key (`'@': Adventurer` —
+  quoted, since YAML reserves a leading `@`). Both are skipped on evaluation
+  and never serialized; mixins resolve against them (see Mixins). Other bare
+  sigils (`$`, `#`, `.`) are ignored as keys. `$type: X` (as in
+  `wip/player.yaml`) is a legacy spelling: skipped on evaluation, never rely
+  on it.
 
 ```yaml
 # Examples (examples/07-actor.yaml, examples/07-class.yaml)
+'@': Adventurer # 07-actor.yaml declares `$actor: Adventurer`
 '@.monk': {}
 '@.monk.martial_arts_die': 1d6
 '@.features':
@@ -534,8 +539,6 @@ root-relative; nested references resolve relative to their own file.
 
 ```yaml
 # Examples (5e/main.yaml)
-$: Character
-
 # Shared binding: merged into the `$` namespace on load, so every document
 # calls $.level.… without attaching the table itself.
 level: $tmpl('level.yaml')
@@ -548,11 +551,12 @@ adopt:
 ## Mixins
 
 `$mixin('file.yaml')` merges another document into an actor. The mixin must
-declare the actor type it targets with a top-level `$` (`$: Character`);
-the engine walks up the template chain — the document holding the call,
-then whichever document pulled that one in with `$tmpl` or `adopt` — to the
-nearest one declaring the same type, and applies the mixin to the actor that
-document builds (an actor document) or patches (an applied one). Provided
+name the actor it attaches to with a top-level `@` (`'@': Character`); the
+engine walks up the template chain — the document holding the call, then
+whichever document pulled that one in with `$tmpl` or `adopt` — to the
+nearest one declaring that actor, and applies the mixin to the actor that
+document builds (an actor document, `$actor: Character`) or patches (an
+applied one, `'@': Character`). Provided
 choices fill in first, so a mixin can gate on a choice an earlier patch
 declared.
 
@@ -564,9 +568,9 @@ declared.
   comments).
 - A root `$if` gates the whole mixin, like any applied document
   (`examples/14-mixin-curse.yaml` never applies).
-- A mixin without a `$` type throws (`mixin … must declare its actor type…`),
-  as does one whose type no document up the chain declares
-  (`$mixin('…'): no parent document defines actor type …`).
+- A mixin without a `@` throws (`mixin … must name the actor it attaches
+  to…`), as does one whose actor no document up the chain declares
+  (`$mixin('…'): no parent document defines actor …`).
 
 5e mixes alternatives in this way: the character document mixes in its
 ability-score methods (each gated on `@.ability_method`), and the fighter
@@ -577,7 +581,7 @@ into (`_ability_methods` follows `abilities`):
 
 ```yaml
 # 5e/fighter/fighter.yaml
-$: Character
+'@': Character
 _subclasses:
   champion: $mixin('champion.yaml')
   battle_master: $mixin('battle_master.yaml')
@@ -586,7 +590,7 @@ _subclasses:
 
 ```yaml
 # Examples (examples/14-mixin-actor.yaml, examples/14-mixin-boon.yaml)
-$: Adventurer
+$actor: Adventurer
 speed: 30
 boon: $mixin('14-mixin-boon.yaml') # → gone; '@.speed': 40 lands on this actor
 ```
@@ -723,8 +727,8 @@ engine.resolve('08-parameters.yaml', { hero_name: 'Aria', starting_level: 3, 'de
 - **Quote `#` expressions**: unquoted, YAML reads `#` as a comment and
   truncates the value — always write `'#.utils.f(…)'`, never `#.utils.f(…)`
   bare. A leading `@` needs quoting too (YAML reserves it); `$` needs none.
-- **Type tags stay `$`**: a bare `#:` key would be a YAML comment, so the
-  type tag is spelled `$: Character` even though `$` is the app root.
+- **Quote the mixin's `@` key**: write `'@': Character`; a bare `@:` is a
+  YAML error.
 - Sentences with periods (e.g. `end. Start`) look like `.`-refs to the
   expression detector — keep prose in `:doc`, which is never evaluated.
   Numeric literals are safe: no digit follows the `.` in a ref, so `2.5`

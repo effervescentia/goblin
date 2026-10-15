@@ -209,11 +209,11 @@ describe('examples', () => {
       l2type: 'bonus_action',
       l2focus: true,
       // The actor's own `d4`, then the `$then` write that replaced it.
-      l2dieEvents: [{ ':set': 'd4' }, { ':source': '07-class.yaml', ':line': 29, ':column': 5, ':set': '1d8' }],
+      l2dieEvents: [{ ':set': 'd4' }, { ':source': '07-class.yaml', ':line': 32, ':column': 5, ':set': '1d8' }],
       // A field the patch created has no origin event.
-      martialDieEvents: [{ ':source': '07-class.yaml', ':line': 10, ':column': 1, ':set': '1d6' }],
+      martialDieEvents: [{ ':source': '07-class.yaml', ':line': 13, ':column': 1, ':set': '1d6' }],
       // A `+key` feature (metadata only) still records the addition.
-      martialEvents: [{ ':source': '07-class.yaml', ':line': 12, ':column': 3, ':add': 'martial_arts' }],
+      martialEvents: [{ ':source': '07-class.yaml', ':line': 15, ':column': 3, ':add': 'martial_arts' }],
     });
   });
 });

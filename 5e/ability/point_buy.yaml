@@ -1,7 +1,7 @@
 # Point buy, applied when the character picks `ability_method: point_buy`:
 # 27 points raise six scores from 8, each to at most 15.
 
-$: Character
+'@': Character
 $if: "@.ability_method == 'point_buy'"
 
 '@.point_buy':
