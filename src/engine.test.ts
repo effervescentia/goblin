@@ -173,6 +173,16 @@ describe('expressions', () => {
     expect(() => engine.evalExpr('$.only_here', scope)).toThrow('unresolvable reference: $.only_here');
   });
 
+  it('never falls back from a missing `#` or `@` path to the app root', () => {
+    const engine = new GoblinEngine('.');
+    engine.appRoot.shared = 1;
+    const doc = {};
+    const scope: EvalRoots = { doc, actor: doc, app: engine.appRoot, current: doc };
+    expect(engine.evalExpr('$.shared', scope)).toBe(1);
+    expect(() => engine.evalExpr('#.shared', scope)).toThrow('unresolvable reference: #.shared');
+    expect(() => engine.evalExpr('@.shared', scope)).toThrow('unresolvable reference: @.shared');
+  });
+
   it('merges yaml helpers into $lib, natives winning on name clashes', () => {
     const engine = new GoblinEngine('.');
     engine.mergeLib({ 'double(x)': 'x * 2', math: { 'floor(x)': '0', 'sign(x)': '1' } });

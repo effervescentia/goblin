@@ -35,10 +35,9 @@ another tree — so `5e/ability/ability.yaml`'s `entry()` can write
 `modifier: '#.modifier(.base)'` and still reach its own `modifier(x)` from
 inside the character. (Private `_` ownership is separate: see Private fields.)
 
-Cross-namespace fallback: when a path is missing under `#` or `@`, the app
-root is tried next (so `@.utils.…` works when the app supplies `utils`).
-`$` and `.` paths never fall back: a missing one is an unresolvable
-reference.
+No fallback: each sigil names exactly one tree, and a path missing from it
+is an unresolvable reference — `@.utils.…` never finds an app-level `utils`;
+write `$.utils.…`.
 
 ## Wildcards
 

@@ -316,18 +316,8 @@ export class GoblinEngine {
         if (fn !== undefined) return fn;
       }
       const rawTarget = this.derefValue(found?.value);
-      if (rawTarget === undefined) {
-        // Only `#`/`@` fall back, into shared globals (e.g. `@.utils.…`
-        // supplied by the app); `.` and `$` name exactly one tree.
-        if (root === CURRENT || root === APP) return undefined;
-        const fallbackFound = this.walkScoped(scope.app, segments, scope);
-        if (fallbackFound !== null) {
-          const fn = this.entryCallable(fallbackFound, scope);
-          if (fn !== undefined) return fn;
-          return this.evaluate(this.derefValue(fallbackFound.value), scope);
-        }
-        return undefined;
-      }
+      // Every sigil names exactly one tree: a missing path never falls back.
+      if (rawTarget === undefined) return undefined;
       const targetScope = {
         ...scope,
         source: found === null ? scope.source : this.fieldSource(found.parent, found.key),
