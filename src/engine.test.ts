@@ -745,6 +745,28 @@ describe('apply', () => {
     expect(out.features).not.toHaveProperty('never');
   });
 
+  it('reads # as the defining document in function bodies and call copies', () => {
+    const engine = new GoblinEngine('.');
+    engine.register('helpers.yaml', {
+      k: 10,
+      'scaled(x)': 'x * #.k',
+      'entry(x)': { value: '#.scaled(x)' },
+    });
+    // No app-root fallback: only the defining document holds `k` and `scaled`.
+    for (const key of ['k', 'scaled(x)', 'entry(x)']) delete engine.appRoot[key];
+    engine.appRoot.helpers = "$tmpl('helpers.yaml')";
+
+    const actor: Record<string, unknown> = {
+      k: 1,
+      direct: '$.helpers.scaled(2)',
+      stat: '$.helpers.entry(3)',
+    };
+    const scope: EvalRoots = { doc: actor, actor, app: engine.appRoot, current: actor };
+    const out = engine.evaluate(actor, scope) as { direct: number; stat: { value: number } };
+    expect(out.direct).toBe(20);
+    expect(out.stat.value).toBe(30);
+  });
+
   it('gates a whole document on a root $if', () => {
     const { engine, doc } = testEngine();
     const actor = () => ({ ...(structuredClone(doc) as Record<string, unknown>), level: 3, features: {} });

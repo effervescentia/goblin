@@ -21,11 +21,11 @@ import type { Location } from './locations';
 import { Die } from './nodes/die';
 
 export interface EvalRoots {
-  /** `$` — top of the current document. */
+  /** `#` — top of the current document. */
   doc: unknown;
   /** `@` — the actor instance the document is applied to. */
   actor: unknown;
-  /** `#` — global application namespace. */
+  /** `$` — global application namespace. */
   app: unknown;
   /** `.` — nearest enclosing record of the expression. */
   current: unknown;
@@ -40,6 +40,9 @@ export interface EvalRoots {
   source?: string;
   /** Where that expression sits in its document, for the events it writes. */
   at?: Location;
+  /** `#` for an expression written in another document than `doc` (a
+   * definition's body, or a call's copy); unset, `#` is `doc`. */
+  home?: unknown;
 }
 
 /** A `_` key is private to the document that wrote it. */

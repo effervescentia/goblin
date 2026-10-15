@@ -61,9 +61,12 @@ describe('FunctionNode record bodies', () => {
       },
     };
     const fn = FunctionNode.match('entry(ability)', record['entry(ability)'], record);
-    const call = fn?.evaluate(null as never, { doc: {}, actor: {}, app: {}, current: record }) as (
-      ...args: unknown[]
-    ) => Record<string, unknown>;
+    const call = fn?.evaluate({ settle: <T>(tree: T) => tree } as never, {
+      doc: {},
+      actor: {},
+      app: {},
+      current: record,
+    }) as (...args: unknown[]) => Record<string, unknown>;
 
     const strength = call('strength');
     const wisdom = call('wisdom');

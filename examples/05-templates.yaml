@@ -3,3 +3,7 @@
 
 weapon: $tmpl('05-greeting.yaml')
 backup: $tmpl('05-greeting.yaml')
+
+# The caller's own weight: the template's functions never see it.
+weight: 100
+heft: '#.weapon.heft(2)' # → 8: the body's `#` is 05-greeting.yaml (weight 4)

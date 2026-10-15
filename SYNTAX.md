@@ -28,6 +28,13 @@ $.utils.ability_modifier       # 'ability_modifier' in the global utils namespac
 
 In a document where the document itself defines the actor (e.g. `wip/player.yaml`), `#` and `@` resolve to the same root. The distinction matters in applied documents (e.g. class files like `wip/monk.yaml`) where `#` is the class document's own namespace and `@` is the character being modified.
 
+`#` is the document an expression was *written* in. A function body reads
+`#` as the document that defines it, wherever it is called from, and the
+record a record-bodied call hands back keeps that `#` after it lands in
+another tree — so `5e/ability/ability.yaml`'s `entry()` can write
+`modifier: '#.modifier(.base)'` and still reach its own `modifier(x)` from
+inside the character. (Private `_` ownership is separate: see Private fields.)
+
 Cross-namespace fallback: when a path is missing under `#` or `@`, the app
 root is tried next (so `@.utils.…` works when the app supplies `utils`); a
 missing `$` path falls back to the current document.
@@ -289,7 +296,8 @@ recursively (relative to the referring file), so no manual preloading is
 needed. Keep `$tmpl('…')` shapes out of comments: the scan is textual.
 
 A tmpl'd document's functions stay callable through the inlined table, with
-`.` bound to the template root. Either attach the table under a key…
+`.` bound to the template root and `#` to the template document. Either
+attach the table under a key…
 
 ```yaml
 levels: $tmpl('level.yaml')
@@ -313,6 +321,8 @@ it.
 ```yaml
 # Examples (examples/05-templates.yaml, examples/05-greeting.yaml)
 weapon: $tmpl('05-greeting.yaml')
+weight: 100
+heft: '#.weapon.heft(2)' # → 8: `heft(n)` reads `#.weight` from 05-greeting.yaml (4)
 ```
 
 ## Metadata

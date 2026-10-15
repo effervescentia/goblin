@@ -133,6 +133,11 @@ describe('examples', () => {
     });
   });
 
+  it('05-templates.yaml reads # in a template function as the template', () => {
+    const state = cli('examples/05-templates.yaml', '--strip-metadata') as { data: Record<string, unknown> };
+    expect(state.data).toMatchObject({ weight: 100, heft: 8 });
+  });
+
   it('14-mixin-actor.yaml merges its typed mixin and drops the call', () => {
     const state = cli('examples/14-mixin-actor.yaml', '--strip-metadata') as { data: unknown };
     expect(state.data).toEqual({ speed: 40, gold: 15 });

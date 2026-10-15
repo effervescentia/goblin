@@ -2,3 +2,5 @@
 title: Morning Star
 damage: 1d8
 weight: 4
+# Inside a body, `#` is this document wherever the call comes from.
+'heft(n)': '#.weight * n'

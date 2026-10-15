@@ -4,7 +4,7 @@
  * Implements SYNTAX.md addressability plus the expression / patch
  * conventions observed in `main.yaml`, `player.yaml` and `monk*.yaml`:
  *
- * - Sigils: `.` current node, `$` document root, `@` actor root, `#` app root.
+ * - Sigils: `.` current node, `#` document root, `@` actor root, `$` app root.
  * - Expressions: any string containing a sigil reference (or inline dice
  *   mixed with operators) is evaluated lazily with on-demand resolution.
  * - Dice: standalone `d6` / `2d6` produces a Die spec; inline dice rolls.
@@ -95,7 +95,7 @@ function isAdditiveList(items: unknown[], label = 'list'): boolean {
 export class GoblinEngine {
   /** Raw (unevaluated) documents by file name. */
   readonly docs = new Map<string, unknown>();
-  /** `#` — shared global namespace (cross-doc values). */
+  /** `$` — shared global namespace (cross-doc values). */
   readonly appRoot: Record<string, unknown> = {};
   /** `$lib` — standard library: natives bound in code, yaml helpers merged on load. */
   readonly library: Record<string, unknown> = withNatives();
@@ -103,6 +103,8 @@ export class GoblinEngine {
   private readonly fieldEvents = new WeakMap<object, Map<string, unknown[]>>();
   /** Source document of a raw tree: loaded documents and `$tmpl('…')` clones. */
   private readonly origins = new WeakMap<object, string>();
+  /** The document a record call's copy was written in: its `#` wherever it lands. */
+  private readonly homes = new WeakMap<object, unknown>();
   /** The document each `$tmpl` / `$mixin` clone was pulled in by: the
    * template chain a mixin walks up to find its actor. */
   private readonly parents = new WeakMap<object, unknown>();
@@ -184,7 +186,7 @@ export class GoblinEngine {
     }
   }
 
-  /** Store a document under `file`, merging top-level tables into `#`. */
+  /** Store a document under `file`, merging top-level tables into `$`. */
   register(file: string, data: unknown, text?: string): unknown {
     this.docs.set(file, data);
     if (text !== undefined && data !== null && typeof data === 'object' && !this.locations.has(data)) {
@@ -226,7 +228,7 @@ export class GoblinEngine {
   }
 
   private cacheKey(ref: string, scope: EvalRoots): string {
-    return `${this.idOf(scope.doc)}|${this.idOf(scope.actor)}|${this.idOf(scope.current)}|${scope.source ?? ''}|${ref}`;
+    return `${this.idOf(scope.doc)}|${this.idOf(scope.home)}|${this.idOf(scope.actor)}|${this.idOf(scope.current)}|${scope.source ?? ''}|${ref}`;
   }
 
   /** Wrap a raw `name(params)` function-definition entry in a callable. */
@@ -238,13 +240,42 @@ export class GoblinEngine {
     if (!fn) return undefined;
     const source = this.fieldSource(found.parent, found.key);
     const at = this.locationOf(found.parent, found.key);
-    return fn.evaluate(this, { ...scope, source, at }) as ((...args: unknown[]) => unknown) | undefined;
+    const home = this.definedIn(found.parent, source, scope);
+    return fn.evaluate(this, { ...scope, home, source, at }) as ((...args: unknown[]) => unknown) | undefined;
+  }
+
+  /** The `#` of a definition held by `parent`: the document that wrote it.
+   * The caller's own (live) document wins when it is that document. */
+  private definedIn(parent: object, source: string | undefined, scope: EvalRoots): unknown {
+    const home = this.homes.get(parent);
+    if (home !== undefined) return home;
+    const doc = scope.home ?? scope.doc;
+    const callerDoc = doc !== null && typeof doc === 'object' ? this.owners.get(doc) : undefined;
+    if (source === undefined || source === callerDoc) return scope.home;
+    return this.docs.get(source) ?? scope.home;
+  }
+
+  /** The tree a sigil reads from. */
+  private rootFor(root: string, scope: EvalRoots): unknown {
+    if (root === CURRENT) return scope.current;
+    if (root === DOCUMENT) return scope.home ?? scope.doc;
+    return root === ACTOR ? scope.actor : scope.app;
+  }
+
+  /** Mark a record call's copy as written in `doc`, so its `#` stays there. */
+  settle<T>(tree: T, doc: unknown): T {
+    const visit = (node: unknown) => {
+      if (node === null || typeof node !== 'object' || node instanceof Die || this.homes.has(node)) return;
+      this.homes.set(node, doc);
+      for (const child of Object.values(node)) visit(child);
+    };
+    visit(tree);
+    return tree;
   }
 
   resolveRef(ref: string, scope: EvalRoots): unknown {
     const { root, path } = parseRef(ref);
-    let base =
-      root === CURRENT ? scope.current : root === DOCUMENT ? scope.doc : root === ACTOR ? scope.actor : scope.app;
+    let base = this.rootFor(root, scope);
     let segments = path;
     // `$lib.…` addresses the standard library (only when written as $lib, not $.lib),
     // unless the base document defines its own `lib` table (explicit bindings win).
@@ -286,10 +317,10 @@ export class GoblinEngine {
       }
       const rawTarget = this.derefValue(found?.value);
       if (rawTarget === undefined) {
-        // Cross-namespace fallback into shared globals: `$`/`@` fall back
+        // Cross-namespace fallback into shared globals: `#`/`@` fall back
         // to the app root (e.g. `player.yaml` uses `@.utils.…` supplied by
-        // the app), `#` falls back to the current document.
-        const fallbackRoot = root === APP ? scope.doc : scope.app;
+        // the app), `$` falls back to the current document.
+        const fallbackRoot = root === APP ? (scope.home ?? scope.doc) : scope.app;
         const fallbackFound = this.walkScoped(fallbackRoot, segments, scope);
         if (fallbackFound !== null) {
           const fn = this.entryCallable(fallbackFound, scope);
@@ -301,6 +332,8 @@ export class GoblinEngine {
       const targetScope = {
         ...scope,
         source: found === null ? scope.source : this.fieldSource(found.parent, found.key),
+        // The target reads `#` as its own document, not the reader's.
+        home: found === null ? undefined : this.homes.get(found.parent),
         current: parentOf(base, segments) ?? scope.current,
         // The target's own path, so `:param` nodes inside it look up provided
         // values by where they live, not where the reference was written.
@@ -368,14 +401,12 @@ export class GoblinEngine {
       },
       assign: (ref: string, value: unknown, op: AssignOp) => {
         const { root, path } = parseRef(ref);
-        const base =
-          root === CURRENT ? scope.current : root === DOCUMENT ? scope.doc : root === ACTOR ? scope.actor : scope.app;
+        const base = this.rootFor(root, scope);
         return this.write(base, root, path, value, op, scope);
       },
       assignEach: (ref: string, expr: string, op: AssignOp) => {
         const { root, path } = parseRef(ref);
-        const base =
-          root === CURRENT ? scope.current : root === DOCUMENT ? scope.doc : root === ACTOR ? scope.actor : scope.app;
+        const base = this.rootFor(root, scope);
         for (const target of this.expandPaths(base, path, scope)) {
           const owner = getPath(base, target.slice(0, -1));
           if (owner === null || typeof owner !== 'object') continue;
@@ -464,12 +495,14 @@ export class GoblinEngine {
    * (any ref spelling, or the sheet walk), so a roll reads the same everywhere.
    */
   evaluateField(record: object, key: string, raw: unknown, fieldScope: EvalRoots): unknown {
-    // List items keep the source of the field holding the list.
-    const scope = Array.isArray(record) ? fieldScope : { ...fieldScope, source: this.fieldSource(record, key) };
+    // List items keep the source of the field holding the list; a call's
+    // copy keeps the `#` it was written against.
+    const homed = { ...fieldScope, home: this.homes.get(record) };
+    const scope = Array.isArray(record) ? homed : { ...homed, source: this.fieldSource(record, key) };
     const memoizable =
       typeof raw === 'string' && ExpressionNode.matches(raw) && Object.keys(scope.params ?? {}).length === 0;
     if (!memoizable) return this.evaluate(raw, scope);
-    const memo = `field|${this.idOf(scope.doc)}|${this.idOf(scope.actor)}|${this.idOf(record)}|${key}`;
+    const memo = `field|${this.idOf(scope.home ?? scope.doc)}|${this.idOf(scope.actor)}|${this.idOf(record)}|${key}`;
     if (this.cache.has(memo)) return this.cache.get(memo);
     const value = this.evaluate(raw, scope);
     this.cache.set(memo, value);
@@ -559,7 +592,7 @@ export class GoblinEngine {
     return tree;
   }
 
-  /** Evaluate a whole loaded document as an actor (`$` and `@` coincide). */
+  /** Evaluate a whole loaded document as an actor (`#` and `@` coincide). */
   evaluateDoc(file: string, provided?: Record<string, unknown>): unknown {
     const raw = this.docs.get(file);
     if (raw === undefined) throw new Error(`document not loaded: ${file}`);
@@ -588,8 +621,8 @@ export class GoblinEngine {
   }
 
   /**
-   * Write override values into the raw tree (`.`/`$`/`@` target the actor,
-   * `#` targets the app; bare paths default to the actor). Overridden paths
+   * Write override values into the raw tree (`.`/`#`/`@` target the actor,
+   * `$` targets the app; bare paths default to the actor). Overridden paths
    * are replaced wholesale — derivations never run and missing paths are
    * created — but a `:param` record keeps its `:type` contract. Mutates like
    * `apply`; re-load or re-resolve for a pristine tree.
@@ -730,7 +763,15 @@ export class GoblinEngine {
   private clone<T>(value: T): T {
     const copy = deepClone(value);
     copyLocations(value, copy, this.locations);
+    this.copyHomes(value, copy);
     return copy;
+  }
+
+  private copyHomes(from: unknown, to: unknown): void {
+    if (from === null || typeof from !== 'object' || to === null || typeof to !== 'object') return;
+    const home = this.homes.get(from);
+    if (home !== undefined && !this.homes.has(to)) this.homes.set(to, home);
+    for (const [key, child] of Object.entries(from)) this.copyHomes(child, (to as Record<string, unknown>)[key]);
   }
 
   /** Run `write` with events citing `record[key]`'s location — or the
@@ -953,8 +994,7 @@ export class GoblinEngine {
     // A path key written `+@.attacks` adds to what is there.
     const adds = pathKey.startsWith('+');
     const { root, path } = parseRef(stripPlus(pathKey));
-    const base =
-      root === ACTOR ? scope.actor : root === DOCUMENT ? scope.doc : root === APP ? scope.app : scope.current;
+    const base = this.rootFor(root, scope);
     if (value && typeof value === 'object' && !Array.isArray(value)) {
       if (!this.condPasses(value as Record<string, unknown>, scope)) return;
       let target = getPath(base, path);

@@ -117,7 +117,8 @@ export class FunctionNode extends Node<unknown> {
     if (FunctionNode.isRecordBody(body)) {
       // A fresh copy per call: two uses of one definition must not share
       // nodes, or a `:param` filled in one would show up in the other.
-      const fn = (...args: unknown[]) => bindParams(deepClone(body), this.params, args);
+      const fn = (...args: unknown[]) =>
+        engine.settle(bindParams(deepClone(body), this.params, args), scope.home ?? scope.doc);
       return FunctionNode.tag(fn, {
         name: this.name,
         params: this.params,
