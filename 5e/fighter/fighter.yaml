@@ -58,9 +58,9 @@ $: Character
           @.hit_points.current += $lib.math.min(1d10 + @.level, @.hit_points.max - @.hit_points.current) * (@.resources.second_wind.current > 0)
           @.resources.second_wind.current -= @.resources.second_wind.current > 0
   +action_surge:
+    $if: '@.level >= 2'
     :label: Action Surge
     :doc: Take one additional action on your turn. Restores on a short rest.
-    $if: '@.level >= 2'
     '@.resources':
       +action_surge:
         :label: Action Surge
@@ -69,52 +69,52 @@ $: Character
         max: 1 + (@.level >= 17)
         recover: short
   +tactical_mind:
+    $if: '@.level >= 2'
     :label: Tactical Mind
     :doc: When you fail an ability check, expend a Second Wind use and add 1d10; if you still fail, the use is not expended.
-    $if: '@.level >= 2'
   +tactical_shift:
+    $if: '@.level >= 5'
     :label: Tactical Shift
     :doc: Immediately after using Second Wind, move up to half your Speed without provoking Opportunity Attacks.
-    $if: '@.level >= 5'
   +tactical_master:
+    $if: '@.level >= 9'
     :label: Tactical Master
     :doc: When using Weapon Mastery, you can use Push, Sap, or Slow instead of the weapon's mastery property.
-    $if: '@.level >= 9'
   +martial_archetype:
+    $if: '@.level >= 3'
     :label: Martial Archetype
     :doc: 'Choose a subclass: Champion, Battle Master, or Eldritch Knight. Its features come from 5e/<subclass>.yaml.'
     :param: true
     :type: string
     :options: [champion, battle_master, eldritch_knight]
-    $if: '@.level >= 3'
   +ability_score_improvement_1:
+    $if: '@.level >= 4'
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    $if: '@.level >= 4'
     '@.improvements.level_4': '$.feature.ability_improvement(4)'
   +extra_attack:
+    $if: '@.level >= 5'
     :label: Extra Attack
     :doc: Strike twice whenever you take the Attack action.
-    $if: '@.level >= 5'
     '+@.attacks': 1 + (@.level >= 11) + (@.level >= 20)
     '@.actions':
       +extra_attack:
         :label: Extra Attack
         :doc: Make two attacks instead of one (three at 11, four at 20).
   +ability_score_improvement_2:
+    $if: '@.level >= 6'
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    $if: '@.level >= 6'
     '@.improvements.level_6': '$.feature.ability_improvement(6)'
   +ability_score_improvement_3:
+    $if: '@.level >= 8'
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    $if: '@.level >= 8'
     '@.improvements.level_8': '$.feature.ability_improvement(8)'
   +indomitable:
+    $if: '@.level >= 9'
     :label: Indomitable
     :doc: Reroll a failed saving throw and add your Fighter level to the save. Uses increase at levels 13 and 17.
-    $if: '@.level >= 9'
     '@.resources':
       +indomitable_points:
         :label: Indomitable Uses
@@ -123,28 +123,29 @@ $: Character
         max: 1 + (@.level >= 13) + (@.level >= 17)
         recover: long
   +ability_score_improvement_4:
+    $if: '@.level >= 12'
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    $if: '@.level >= 12'
     '@.improvements.level_12': '$.feature.ability_improvement(12)'
   +ability_score_improvement_5:
+    $if: '@.level >= 14'
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    $if: '@.level >= 14'
     '@.improvements.level_14': '$.feature.ability_improvement(14)'
   +ability_score_improvement_6:
+    $if: '@.level >= 16'
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    $if: '@.level >= 16'
     '@.improvements.level_16': '$.feature.ability_improvement(16)'
   +studied_attacks:
+    $if: '@.level >= 13'
     :label: Studied Attacks
     :doc: After missing a creature with an attack roll, you have Advantage on your next attack roll against it before the end of your next turn.
-    $if: '@.level >= 13'
   +epic_boon:
+    $if: '@.level >= 19'
     :label: Epic Boon
     :doc: Gain an Epic Boon feat or another feat for which you qualify.
-    $if: '@.level >= 19'
+
 # Subclasses mix into the character this file is applied to; each gates on
 # `features.martial_archetype`, so only the chosen one adds anything.
 _subclasses:

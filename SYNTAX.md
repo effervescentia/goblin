@@ -390,7 +390,8 @@ syntax:
   `ability/roll_assign.yaml` (see Mixins), each gated on `@.ability_method`,
   so only the chosen method's params reach the next `{ query }`. `$then` is
   itself a patch whose path keys are absolute; a bare `$then` without `$if`
-  applies unconditionally.
+  applies unconditionally. At a document's root, `$if` gates the whole
+  applied document (or mixin): false applies none of it.
   `$if`/`$then` are never serialized.
 - **Type tags**: a bare `$` key (e.g. `$: Player`) declares the expected actor
   type and is ignored by the engine, as are all bare sigils. `$type: X` (as
@@ -551,6 +552,8 @@ declared.
 - Paths resolve relative to the calling file, like `$tmpl`, and mixins are
   discovered on load the same way (textually — keep the call shape out of
   comments).
+- A root `$if` gates the whole mixin, like any applied document
+  (`examples/14-mixin-curse.yaml` never applies).
 - A mixin without a `$` type throws (`mixin … must declare its actor type…`),
   as does one whose type no document up the chain declares
   (`$mixin('…'): no parent document defines actor type …`).

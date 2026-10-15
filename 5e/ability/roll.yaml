@@ -2,9 +2,9 @@
 # 4d6 per ability, dropping the lowest die.
 
 $: Character
+$if: "@.ability_method == 'roll'"
 
 '@.abilities':
-  $if: "@.ability_method == 'roll'"
   strength: '$.ability.rolled()'
   dexterity: '$.ability.rolled()'
   constitution: '$.ability.rolled()'

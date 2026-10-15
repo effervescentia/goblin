@@ -2,9 +2,9 @@
 # 27 points raise six scores from 8, each to at most 15.
 
 $: Character
+$if: "@.ability_method == 'point_buy'"
 
 '@.point_buy':
-  $if: "@.ability_method == 'point_buy'"
   :label: Point Buy
   :doc: 27 points buy your six scores; each starts at 8 and tops out at 15.
   '!validate':
@@ -20,7 +20,6 @@ $: Character
     $.ability.point_cost(@.abilities.charisma.bought)
 
 '@.abilities':
-  $if: "@.ability_method == 'point_buy'"
   strength: "$.ability.bought('Strength')"
   dexterity: "$.ability.bought('Dexterity')"
   constitution: "$.ability.bought('Constitution')"

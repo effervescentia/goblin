@@ -744,6 +744,23 @@ describe('apply', () => {
     expect(out.features).not.toHaveProperty('sneak_attack');
     expect(out.features).not.toHaveProperty('never');
   });
+
+  it('gates a whole document on a root $if', () => {
+    const { engine, doc } = testEngine();
+    const actor = () => ({ ...(structuredClone(doc) as Record<string, unknown>), level: 3, features: {} });
+    const patch = (cond: string) => ({
+      $if: cond,
+      $then: { '@.features': { '+bonus': {} } },
+      '@.features': { '+gated': {} },
+    });
+    engine.docs.set('closed.yaml', patch('@.level >= 5'));
+    engine.docs.set('open.yaml', patch('@.level >= 2'));
+
+    const closed = engine.apply(actor(), 'closed.yaml') as { features: Record<string, unknown> };
+    expect(closed.features).toEqual({});
+    const open = engine.apply(actor(), 'open.yaml') as { features: Record<string, unknown> };
+    expect(Object.keys(open.features).sort()).toEqual(['bonus', 'gated']);
+  });
 });
 
 describe('validate', () => {

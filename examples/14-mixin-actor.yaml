@@ -9,3 +9,4 @@ $: Adventurer
 speed: 30
 gold: 10
 boon: $mixin('14-mixin-boon.yaml') # → gone; speed 40, gold 15
+curse: $mixin('14-mixin-curse.yaml') # → gone; its root `$if` fails, so gold stays 15

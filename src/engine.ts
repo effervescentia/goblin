@@ -932,8 +932,12 @@ export class GoblinEngine {
       return;
     }
     if (typeof patch !== 'object' || patch === null) return;
+    // A root `$if` gates the whole document, like any other patch node.
+    const rec = patch as Record<string, unknown>;
+    if (!this.condPasses(rec, scope)) return;
+    if (THEN_KEY in rec) this.applyPatchObject(rec[THEN_KEY], scope);
     const target = actorRaw as Record<string, unknown>;
-    for (const [key, value] of Object.entries(patch as Record<string, unknown>)) {
+    for (const [key, value] of Object.entries(rec)) {
       if (isBareSigil(key) || key === TYPE_TAG) continue;
       if (isMetaKey(key) || isValidateKey(key)) {
         target[key] = deepClone(value);

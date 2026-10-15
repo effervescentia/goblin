@@ -2,9 +2,9 @@
 # `ability_method: standard_array`: 15, 14, 13, 12, 10 and 8, one per ability.
 
 $: Character
+$if: "@.ability_method == 'standard_array'"
 
 '@.standard_array':
-  $if: "@.ability_method == 'standard_array'"
   :label: Standard Array
   :doc: Assign 15, 14, 13, 12, 10 and 8, one to each ability.
   # Six picks covering all six scores: each used exactly once.
@@ -21,7 +21,6 @@ $: Character
     - '@.abilities.charisma.assigned'
 
 '@.abilities':
-  $if: "@.ability_method == 'standard_array'"
   strength: "$.ability.assigned('Strength')"
   dexterity: "$.ability.assigned('Dexterity')"
   constitution: "$.ability.assigned('Constitution')"

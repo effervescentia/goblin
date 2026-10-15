@@ -3,9 +3,9 @@
 # one ability by its position.
 
 $: Character
+$if: "@.ability_method == 'roll_assign'"
 
 '@.roll_assign':
-  $if: "@.ability_method == 'roll_assign'"
   :label: Roll and Assign
   :doc: Roll 4d6 six times, dropping the lowest die, then assign each roll to an ability.
   # Six picks covering all six rolls: each taken exactly once.
@@ -29,7 +29,6 @@ $: Character
     - '@.abilities.charisma.roll'
 
 '@.abilities':
-  $if: "@.ability_method == 'roll_assign'"
   strength: "$.ability.assigned_roll('Strength')"
   dexterity: "$.ability.assigned_roll('Dexterity')"
   constitution: "$.ability.assigned_roll('Constitution')"

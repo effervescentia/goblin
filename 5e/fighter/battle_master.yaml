@@ -3,16 +3,14 @@
 # superiority dice that comes back on a short rest.
 
 $: Character
+$if: "@.level >= 3 && @.features.martial_archetype == 'battle_master'"
 
 '@.features':
-  # Level first: below 3 the choice doesn't exist yet, and `&&` never reads it.
-  $if: "@.level >= 3 && @.features.martial_archetype == 'battle_master'"
   +combat_superiority:
     :label: Combat Superiority
     :doc: >-
       Learn maneuvers and spend superiority dice to use them. Creatures resist
       a maneuver's effect against your maneuver save DC.
-    $if: '@.level >= 3'
     save_dc: 8 + @.proficiency_bonus + $lib.math.max(@.abilities.strength.modifier, @.abilities.dexterity.modifier)
     '@.resources':
       +superiority_dice:
@@ -66,9 +64,9 @@ $: Character
       :count: 2
       :unique: true
   +student_of_war:
+    $if: '@.level >= 3'
     :label: Student of War
     :doc: Gain proficiency with one type of artisan's tools.
-    $if: '@.level >= 3'
     '@.proficiencies.tools':
       :label: Artisan's Tools
       :doc: The artisan's tools you trained with.
@@ -79,18 +77,18 @@ $: Character
          cobblers_tools, cooks_utensils, glassblowers_tools, jewelers_tools, leatherworkers_tools, masons_tools,
          painters_supplies, potters_tools, smiths_tools, tinkers_tools, weavers_tools, woodcarvers_tools]
   +know_your_enemy:
+    $if: '@.level >= 7'
     :label: Know Your Enemy
     :doc: Study a creature for a minute to learn how it compares to you in a couple of capabilities.
-    $if: '@.level >= 7'
   +improved_combat_superiority:
+    $if: '@.level >= 10'
     :label: Improved Combat Superiority
     :doc: Your superiority dice become d10s, and d12s at 18th level.
-    $if: '@.level >= 10'
     '@.resources.superiority_dice.die': d10
     '@.resources.superiority_dice':
       $if: '@.level >= 18'
       die: d12
   +relentless:
+    $if: '@.level >= 15'
     :label: Relentless
     :doc: When you roll initiative with no superiority dice left, regain one.
-    $if: '@.level >= 15'
