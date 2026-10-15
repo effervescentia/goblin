@@ -5,9 +5,9 @@ $: Character
 
 '@.abilities':
   $if: "@.ability_method == 'roll'"
-  strength: '#.ability.rolled()'
-  dexterity: '#.ability.rolled()'
-  constitution: '#.ability.rolled()'
-  intelligence: '#.ability.rolled()'
-  wisdom: '#.ability.rolled()'
-  charisma: '#.ability.rolled()'
+  strength: '$.ability.rolled()'
+  dexterity: '$.ability.rolled()'
+  constitution: '$.ability.rolled()'
+  intelligence: '$.ability.rolled()'
+  wisdom: '$.ability.rolled()'
+  charisma: '$.ability.rolled()'

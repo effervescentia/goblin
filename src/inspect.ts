@@ -7,13 +7,13 @@
 import {
   ASSIGN_OP,
   DOC_KEY,
-  DOCUMENT,
   EVENTS_KEY,
   IF_KEY,
   LABEL_KEY,
   PARAM_KEY,
   PARAM_VALUE_KEY,
   THEN_KEY,
+  TYPE_TAG,
   VALIDATE_KEY,
 } from './constants';
 import { Die } from './nodes/die';
@@ -40,7 +40,7 @@ export interface InspectNode {
   /** `!validate` rules declared on this record. */
   rules?: string[];
   events?: Record<string, unknown>[];
-  /** Absolute paths (`#.…` for the app root) this node's expression reads. */
+  /** Absolute paths (`$.…` for the app root) this node's expression reads. */
   reads: string[];
   children: string[];
   private: boolean;
@@ -54,7 +54,7 @@ function fieldKeys(record: Record<string, unknown>): string[] {
       !isValidateKey(key) &&
       !isBareSigil(key) &&
       !isPathKey(key) &&
-      key !== DOCUMENT &&
+      key !== TYPE_TAG &&
       key !== IF_KEY &&
       key !== THEN_KEY,
   );
@@ -62,11 +62,11 @@ function fieldKeys(record: Record<string, unknown>): string[] {
 
 const join = (parent: string, key: string) => (parent ? `${parent}.${key}` : key);
 
-/** A ref as an absolute path: `.x` from the holding record, `@`/`$` from the
- * actor root (they coincide once patches are merged), `#` kept as written. */
+/** A ref as an absolute path: `.x` from the holding record, `@`/`#` from the
+ * actor root (they coincide once patches are merged), `$` kept as written. */
 function absolute(ref: string, holder: string): string {
-  if (ref.startsWith('#')) return ref;
-  if (ref.startsWith('@') || ref.startsWith('$')) return ref.replace(/^[@$]\.?/, '');
+  if (ref.startsWith('$')) return ref;
+  if (ref.startsWith('@') || ref.startsWith('#')) return ref.replace(/^[@#]\.?/, '');
   return join(holder, ref.slice(1));
 }
 

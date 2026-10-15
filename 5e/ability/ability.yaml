@@ -1,4 +1,4 @@
-# Ability score helpers, attached as `#.ability` by 5e/main.yaml: the shape of
+# Ability score helpers, attached as `$.ability` by 5e/main.yaml: the shape of
 # one ability entry (5e/character.yaml) and the per-ability choice each
 # starting method adds (5e/ability/point_buy.yaml, 5e/ability/standard_array.yaml,
 # 5e/ability/roll.yaml, 5e/ability/roll_assign.yaml).
@@ -13,7 +13,7 @@
   start:
     :doc: Starting {label} score, filled in by the chosen ability score method.
   base: .start + $lib.list.count(@.improvements, ability)
-  modifier: '#.ability.modifier(.base)'
+  modifier: '$.ability.modifier(.base)'
 
 # Point buy: 8, plus the points bought for it.
 'bought(label)':

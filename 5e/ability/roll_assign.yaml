@@ -30,9 +30,9 @@ $: Character
 
 '@.abilities':
   $if: "@.ability_method == 'roll_assign'"
-  strength: "#.ability.assigned_roll('Strength')"
-  dexterity: "#.ability.assigned_roll('Dexterity')"
-  constitution: "#.ability.assigned_roll('Constitution')"
-  intelligence: "#.ability.assigned_roll('Intelligence')"
-  wisdom: "#.ability.assigned_roll('Wisdom')"
-  charisma: "#.ability.assigned_roll('Charisma')"
+  strength: "$.ability.assigned_roll('Strength')"
+  dexterity: "$.ability.assigned_roll('Dexterity')"
+  constitution: "$.ability.assigned_roll('Constitution')"
+  intelligence: "$.ability.assigned_roll('Intelligence')"
+  wisdom: "$.ability.assigned_roll('Wisdom')"
+  charisma: "$.ability.assigned_roll('Charisma')"

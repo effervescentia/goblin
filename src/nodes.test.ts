@@ -25,8 +25,8 @@ describe('parse', () => {
     expect(parse('d6')).toBeInstanceOf(DieNode);
     expect(parse('2d6')).toBeInstanceOf(DieNode);
     expect(parse(new Die(1, 6, '1d6'))).toBeInstanceOf(DieNode);
-    expect(parse('#.utils.f(1)')).toBeInstanceOf(ExpressionNode);
-    expect(parse('10 + $.x')).toBeInstanceOf(ExpressionNode);
+    expect(parse('$.utils.f(1)')).toBeInstanceOf(ExpressionNode);
+    expect(parse('10 + #.x')).toBeInstanceOf(ExpressionNode);
   });
 
   it('classifies collections and anything else', () => {

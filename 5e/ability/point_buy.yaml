@@ -12,18 +12,18 @@ $: Character
   # Private: the limit only this document's rule reads.
   _budget: 27
   spent: >-
-    #.ability.point_cost(@.abilities.strength.bought) +
-    #.ability.point_cost(@.abilities.dexterity.bought) +
-    #.ability.point_cost(@.abilities.constitution.bought) +
-    #.ability.point_cost(@.abilities.intelligence.bought) +
-    #.ability.point_cost(@.abilities.wisdom.bought) +
-    #.ability.point_cost(@.abilities.charisma.bought)
+    $.ability.point_cost(@.abilities.strength.bought) +
+    $.ability.point_cost(@.abilities.dexterity.bought) +
+    $.ability.point_cost(@.abilities.constitution.bought) +
+    $.ability.point_cost(@.abilities.intelligence.bought) +
+    $.ability.point_cost(@.abilities.wisdom.bought) +
+    $.ability.point_cost(@.abilities.charisma.bought)
 
 '@.abilities':
   $if: "@.ability_method == 'point_buy'"
-  strength: "#.ability.bought('Strength')"
-  dexterity: "#.ability.bought('Dexterity')"
-  constitution: "#.ability.bought('Constitution')"
-  intelligence: "#.ability.bought('Intelligence')"
-  wisdom: "#.ability.bought('Wisdom')"
-  charisma: "#.ability.bought('Charisma')"
+  strength: "$.ability.bought('Strength')"
+  dexterity: "$.ability.bought('Dexterity')"
+  constitution: "$.ability.bought('Constitution')"
+  intelligence: "$.ability.bought('Intelligence')"
+  wisdom: "$.ability.bought('Wisdom')"
+  charisma: "$.ability.bought('Charisma')"

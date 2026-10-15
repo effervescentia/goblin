@@ -8,9 +8,9 @@ utils:
 
 strength:
   base: 15
-  modifier: $.utils.ability_modifier(.base) # → 2
+  modifier: '#.utils.ability_modifier(.base)' # → 2
 
-doubled: $.utils.double(21) # → 42
+doubled: '#.utils.double(21)' # → 42
 floored: $lib.math.floor(2.9) # → 2
 'lucky()': 1d20 # zero-arg callable
 
@@ -21,5 +21,5 @@ base_armor: 10
 'shield(name, bonus)':
   :label: '{name}'
   :doc: A sturdy board of wood and iron.
-  armor_class: $.base_armor + bonus
-off_hand: $.shield('Heater Shield', 2)
+  armor_class: '#.base_armor + bonus'
+off_hand: "#.shield('Heater Shield', 2)"

@@ -15,13 +15,13 @@ function testEngine() {
       'ability_modifier(x)': '$lib.math.floor((x - 10) / 2)',
     },
     abilities: {
-      strength: { base: 15, modifier: '#.utils.ability_modifier(.base)' },
-      dexterity: { base: 14, modifier: '#.utils.ability_modifier(.base)' },
-      wisdom: { base: 12, modifier: '#.utils.ability_modifier(.base)' },
+      strength: { base: 15, modifier: '$.utils.ability_modifier(.base)' },
+      dexterity: { base: 14, modifier: '$.utils.ability_modifier(.base)' },
+      wisdom: { base: 12, modifier: '$.utils.ability_modifier(.base)' },
     },
-    armor_class: '10 + #.abilities.dexterity.modifier',
+    armor_class: '10 + $.abilities.dexterity.modifier',
     initiative: {
-      base: '#.abilities.dexterity.modifier',
+      base: '$.abilities.dexterity.modifier',
       'roll()': '1d20 + .base',
     },
     hit_die: 'd6',
@@ -31,7 +31,7 @@ function testEngine() {
       max: 5,
     },
     rest: {
-      'short()': '#.hit_points.current = $lib.math.min(#.hit_points.current + #.hit_die, #.hit_points.max)',
+      'short()': '$.hit_points.current = $lib.math.min($.hit_points.current + $.hit_die, $.hit_points.max)',
     },
   };
   engine.docs.set('main.yaml', doc);
@@ -43,8 +43,8 @@ function testEngine() {
 
 describe('parseRef', () => {
   it('splits sigil and segments', () => {
-    expect(parseRef('#.utils.ability_modifier')).toEqual({ root: '#', path: ['utils', 'ability_modifier'] });
-    expect(parseRef('$.abilities.dexterity')).toEqual({ root: '$', path: ['abilities', 'dexterity'] });
+    expect(parseRef('$.utils.ability_modifier')).toEqual({ root: '$', path: ['utils', 'ability_modifier'] });
+    expect(parseRef('#.abilities.dexterity')).toEqual({ root: '#', path: ['abilities', 'dexterity'] });
     expect(parseRef('@.features')).toEqual({ root: '@', path: ['features'] });
     expect(parseRef('.base')).toEqual({ root: '.', path: ['base'] });
   });
@@ -52,7 +52,7 @@ describe('parseRef', () => {
   it('handles bare sigils and missing dots', () => {
     expect(parseRef('$')).toEqual({ root: '$', path: [] });
     expect(parseRef('@')).toEqual({ root: '@', path: [] });
-    expect(parseRef('$math.min')).toEqual({ root: '$', path: ['math', 'min'] });
+    expect(parseRef('#math.min')).toEqual({ root: '#', path: ['math', 'min'] });
   });
 });
 
@@ -89,7 +89,7 @@ describe('dice', () => {
 
   it('rolls an expression field once per evaluation, however it is reached', () => {
     const engine = new GoblinEngine('.');
-    const doc = { score: { roll: '1d1000000 + 0', copy: '.roll', again: '$.score.roll' } };
+    const doc = { score: { roll: '1d1000000 + 0', copy: '.roll', again: '#.score.roll' } };
     engine.docs.set('roll.yaml', doc);
     const out = engine.evaluateDoc('roll.yaml') as { score: { roll: number; copy: number; again: number } };
     expect(out.score.copy).toBe(out.score.roll);
@@ -98,7 +98,7 @@ describe('dice', () => {
 
   it('rolls each list item once, however it is reached', () => {
     const engine = new GoblinEngine('.');
-    const doc = { rolls: ['1d1000000 + 0', '1d1000000 + 0'], first: '$.rolls[0]', last: '$.rolls[-1]' };
+    const doc = { rolls: ['1d1000000 + 0', '1d1000000 + 0'], first: '#.rolls[0]', last: '#.rolls[-1]' };
     engine.docs.set('rolls.yaml', doc);
     const out = engine.evaluateDoc('rolls.yaml') as { rolls: number[]; first: number; last: number };
     expect(out.first).toBe(out.rolls[0]);
@@ -120,16 +120,16 @@ describe('dice', () => {
 
 describe('expressions', () => {
   it('detects expression strings', () => {
-    expect(ExpressionNode.matches('#.utils.ability_modifier(.base)')).toBe(true);
-    expect(ExpressionNode.matches('10 + $.abilities.dexterity.modifier')).toBe(true);
+    expect(ExpressionNode.matches('$.utils.ability_modifier(.base)')).toBe(true);
+    expect(ExpressionNode.matches('10 + #.abilities.dexterity.modifier')).toBe(true);
     expect(ExpressionNode.matches('bonus_action')).toBe(false);
     expect(ExpressionNode.matches('Player')).toBe(false);
   });
 
   it('evaluates arithmetic and references', () => {
     const { engine, scope } = testEngine();
-    expect(engine.evalExpr('10 + #.abilities.dexterity.modifier', scope)).toBe(12);
-    expect(engine.evalExpr('#.utils.ability_modifier(15)', scope)).toBe(2);
+    expect(engine.evalExpr('10 + $.abilities.dexterity.modifier', scope)).toBe(12);
+    expect(engine.evalExpr('$.utils.ability_modifier(15)', scope)).toBe(2);
   });
 
   it('resolves `.` against the current node', () => {
@@ -145,11 +145,11 @@ describe('expressions', () => {
     expect(engine.evalExpr('$lib.math.floor(2.9)', scope)).toBe(2);
   });
 
-  it('does not resolve `$math` / `$.math` — the stdlib is `$lib` only', () => {
+  it('does not resolve `#math` / `#.math` — the stdlib is `$lib` only', () => {
     const { engine, scope } = testEngine();
-    expect(() => engine.evalExpr('$math.min(3, 5)', scope)).toThrow('unresolvable reference: $.math.min');
-    expect(() => engine.evalExpr('$.math.min(3, 5)', scope)).toThrow('unresolvable reference: $.math.min');
+    expect(() => engine.evalExpr('#math.min(3, 5)', scope)).toThrow('unresolvable reference: #.math.min');
     expect(() => engine.evalExpr('#.math.min(3, 5)', scope)).toThrow('unresolvable reference: #.math.min');
+    expect(() => engine.evalExpr('$.math.min(3, 5)', scope)).toThrow('unresolvable reference: $.math.min');
     // No bare `math` binding leaks into compiled expressions either.
     expect(() => engine.evalExpr('math.min(3, 5)', scope)).toThrow();
   });
@@ -165,7 +165,7 @@ describe('expressions', () => {
 
   it('throws on unresolvable references', () => {
     const { engine, scope } = testEngine();
-    expect(() => engine.evalExpr('#.missing.thing', scope)).toThrow('unresolvable reference');
+    expect(() => engine.evalExpr('$.missing.thing', scope)).toThrow('unresolvable reference');
   });
 
   it('detects circular references', () => {
@@ -244,25 +244,25 @@ describe('indexing', () => {
 
   it('picks items from 0, negative from the end, null past either end', () => {
     const engine = new GoblinEngine('.');
-    expect(engine.evalExpr('$.ranked[0]', scopeOf(doc))).toBe('gold');
-    expect(engine.evalExpr('$.ranked[-1]', scopeOf(doc))).toBe('bronze');
-    expect(engine.evalExpr('$.ranked[$.place - 1]', scopeOf(doc))).toBe('silver');
-    expect(engine.evalExpr('$.ranked[3]', scopeOf(doc))).toBeNull();
-    expect(engine.evalExpr('$.ranked[-4]', scopeOf(doc))).toBeNull();
+    expect(engine.evalExpr('#.ranked[0]', scopeOf(doc))).toBe('gold');
+    expect(engine.evalExpr('#.ranked[-1]', scopeOf(doc))).toBe('bronze');
+    expect(engine.evalExpr('#.ranked[#.place - 1]', scopeOf(doc))).toBe('silver');
+    expect(engine.evalExpr('#.ranked[3]', scopeOf(doc))).toBeNull();
+    expect(engine.evalExpr('#.ranked[-4]', scopeOf(doc))).toBeNull();
   });
 
   it('chains, nests, and leaves list literals alone', () => {
     const engine = new GoblinEngine('.');
-    expect(engine.evalExpr('$.grid[1][0]', scopeOf(doc))).toBe(3);
-    expect(engine.evalExpr('$.grid[$.grid[0][0]][1]', scopeOf(doc))).toBe(4);
+    expect(engine.evalExpr('#.grid[1][0]', scopeOf(doc))).toBe(3);
+    expect(engine.evalExpr('#.grid[#.grid[0][0]][1]', scopeOf(doc))).toBe(4);
     expect(engine.evalExpr('$lib.set.subset([1, 2], [2, 1, 3])', scopeOf(doc))).toBe(1);
-    expect(engine.evalExpr('[$.place, 5][1]', scopeOf(doc))).toBe(5);
+    expect(engine.evalExpr('[#.place, 5][1]', scopeOf(doc))).toBe(5);
   });
 
   it('refuses non-lists and non-integer indexes', () => {
     const engine = new GoblinEngine('.');
-    expect(() => engine.evalExpr('$.name[0]', scopeOf(doc))).toThrow('cannot index string: not a list');
-    expect(() => engine.evalExpr('$.ranked[0.5]', scopeOf(doc))).toThrow('list index must be an integer, got 0.5');
+    expect(() => engine.evalExpr('#.name[0]', scopeOf(doc))).toThrow('cannot index string: not a list');
+    expect(() => engine.evalExpr('#.ranked[0.5]', scopeOf(doc))).toThrow('list index must be an integer, got 0.5');
   });
 });
 
@@ -281,30 +281,30 @@ describe('wildcards', () => {
     const engine = new GoblinEngine('.');
     const doc = pools();
     const scope: EvalRoots = { doc, actor: doc, app: {}, current: doc };
-    expect(engine.evalExpr('$.resources.*.max', scope)).toEqual([2, 3]);
-    expect(engine.evalExpr('$.flags.*.on', scope)).toEqual([true, false]);
-    expect(engine.evalExpr('$lib.list.size($.resources.*.max)', scope)).toBe(2);
+    expect(engine.evalExpr('#.resources.*.max', scope)).toEqual([2, 3]);
+    expect(engine.evalExpr('#.flags.*.on', scope)).toEqual([true, false]);
+    expect(engine.evalExpr('$lib.list.size(#.resources.*.max)', scope)).toBe(2);
   });
 
   it('filters matches with a predicate, skipping children it cannot read', () => {
     const engine = new GoblinEngine('.');
     const doc = pools();
     const scope: EvalRoots = { doc, actor: doc, app: {}, current: doc };
-    expect(engine.evalExpr("$.resources.{.recover == 'short'}.max", scope)).toEqual([2]);
-    expect(engine.evalExpr('$.resources.{.max > 1 && .max < 3}.max', scope)).toEqual([2]);
-    expect(engine.evalExpr('$.resources.{.recover == "long"}.max', scope)).toEqual([3]);
+    expect(engine.evalExpr("#.resources.{.recover == 'short'}.max", scope)).toEqual([2]);
+    expect(engine.evalExpr('#.resources.{.max > 1 && .max < 3}.max', scope)).toEqual([2]);
+    expect(engine.evalExpr('#.resources.{.recover == "long"}.max', scope)).toEqual([3]);
     // The third flag has no `on`: it does not match rather than throwing.
-    expect(engine.evalExpr('$.flags.{.on}.on', scope)).toEqual([true]);
+    expect(engine.evalExpr('#.flags.{.on}.on', scope)).toEqual([true]);
   });
 
   it('assigns each match, with `.` bound to the record being written', () => {
     const engine = new GoblinEngine('.');
     const doc = pools();
     const scope: EvalRoots = { doc, actor: doc, app: {}, current: doc };
-    engine.evalExpr("$.resources.{.recover == 'short'}.current = .max", scope);
+    engine.evalExpr("#.resources.{.recover == 'short'}.current = .max", scope);
     expect(doc.resources.surge.current).toBe(2);
     expect(doc.resources.indomitable.current).toBe(0);
-    engine.evalExpr('$.resources.*.current = .max', scope);
+    engine.evalExpr('#.resources.*.current = .max', scope);
     expect(doc.resources.indomitable.current).toBe(3);
   });
 
@@ -335,14 +335,14 @@ describe('wildcards', () => {
     const engine = new GoblinEngine('.');
     const doc = pools();
     const scope: EvalRoots = { doc, actor: doc, app: {}, current: doc };
-    engine.evalExpr('$.resources.surge.current += 2 * 3', scope);
+    engine.evalExpr('#.resources.surge.current += 2 * 3', scope);
     expect(doc.resources.surge.current).toBe(6);
-    engine.evalExpr('$.resources.surge.current -= 1 + 1', scope);
+    engine.evalExpr('#.resources.surge.current -= 1 + 1', scope);
     expect(doc.resources.surge.current).toBe(4);
-    engine.evalExpr('$.resources.*.current += .max', scope);
+    engine.evalExpr('#.resources.*.current += .max', scope);
     expect(doc.resources.surge.current).toBe(6);
     expect(doc.resources.indomitable.current).toBe(3);
-    engine.evalExpr("$.resources.{.recover == 'long'}.current -= 1", scope);
+    engine.evalExpr("#.resources.{.recover == 'long'}.current -= 1", scope);
     expect(doc.resources.indomitable.current).toBe(2);
   });
 
@@ -357,7 +357,7 @@ describe('wildcards', () => {
   it("skips another document's `_` fields", () => {
     const engine = new GoblinEngine('.');
     engine.register('a.yaml', { stats: { _hidden: 1, open: 2 } });
-    engine.register('b.yaml', { all: '#.stats.*' });
+    engine.register('b.yaml', { all: '$.stats.*' });
     const out = engine.evaluateDoc('b.yaml') as { all: unknown };
     expect(out.all).toEqual([2]);
   });
@@ -491,7 +491,7 @@ describe('private fields', () => {
   };
 
   it('lets a document read its own `_` fields', () => {
-    const engine = engineWith({ 'own.yaml': { _secret: 4, shown: '$._secret * 2', box: { _n: 1, m: '._n + 1' } } });
+    const engine = engineWith({ 'own.yaml': { _secret: 4, shown: '#._secret * 2', box: { _n: 1, m: '._n + 1' } } });
     const out = engine.evaluateDoc('own.yaml') as { shown: number; box: { m: number } };
     expect(out.shown).toBe(8);
     expect(out.box.m).toBe(2);
@@ -679,8 +679,8 @@ describe('apply', () => {
     const engine = new GoblinEngine('.');
     engine.appRoot.feature = { 'choice()': { ':label': 'Pick', ':param': true, ':type': 'string' } };
     engine.docs.set('grant.yaml', {
-      '@.choices.first': '#.feature.choice()',
-      '@.choices.second': '#.feature.choice()',
+      '@.choices.first': '$.feature.choice()',
+      '@.choices.second': '$.feature.choice()',
       // A call that yields a number stays an expression, lazy as written.
       '@.armor_class': '$lib.math.floor(12.9)',
     });
@@ -732,7 +732,7 @@ describe('apply', () => {
     engine.docs.set('gated.yaml', {
       '@.features': {
         '+sneak_attack': {
-          $if: '#.hit_points.current > #.hit_points.max',
+          $if: '$.hit_points.current > $.hit_points.max',
           $then: { '@.features': { '+never': {} } },
         },
       },
@@ -796,28 +796,28 @@ describe('debug', () => {
     expect(debug((out.rest as { short: unknown }).short)).toEqual({
       ':type': 'function',
       ':params': [],
-      ':source': '#.hit_points.current = $lib.math.min(#.hit_points.current + #.hit_die, #.hit_points.max)',
-      ':deps': ['#.hit_points.current', '#.hit_die', '#.hit_points.max'],
+      ':source': '$.hit_points.current = $lib.math.min($.hit_points.current + $.hit_die, $.hit_points.max)',
+      ':deps': ['$.hit_points.current', '$.hit_die', '$.hit_points.max'],
     });
   });
 });
 
 describe('FunctionNode.detectDeps', () => {
   it('collects refs in order, deduplicated', () => {
-    expect(FunctionNode.detectDeps('#.utils.ability_modifier(.base)')).toEqual(['#.utils.ability_modifier', '.base']);
-    expect(FunctionNode.detectDeps('$.a + $.a + $.b')).toEqual(['$.a', '$.b']);
+    expect(FunctionNode.detectDeps('$.utils.ability_modifier(.base)')).toEqual(['$.utils.ability_modifier', '.base']);
+    expect(FunctionNode.detectDeps('#.a + #.a + #.b')).toEqual(['#.a', '#.b']);
   });
 
   it('ignores string literals, dice, and dot-less sigils normalized', () => {
     expect(FunctionNode.detectDeps("$tmpl('a.yaml')")).toEqual(['$.tmpl']);
-    expect(FunctionNode.detectDeps('$math.max(3, 5)')).toEqual(['$.math.max']);
+    expect(FunctionNode.detectDeps('#math.max(3, 5)')).toEqual(['#.math.max']);
     expect(FunctionNode.detectDeps('1d20 + 2')).toEqual([]);
   });
 
   it('omits $lib refs', () => {
     expect(FunctionNode.detectDeps('$lib.math.floor(2.9)')).toEqual([]);
     expect(FunctionNode.detectDeps('$.lib.math.min(3, 5)')).toEqual([]);
-    expect(FunctionNode.detectDeps('#.x + $lib.math.max(1, 2)')).toEqual(['#.x']);
+    expect(FunctionNode.detectDeps('$.x + $lib.math.max(1, 2)')).toEqual(['$.x']);
   });
 
   it('trims whitespace from printed source', () => {
@@ -867,8 +867,8 @@ describe('parameters', () => {
     };
     const doc = {
       improvements: ['wisdom', 'wisdom'],
-      strength: "#.ability.entry('strength')",
-      wisdom: "#.ability.entry('wisdom')",
+      strength: "$.ability.entry('strength')",
+      wisdom: "$.ability.entry('wisdom')",
     };
     engine.docs.set('sheet.yaml', doc);
 

@@ -12,7 +12,7 @@ abilities:
   wisdom:
     base: 12
     modifier: 1
-armor_class: '10 + $.abilities.dexterity.modifier' # → 12
+armor_class: '10 + #.abilities.dexterity.modifier' # → 12
 features: {}
 actions:
   unarmed_strike:

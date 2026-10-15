@@ -91,7 +91,7 @@ $: Character
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 4'
-    '@.improvements.level_4': '#.feature.ability_improvement(4)'
+    '@.improvements.level_4': '$.feature.ability_improvement(4)'
   +extra_attack:
     :label: Extra Attack
     :doc: Strike twice whenever you take the Attack action.
@@ -105,12 +105,12 @@ $: Character
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 6'
-    '@.improvements.level_6': '#.feature.ability_improvement(6)'
+    '@.improvements.level_6': '$.feature.ability_improvement(6)'
   +ability_score_improvement_3:
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 8'
-    '@.improvements.level_8': '#.feature.ability_improvement(8)'
+    '@.improvements.level_8': '$.feature.ability_improvement(8)'
   +indomitable:
     :label: Indomitable
     :doc: Reroll a failed saving throw and add your Fighter level to the save. Uses increase at levels 13 and 17.
@@ -126,17 +126,17 @@ $: Character
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 12'
-    '@.improvements.level_12': '#.feature.ability_improvement(12)'
+    '@.improvements.level_12': '$.feature.ability_improvement(12)'
   +ability_score_improvement_5:
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 14'
-    '@.improvements.level_14': '#.feature.ability_improvement(14)'
+    '@.improvements.level_14': '$.feature.ability_improvement(14)'
   +ability_score_improvement_6:
     :label: Ability Score Improvement
     :doc: Add +2 to one ability score or +1 to two (or take a feat).
     $if: '@.level >= 16'
-    '@.improvements.level_16': '#.feature.ability_improvement(16)'
+    '@.improvements.level_16': '$.feature.ability_improvement(16)'
   +studied_attacks:
     :label: Studied Attacks
     :doc: After missing a creature with an attack roll, you have Advantage on your next attack roll against it before the end of your next turn.

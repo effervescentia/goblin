@@ -1,6 +1,6 @@
 # D&D 5e level progression: XP thresholds plus the derivation function.
 # Bound in 5e/main.yaml (`level: $tmpl('level.yaml')`) and called un-attached
-# as #.level.level_for(@.xp). Inside the body, `.` is this document's
+# as $.level.level_for(@.xp). Inside the body, `.` is this document's
 # root and `xp` is the call argument.
 
 # XP needed for each level, from level 1 at index 0 to level 20 at index 19.

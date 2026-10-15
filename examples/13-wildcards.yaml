@@ -14,10 +14,10 @@ resources:
     max: 3
     recover: long
 
-maxes: $.resources.*.max # → [2, 3]
-pools: $lib.list.size($.resources.*.max) # → 2
-short_maxes: $.resources.{.recover == 'short'}.max # → [2]
+maxes: '#.resources.*.max' # → [2, 3]
+pools: '$lib.list.size(#.resources.*.max)' # → 2
+short_maxes: "#.resources.{.recover == 'short'}.max" # → [2]
 
 # Called in code (`rest.short()`): refills only the `short` resources.
 rest:
-  'short()': $.resources.{.recover == 'short'}.current = .max
+  'short()': "#.resources.{.recover == 'short'}.current = .max"

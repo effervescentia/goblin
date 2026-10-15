@@ -22,9 +22,9 @@ $: Character
 
 '@.abilities':
   $if: "@.ability_method == 'standard_array'"
-  strength: "#.ability.assigned('Strength')"
-  dexterity: "#.ability.assigned('Dexterity')"
-  constitution: "#.ability.assigned('Constitution')"
-  intelligence: "#.ability.assigned('Intelligence')"
-  wisdom: "#.ability.assigned('Wisdom')"
-  charisma: "#.ability.assigned('Charisma')"
+  strength: "$.ability.assigned('Strength')"
+  dexterity: "$.ability.assigned('Dexterity')"
+  constitution: "$.ability.assigned('Constitution')"
+  intelligence: "$.ability.assigned('Intelligence')"
+  wisdom: "$.ability.assigned('Wisdom')"
+  charisma: "$.ability.assigned('Charisma')"

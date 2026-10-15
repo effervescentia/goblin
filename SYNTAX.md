@@ -11,26 +11,26 @@ Nodes are referenced by path using a leading sigil that determines the root of t
 | Sigil | Root | Description |
 |-------|------|-------------|
 | `.`   | Current node | Relative path from the node being evaluated |
-| `$`   | Document root | Top of the current document (the `.yaml` file) |
+| `#`   | Document root | Top of the current document (the `.yaml` file) |
 | `@`   | Actor root | The actor instance this document is applied to |
-| `#`   | App root | Global application namespace (shared tables, cross-doc values) |
+| `$`   | App root | Global application namespace (shared tables, cross-doc values) |
 
 Segments are separated by `.`. A bare sigil with no segments refers to the root itself.
-The dot after a sigil is optional: `$foo.bar` and `$.foo.bar` are equivalent.
+The dot after a sigil is optional: `#foo.bar` and `#.foo.bar` are equivalent.
 
 ```yaml
 # Examples (examples/01-addressability.yaml)
 .base                          # sibling field 'base' on the current node
-$.abilities.dexterity          # 'abilities.dexterity' from document root
+#.abilities.dexterity          # 'abilities.dexterity' from document root
 @.features                     # 'features' on the actor this document is applied to
-#.utils.ability_modifier       # 'ability_modifier' in the global utils namespace
+$.utils.ability_modifier       # 'ability_modifier' in the global utils namespace
 ```
 
-In a document where the document itself defines the actor (e.g. `wip/player.yaml`), `$` and `@` resolve to the same root. The distinction matters in applied documents (e.g. class files like `wip/monk.yaml`) where `$` is the class document's own namespace and `@` is the character being modified.
+In a document where the document itself defines the actor (e.g. `wip/player.yaml`), `#` and `@` resolve to the same root. The distinction matters in applied documents (e.g. class files like `wip/monk.yaml`) where `#` is the class document's own namespace and `@` is the character being modified.
 
-Cross-namespace fallback: when a path is missing under `$` or `@`, the app
+Cross-namespace fallback: when a path is missing under `#` or `@`, the app
 root is tried next (so `@.utils.…` works when the app supplies `utils`); a
-missing `#` path falls back to the current document.
+missing `$` path falls back to the current document.
 
 ## Wildcards
 
@@ -38,7 +38,7 @@ A `*` path segment matches every child: list items, or record fields —
 never metadata, `!validate` rules, functions, patch keys, or another
 document's `_` fields. Read, a wildcard ref is the list of its matches that
 resolve, in order; a match missing the rest of the path is skipped
-(`$.flags.*.on` leaves out a flag with no `on`). Wildcards may repeat
+(`#.flags.*.on` leaves out a flag with no `on`). Wildcards may repeat
 (`@.a.*.b.*`), giving nested lists.
 
 A `{predicate}` segment keeps only the children the predicate holds for,
@@ -56,10 +56,10 @@ not exist are skipped.
 
 ```yaml
 # Examples (examples/13-wildcards.yaml)
-maxes: $.resources.*.max                          # → [2, 3]
-short_maxes: $.resources.{.recover == 'short'}.max # → [2]
+maxes: '#.resources.*.max'                          # → [2, 3]
+short_maxes: "#.resources.{.recover == 'short'}.max" # → [2]
 rest:
-  'short()': $.resources.{.recover == 'short'}.current = .max
+  'short()': "#.resources.{.recover == 'short'}.current = .max"
 ```
 
 5e's rests work this way: every resource declares `recover: short` or
@@ -74,7 +74,7 @@ A key starting with `_` is **private**: only expressions written by the same
 document can reference it, through any sigil. Documents compose into one
 tree, so "written by" follows provenance rather than where a node sits: a
 field belongs to the `:source` of its latest write (see Change events), else
-to the document its record came from. A record call (`#.ability.entry(…)`)
+to the document its record came from. A record call (`$.ability.entry(…)`)
 hands back nodes owned by the document that made the call.
 
 - A ref from another document that reaches a `_` segment throws
@@ -105,7 +105,7 @@ A scalar is evaluated by shape:
 
 ```yaml
 # Examples (examples/02-expressions.yaml)
-sum: $.strength + $.dexterity        # expression → 29
+sum: '#.strength + #.dexterity'      # expression → 29
 label: Fighter                        # no sigil → stays a string
 ```
 
@@ -125,15 +125,15 @@ access (e.g. `foo.bar`) inside expression strings. Comparisons coerce to
 (see `5e/character.yaml`).
 
 ```yaml
-mean: ($.strength + $.dexterity) / 2  # → 14.5
-strong: $.strength > $.dexterity      # → true
+mean: '(#.strength + #.dexterity) / 2'  # → 14.5
+strong: '#.strength > #.dexterity'      # → true
 ```
 
 ## Indexing
 
 `list[index]` picks one item from a list, counting from 0. A negative index
 counts from the end, and an index past either end gives `null`. The index is
-any expression, and indexes chain (`$.grid[1][0]`). Indexing anything but a
+any expression, and indexes chain (`#.grid[1][0]`). Indexing anything but a
 list, or with a non-integer, throws. A `[` right after a ref, a call or
 another index is indexing; anywhere else it opens a list literal
 (`$lib.set.subset([1, 2], .picks)`).
@@ -144,10 +144,10 @@ another index is indexing; anywhere else it opens a list literal
 ```yaml
 # Examples (examples/12-indexing.yaml)
 ranked: [gold, silver, bronze]
-first: $.ranked[0]              # → gold
-last: $.ranked[-1]              # → bronze
-placed: $.ranked[$.place - 1]   # → silver
-missing: $.ranked[5]            # → null
+first: '#.ranked[0]'              # → gold
+last: '#.ranked[-1]'              # → bronze
+placed: '#.ranked[#.place - 1]'   # → silver
+missing: '#.ranked[5]'            # → null
 ```
 
 ## Dice
@@ -158,7 +158,7 @@ missing: $.ranked[5]            # → null
   and is *not* rolled.
 - Inline in a larger expression, dice are **rolled immediately**. The string
   must contain a sigil ref to be an expression (see above): `1d20 + 2` alone
-  is plain text, `1d20 + $.dex_bonus` rolls.
+  is plain text, `1d20 + #.dex_bonus` rolls.
 - A die used in arithmetic rolls (`hit_points + hit_die` rolls the die).
 - An expression field rolls **once per evaluation**: every ref to it, and the
   evaluated sheet itself, reads the same number (`base: .start` matches a
@@ -170,8 +170,8 @@ missing: $.ranked[5]            # → null
 # Examples (examples/03-dice.yaml)
 hit_die: d8          # → "d8" (spec)
 dex_bonus: 2
-initiative: 1d20 + $.dex_bonus # → a rolled number between 3 and 22
-heal: $.hit_die + 0  # Die in arithmetic rolls → 1..8
+initiative: '1d20 + #.dex_bonus' # → a rolled number between 3 and 22
+heal: '#.hit_die + 0'  # Die in arithmetic rolls → 1..8
 ```
 
 ## Functions
@@ -206,12 +206,12 @@ anywhere in a string — metadata included — is its text.
 
 # 5e/character.yaml
 abilities:
-  strength: "#.ability.entry('strength', 'Strength')"
+  strength: "$.ability.entry('strength', 'Strength')"
 
 # 5e/ability/point_buy.yaml (a patch: the call merges into the entry above)
 '@.abilities':
   $if: "@.ability_method == 'point_buy'"
-  strength: "#.ability.bought('Strength')"
+  strength: "$.ability.bought('Strength')"
 ```
 
 A call written as a plain document value expands where it stands, so the
@@ -261,9 +261,9 @@ utils:
 
 strength:
   base: 15
-  modifier: $.utils.ability_modifier(.base)  # → 2
+  modifier: '#.utils.ability_modifier(.base)'  # → 2
 
-doubled: $.utils.double(21)  # → 42
+doubled: '#.utils.double(21)'  # → 42
 'lucky()': 1d20              # zero-arg callable
 ```
 
@@ -293,20 +293,20 @@ A tmpl'd document's functions stay callable through the inlined table, with
 
 ```yaml
 levels: $tmpl('level.yaml')
-level: $.levels.level_for(@.xp.value)
+level: '#.levels.level_for(@.xp.value)'
 ```
 
 …or leave it un-attached and call through the app binding (see Composition),
 which keeps the calling document free of the table:
 
 ```yaml
-level: '#.level.level_for(@.xp.value)'
+level: $.level.level_for(@.xp.value)
 ```
 
 A patch value that is a single call — `$tmpl('…')` or a call to a
 record-bodied function — inlines on the way in, so a repeated node can live
 in one place and still be filled: `5e/fighter/fighter.yaml` writes
-`'@.improvements.level_4': '#.feature.ability_improvement()'`, and the
+`'@.improvements.level_4': '$.feature.ability_improvement()'`, and the
 `:param` record it hands back lands in the actor tree where the query finds
 it.
 
@@ -325,7 +325,7 @@ display name, for UIs that list nodes by something friendlier than their key;
 ```yaml
 # Examples (examples/06-metadata-validation.yaml)
 :label: Hit Points
-:doc: Tracks health. See $.hit_points.max for the cap (refs here are inert).
+:doc: 'Tracks health. See #.hit_points.max for the cap (refs here are inert).'
 ```
 
 Metadata rides along wherever the node goes: it survives `apply()`, shows up
@@ -368,7 +368,7 @@ that is a pure function of level as an unconditional expression. Evaluate
 with provided values first so conditions read materialized params. Patch
 syntax:
 
-- **Path keys** (`'@.features'`, `'#.hit_points.value'`) target a node by
+- **Path keys** (`'@.features'`, `'$.hit_points.value'`) target a node by
   absolute ref. In plain evaluation they are skipped, never serialized.
   A `+` in front of the path (`'+@.attacks': 1`) adds to the value already
   there instead of replacing it: two numbers sum, and anything else composes
@@ -439,7 +439,7 @@ patch touched print bare, as before.
   its text, evaluated where it landed. The latest `:set` is the field's own
   value, so a roll (`$lib.dice.keep_highest(4, 6, 3)`) logs the number the
   sheet shows; one a later write replaced still resolves (an overridden
-  `level` logs what `#.level.level_for(@.xp)` gave). A plain list
+  `level` logs what `$.level.level_for(@.xp)` gave). A plain list
   (`- all_armor`) is the document stating the list itself, so it files as
   `:set` holding that list, each item resolved.
 - `:add` names what an addition added: the value a `+@.path` key added
@@ -483,7 +483,7 @@ unchanged by this.
 
 Bodies spanning multiple lines (or `;`-separated) are statement blocks. A
 statement of the form `<ref> = <expr>` — where the left side is exactly one
-reference — assigns through the sigil (`#.` writes app state, `@.` actor
+reference — assigns through the sigil (`$.` writes app state, `@.` actor
 state, `.` the current node) and clears the resolution cache. The block's
 value is its last non-assignment statement (all-assignment blocks evaluate
 to `undefined`). Watch the single `=`: `$if: '@.level = 5'` does not compare —
@@ -525,8 +525,8 @@ root-relative; nested references resolve relative to their own file.
 # Examples (5e/main.yaml)
 $: Character
 
-# Shared binding: merged into the `#` namespace on load, so every document
-# calls #.level.… without attaching the table itself.
+# Shared binding: merged into the `$` namespace on load, so every document
+# calls $.level.… without attaching the table itself.
 level: $tmpl('level.yaml')
 
 actor: $tmpl('character.yaml')
@@ -669,7 +669,7 @@ envelope that is either satisfied or asking:
 - Provided values of the wrong `:type` — or violating `:options` / `:min` /
   `:max` / `:count` / `:unique` — still throw instead of resolving.
 - `resolve(file, provided, overrides)` writes override values into the tree
-  first (`.`/`$`/`@` target the actor, `#` the app; bare paths default to the
+  first (`.`/`#`/`@` target the actor, `$` the app; bare paths default to the
   actor). Overridden originals are ignored — derivations never run and
   missing paths are created — but `:param` records keep their `:type`
   contract. CLI flag: `--set path=value` (separate from `--param`).
@@ -701,15 +701,17 @@ engine.resolve('08-parameters.yaml', { hero_name: 'Aria', starting_level: 3, 'de
 - **Circular references** throw (`circular reference: a -> b -> a`).
 - **Unresolvable references** throw (`unresolvable reference: …`).
 - Loading a file merges its top-level tables into the app namespace
-  (first wins), so self-contained docs expose e.g. `#.utils.…`.
-- Evaluating a document as its own actor (`evaluateDoc`) makes `$` and `@`
+  (first wins), so self-contained docs expose e.g. `$.utils.…`.
+- Evaluating a document as its own actor (`evaluateDoc`) makes `#` and `@`
   coincide.
 
 ## YAML gotchas
 
 - **Quote `#` expressions**: unquoted, YAML reads `#` as a comment and
   truncates the value — always write `'#.utils.f(…)'`, never `#.utils.f(…)`
-  bare. (`@` and `$` need no quoting; `@.x` as a *key* does, for clarity.)
+  bare. A leading `@` needs quoting too (YAML reserves it); `$` needs none.
+- **Type tags stay `$`**: a bare `#:` key would be a YAML comment, so the
+  type tag is spelled `$: Character` even though `$` is the app root.
 - Sentences with periods (e.g. `end. Start`) look like `.`-refs to the
   expression detector — keep prose in `:doc`, which is never evaluated.
   Numeric literals are safe: no digit follows the `.` in a ref, so `2.5`

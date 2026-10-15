@@ -57,7 +57,7 @@ export function isValidateKey(key: string): boolean {
   return key === VALIDATE_KEY;
 }
 
-/** Path patch (`@.features`, `#.hit_points.value`); a leading `+` on the path
+/** Path patch (`@.features`, `$.hit_points.value`); a leading `+` on the path
  * marks the write as an addition. */
 export function isPathKey(key: string): boolean {
   const head = stripPlus(key)[0];
@@ -355,7 +355,7 @@ export function compileBody(body: string, paramNames: string[] = []) {
       : `return (${codes[0]?.code ?? 'undefined'});`;
 
   // No stdlib free variable is bound here: `$lib.…` is the only way in, so
-  // `$math` stays an ordinary document ref that resolves to nothing.
+  // `$math` stays an ordinary app ref that resolves to nothing.
   const fn = new Function('__resolve', '__assign', '__assign_each', '__roll', '__index', ...paramNames, js) as (
     ...args: unknown[]
   ) => unknown;

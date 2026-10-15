@@ -8,7 +8,7 @@ function resolved() {
     name: { ':label': 'Name', ':param': true, ':type': 'string' },
     stats: { base: 10, bonus: '.base + 2', _hidden: 1 },
     resources: { surge: { current: 0, max: 2, recover: 'short' } },
-    armor: '$.stats.bonus + 1',
+    armor: '#.stats.bonus + 1',
     'rest()': "@.resources.{.recover == 'short'}.current = .max",
   });
   engine.register('patch.yaml', { '@.stats.base': 12 });

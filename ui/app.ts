@@ -441,7 +441,7 @@ function readIndex(nodes: InspectNode[]): Map<string, string[]> {
   const readBy = new Map<string, string[]>();
   for (const node of nodes) {
     for (const read of node.reads) {
-      if (read.startsWith('#')) continue;
+      if (read.startsWith('$')) continue;
       const matches = matcher(read);
       for (const target of nodes) {
         if (!matches(target.path)) continue;
@@ -561,7 +561,7 @@ function renderReads(
     'ul',
     { className: 'refs' },
     reads.map((read) => {
-      if (read.startsWith('#'))
+      if (read.startsWith('$'))
         return h('li', {}, h('code', { className: 'muted' }, read), h('span', { className: 'note' }, ' app'));
       if (!/\*|\{/.test(read)) return h('li', {}, pathLink(read, byPath, select));
       const matches = nodes.filter((node) => matcher(read)(node.path));

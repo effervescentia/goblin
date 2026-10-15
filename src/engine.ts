@@ -36,6 +36,7 @@ import {
   TEMPLATE_SCAN,
   THEN_KEY,
   TYPE_KEY,
+  TYPE_TAG,
   VALIDATE_KEY,
   VALUE_KEY,
 } from './constants';
@@ -194,7 +195,7 @@ export class GoblinEngine {
     if (data && typeof data === 'object' && !this.origins.has(data)) this.origins.set(data, file);
     this.claim(data, file);
     // Merge top-level `utils`/`math`-style tables into the app namespace
-    // so `#.utils.…` works for self-contained docs like main.yaml.
+    // so `$.utils.…` works for self-contained docs like main.yaml.
     if (data && typeof data === 'object' && !Array.isArray(data)) {
       for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
         // A document that is itself one node (a `$tmpl`'d `:param` record)
@@ -538,7 +539,7 @@ export class GoblinEngine {
         !isBareSigil(key) &&
         !isPathKey(key) &&
         !FunctionNode.isKey(key) &&
-        key !== DOCUMENT &&
+        key !== TYPE_TAG &&
         key !== IF_KEY &&
         key !== THEN_KEY &&
         !key.startsWith('+') &&
@@ -821,7 +822,7 @@ export class GoblinEngine {
   }
 
   /** A patch value that is one call to a definition (`$tmpl('…')`,
-   * `#.feature.x()`) inlines here, so `:param` nodes inside it land in the
+   * `$.feature.x()`) inlines here, so `:param` nodes inside it land in the
    * actor tree instead of staying an expression. Calls that yield anything
    * but a record stay as written, and so stay lazy. */
   private inlinePatchValue(value: unknown, scope: EvalRoots): unknown {
@@ -846,7 +847,7 @@ export class GoblinEngine {
     const file = call.trim().match(MIXIN_CALL)?.[1] ?? '';
     const doc = this.docs.get(file);
     if (doc === null || typeof doc !== 'object') throw new Error(`mixin not loaded: ${file}`);
-    const type = (doc as Record<string, unknown>)[DOCUMENT];
+    const type = (doc as Record<string, unknown>)[TYPE_TAG];
     if (typeof type !== 'string') throw new Error(`mixin ${file} must declare its actor type with a top-level \`$\``);
     const actor = this.mixinTarget(type, scope);
     if (actor === undefined) throw new Error(`$mixin('${file}'): no parent document defines actor type ${type}`);
@@ -864,7 +865,7 @@ export class GoblinEngine {
     const seen = new Set<unknown>();
     for (let doc = scope.doc; doc !== null && typeof doc === 'object' && !seen.has(doc); doc = this.parents.get(doc)) {
       seen.add(doc);
-      if ((doc as Record<string, unknown>)[DOCUMENT] !== type) continue;
+      if ((doc as Record<string, unknown>)[TYPE_TAG] !== type) continue;
       const actor = this.actorOf.get(doc) ?? (doc === scope.actor ? doc : undefined);
       if (actor !== undefined) return actor;
     }
@@ -933,7 +934,7 @@ export class GoblinEngine {
     if (typeof patch !== 'object' || patch === null) return;
     const target = actorRaw as Record<string, unknown>;
     for (const [key, value] of Object.entries(patch as Record<string, unknown>)) {
-      if (isBareSigil(key) || key === DOCUMENT) continue;
+      if (isBareSigil(key) || key === TYPE_TAG) continue;
       if (isMetaKey(key) || isValidateKey(key)) {
         target[key] = deepClone(value);
         continue;
@@ -1014,7 +1015,7 @@ export class GoblinEngine {
     if (Array.isArray(patch)) return;
     if (!patch || typeof patch !== 'object') return;
     for (const [k, v] of Object.entries(patch as Record<string, unknown>)) {
-      if (isBareSigil(k) || k === DOCUMENT || k === IF_KEY || k === THEN_KEY) continue;
+      if (isBareSigil(k) || k === TYPE_TAG || k === IF_KEY || k === THEN_KEY) continue;
       if (isMetaKey(k) || isValidateKey(k)) continue;
       const record = patch as Record<string, unknown>;
       if (isPathKey(k)) {

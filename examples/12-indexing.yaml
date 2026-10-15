@@ -4,9 +4,9 @@
 ranked: [gold, silver, bronze]
 place: 2
 
-first: $.ranked[0] # → gold
-last: $.ranked[-1] # → bronze
-placed: $.ranked[$.place - 1] # → silver
-missing: $.ranked[5] # → null
+first: '#.ranked[0]' # → gold
+last: '#.ranked[-1]' # → bronze
+placed: '#.ranked[#.place - 1]' # → silver
+missing: '#.ranked[5]' # → null
 grid: [[1, 2], [3, 4]]
-corner: $.grid[1][0] # → 3
+corner: '#.grid[1][0]' # → 3

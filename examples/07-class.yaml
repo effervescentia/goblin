@@ -1,5 +1,5 @@
 # Applied document (class/boon) for 07-actor.yaml.
-# Top-level `@.` keys target the ACTOR; `$` here would be this file's own root.
+# Top-level `@.` keys target the ACTOR; `#` here would be this file's own root.
 # `+` marks additions. `$if` gates its whole node on actor state — false
 # applies nothing (not even `:doc`), so unearned content leaves no residue;
 # `$then` holds absolute patches applied when the condition holds.

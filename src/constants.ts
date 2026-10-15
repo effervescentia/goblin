@@ -8,11 +8,14 @@
 /** Current node. */
 export const CURRENT = '.';
 /** Document root. */
-export const DOCUMENT = '$';
+export const DOCUMENT = '#';
 /** Actor root. */
 export const ACTOR = '@';
 /** App root. */
-export const APP = '#';
+export const APP = '$';
+
+/** Actor type tag key (`$: Character`); `#:` would be a YAML comment. */
+export const TYPE_TAG = '$';
 
 export type Sigil = typeof CURRENT | typeof DOCUMENT | typeof ACTOR | typeof APP;
 
@@ -26,7 +29,7 @@ export const DIE_LITERAL = /^(\d*)d(\d+)$/;
 
 // NOTE: `[#$@]` below spells DOCUMENT + ACTOR + APP (`.` is matched
 // separately); keep in sync if sigils change.
-/** Sigil references (`.x`, `$.x`, `@.x`, `#.x`, `$lib.x`, bare sigils). Global: reset `lastIndex` around `.test`/`.match`. */
+/** Sigil references (`.x`, `#.x`, `@.x`, `$.x`, `$lib.x`, bare sigils). Global: reset `lastIndex` around `.test`/`.match`. */
 export const SIGIL_REF =
   /([$]lib(\.[A-Za-z_][\w.]*)?|[#$@]\.[A-Za-z_][\w.]*|[#$@](?![\w.]|\.\w)|\.[A-Za-z_][\w.]*|\.(?![\w.]))/g;
 
@@ -45,7 +48,7 @@ export const DOTLESS_SIGIL = /([#$@])(?=[A-Za-z_])/g;
 /** Quoted string literals, protected from ref/dice rewriting. */
 export const STRING_LITERAL = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g;
 
-/** Whole-string call to a definition: `$tmpl('x.yaml')`, `#.feature.y()`. */
+/** Whole-string call to a definition: `$tmpl('x.yaml')`, `$.feature.y()`. */
 export const CALL_EXPR = /^[#$@.][\w.]*\([^()]*\)$/;
 
 /** Whole-string template call: `$tmpl('file.yaml')`. */

@@ -2,7 +2,6 @@ import {
   COUNT_KEY,
   DEFAULT_KEY,
   DOC_KEY,
-  DOCUMENT,
   EVENTS_KEY,
   FUNCTION_KEY,
   IF_KEY,
@@ -15,6 +14,7 @@ import {
   SOURCE_KEY,
   THEN_KEY,
   TYPE_KEY,
+  TYPE_TAG,
   UNIQUE_KEY,
   VALIDATE_KEY,
   VALUE_KEY,
@@ -223,7 +223,7 @@ export class RecordNode extends Node<Record<string, unknown>> {
     const base = scope.path ?? [];
     const out: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(record)) {
-      if (isBareSigil(key) || key === DOCUMENT) continue; // `$: Player` type tag
+      if (isBareSigil(key) || key === TYPE_TAG) continue; // `$: Player` type tag
       if (isMetaKey(key)) {
         out[key] = value;
         continue;
@@ -314,7 +314,7 @@ function eachParamRecord(raw: unknown, visit: (record: Record<string, unknown>, 
         key === THEN_KEY
       )
         continue;
-      if (isBareSigil(key) || key === DOCUMENT || isPathKey(key)) continue;
+      if (isBareSigil(key) || key === TYPE_TAG || isPathKey(key)) continue;
       const fnMatch = key.match(FUNCTION_KEY);
       visitNode(value, [...path, fnMatch ? fnMatch[1]! : stripPlus(key)]);
     }
