@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parseArgs, parseParamValue, USAGE } from './cli';
+import { COMPANION_PARAMS } from './dnd5e.fixtures';
 import { print } from './nodes/serialize';
 
 describe('parseArgs', () => {
@@ -288,7 +289,7 @@ describe('cli', () => {
   });
 
   it('--strip-metadata drops metadata keys from data output', () => {
-    // 5e/main.yaml nests its character at `party.aria`, namespaced `aria`.
+    // 5e/main.yaml nests its characters under `party`; this reads `aria`.
     const character = (data: Record<string, unknown>) =>
       (data.party as Record<string, Record<string, unknown>>).aria as Record<string, unknown>;
     const params = [
@@ -323,7 +324,7 @@ describe('cli', () => {
       '--param',
       'improvements.level_4=["strength","strength"]',
     ].map((arg) => (arg === '--param' ? arg : `aria.${arg}`));
-    const args = ['5e/main.yaml', '--compact', ...params];
+    const args = ['5e/main.yaml', '--compact', ...params, ...COMPANION_PARAMS];
     const full = runCli(...args);
     expect(full.status).toBe(0);
     const fullData = character((JSON.parse(full.stdout) as { data: Record<string, unknown> }).data);

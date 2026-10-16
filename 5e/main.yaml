@@ -24,3 +24,5 @@ ability: $tmpl('ability/ability.yaml')
 
 party:
   aria: $tmpl('character.yaml', 'aria')
+  bram: $tmpl('character.yaml', 'bram')
+  cora: $tmpl('character.yaml', 'cora')

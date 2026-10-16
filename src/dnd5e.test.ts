@@ -2,14 +2,16 @@ import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { COMPANION_PARAMS } from './dnd5e.fixtures';
 
 // End-to-end over the real 5e/ documents (parsed by Bun, so shelled out like
 // src/examples.test.ts): XP thresholds, class adoption at the derived level,
 // choices, and progression.
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-// 5e/main.yaml nests its character at `party.aria`, namespaced `aria`: params
-// are addressed by the namespace, and `cli` answers relative to it.
+// 5e/main.yaml nests its characters under `party`, each namespaced by its key:
+// tests play `aria`, params are addressed by the namespace, and `cli` answers
+// relative to it (bram and cora come fully chosen from the fixtures).
 const PC = 'aria';
 
 function run(entry: string, ...extra: string[]): unknown {
@@ -25,7 +27,7 @@ function run(entry: string, ...extra: string[]): unknown {
  * prefix, and the `{ data }` / `{ query }` envelope comes back without it. */
 function cli(entry: string, ...extra: string[]): unknown {
   const args = extra.map((arg, i) => (extra[i - 1] === '--param' || extra[i - 1] === '--set' ? `${PC}.${arg}` : arg));
-  const state = run(entry, ...args) as {
+  const state = run(entry, ...args, ...COMPANION_PARAMS) as {
     data?: { party: Record<string, unknown> };
     query?: Array<{ path: string }>;
   };
