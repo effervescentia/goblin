@@ -1,29 +1,33 @@
-# D&D 5e Fighter. Applied onto a 5e/character.yaml actor:
-#   engine.apply(actor, 'fighter/fighter.yaml')
-
 '@': Character
-
-'@.class': fighter
+$if: "@.class == 'fighter'"
 
 '@.hit_die': d10
 '@.hit_points':
   max: 10 + @.abilities.constitution.modifier
   current: '@.hit_points.max'
-'@.proficiencies.armor':
-  - all_armor
-  - shields
 '@.proficiencies.weapon':
   - simple_weapons
   - martial_weapons
+'@.proficiencies.armor':
+  - all_armor
+  - shields
 '@.proficiencies.saving_throws':
   - strength
   - constitution
 '@.skills.trained':
   :label: Skill Proficiencies
-  :doc: 'Choose two: acrobatics, animal_handling, athletics, history, insight, intimidation, perception, survival.'
+  :doc: 'Choose two proficient skills.'
   :param: true
   :type: array
-  :options: [acrobatics, animal_handling, athletics, history, insight, intimidation, perception, survival]
+  :options:
+    - acrobatics
+    - animal_handling
+    - athletics
+    - history
+    - insight
+    - intimidation
+    - perception
+    - survival
   :count: 2
   :unique: true
 '@.features':
@@ -32,7 +36,17 @@
     :doc: Pick the combat style you trained in.
     :param: true
     :type: string
-    :options: [archery, defense, dueling, great_weapon_fighting, protection, two_weapon_fighting]
+    :options:
+      - archery
+      - blind_fighting
+      - defense
+      - dueling
+      - great_weapon_fighting
+      - interception
+      - protection
+      - thrown_weapon_fighting
+      - two_weapon_fighting
+      - unarmed_fighting
   +weapon_mastery:
     :label: Weapon Mastery
     :doc: Mastery properties of three weapons; the number increases at levels 4, 10, and 16.
@@ -83,7 +97,7 @@
   +martial_archetype:
     $if: '@.level >= 3'
     :label: Martial Archetype
-    :doc: 'Choose a subclass: Champion, Battle Master, or Eldritch Knight. Its features come from 5e/<subclass>.yaml.'
+    :doc: 'Choose a subclass for your character.'
     :param: true
     :type: string
     :options: [champion, battle_master, eldritch_knight]
@@ -146,8 +160,6 @@
     :label: Epic Boon
     :doc: Gain an Epic Boon feat or another feat for which you qualify.
 
-# Subclasses mix into the character this file is applied to; each gates on
-# `features.martial_archetype`, so only the chosen one adds anything.
 _subclasses:
   champion: $mixin('champion.yaml')
   battle_master: $mixin('battle_master.yaml')

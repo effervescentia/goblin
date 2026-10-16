@@ -1,0 +1,103 @@
+'@': Character
+$if: "@.class == 'monk'"
+
+'@.hit_die': d8
+'@.hit_points':
+  max: 8 + @.abilities.constitution.modifier
+  current: '@.hit_points.max'
+'@.proficiencies.weapon':
+  - simple_weapons
+  - light_martial_weapons
+'@.proficiencies.saving_throws':
+  - strength
+  - dexterity
+'@.skills.trained':
+  :label: Skill Proficiencies
+  :doc: 'Choose two proficient skills.'
+  :param: true
+  :type: array
+  :options:
+    - acrobatics
+    - athletics
+    - history
+    - insight
+    - religion
+    - stealth
+  :count: 2
+  :unique: true
+'@.features':
+  +martial_arts:
+    :label: Martial Arts
+  +unarmored_defense:
+    :label: Unarmored Defense
+  +monks_focus:
+    $if: '@.level >= 2'
+    :label: Monk's Focus
+  +unarmored_movement:
+    $if: '@.level >= 2'
+    :label: Unarmored Movement
+  +deflect_attacks:
+    $if: '@.level >= 3'
+    :label: Deflect Attacks
+  +ability_score_improvement_1:
+    $if: '@.level >= 4'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_4': '$.feature.ability_improvement(4)'
+  +slow_fall:
+    $if: '@.level >= 4'
+    :label: Slow Fall
+  +extra_attack:
+    $if: '@.level >= 5'
+    :label: Extra Attack
+  +stunning_strike:
+    $if: '@.level >= 5'
+    :label: Stunning Strike
+  +empowered_strikes:
+    $if: '@.level >= 6'
+    :label: Empowered Strikes
+  +evasion:
+    $if: '@.level >= 7'
+    :label: Evasion
+  +ability_score_improvement_2:
+    $if: '@.level >= 8'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_8': '$.feature.ability_improvement(8)'
+  +acrobatic_movement:
+    $if: '@.level >= 9'
+    :label: Acrobatic Movement
+  +heightened_focus:
+    $if: '@.level >= 10'
+    :label: Heightened Focus
+  +self_restoration:
+    $if: '@.level >= 10'
+    :label: Self Restoration
+  +ability_score_improvement_3:
+    $if: '@.level >= 12'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_12': '$.feature.ability_improvement(12)'
+  +deflect_energy:
+    $if: '@.level >= 13'
+    :label: Deflect Energy
+  +disciplined_survivor:
+    $if: '@.level >= 14'
+    :label: Disciplined Survivor
+  +perfect_focus:
+    $if: '@.level >= 15'
+    :label: Perfect Focus
+  +ability_score_improvement_4:
+    $if: '@.level >= 16'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_16': '$.feature.ability_improvement(16)'
+  +superior_defense:
+    $if: '@.level >= 18'
+    :label: Superior Defense
+  +epic_boon:
+    $if: '@.level >= 19'
+    :label: Epic boon
+  +body_and_mind:
+    $if: '@.level >= 20'
+    :label: Body and Mind

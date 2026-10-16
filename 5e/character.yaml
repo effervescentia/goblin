@@ -93,9 +93,21 @@ proficiencies:
 # (back on any rest) or `long` (back only on a long rest).
 resources: {}
 
+class:
+  :label: Class
+  :doc: Choose a class for your character.
+  :param: true
+  :type: string
+  :options:
+    - barbarian
+    - fighter
+    - monk
+
 # The composed 5e character includes the Fighter class as a Character mixin.
 _classes:
+  barbarian: $mixin('barbarian/barbarian.yaml')
   fighter: $mixin('fighter/fighter.yaml')
+  monk: $mixin('monk/monk.yaml')
 
 # A short rest refills the `short` resources; a long rest refills everything.
 rest:
