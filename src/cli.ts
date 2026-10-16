@@ -3,7 +3,7 @@
  * Goblin CLI — resolves the application state and prints it as JSON.
  *
  * Usage:
- *   goblin [entry.yaml] [--compact] [--in state.json|-] [--out file.json] [--help]
+ *   goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--in state.json|-] [--out file.json] [--help]
  *
  * With no entry file, `.goblin.yaml` in the current directory is required.
  * An entry containing a directory (`examples/foo.yaml`) is resolved with
@@ -18,9 +18,10 @@ import { print } from './nodes/serialize';
 export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--strip-metadata] [--in state.json|-] [--out file.json] [--help]
 
 Resolves a goblin document and prints the result as JSON: either
-{ "hash", "version", "parameters", "overrides", "data" } when all :param
-values are satisfied (version counts runs since the first, bumped by each
---in; parameters/overrides are this run's inputs; hash is a sha256 over the
+{ "hash", "version", "events", "data" } when all :param values are
+satisfied (version counts runs since the first, bumped by each --in; events
+is the stream of every --param/--set given so far, each as
+{ version, type: "param" | "set", path, value }; hash is a sha256 over the
 compact JSON of the rest), or
 { "query": […] } listing the outstanding parameters. A resolved sheet must
 also pass its !validate rules; failing rules print as { "errors": […] }.
@@ -38,9 +39,9 @@ Arguments:
                 printed data, leaving plain values only. Functions print as
                 their source expression; records left empty collapse to null.
   --in          Rehydrate from a prior { "data": … } output (a file, or
-                - for stdin): its parameters and overrides are replayed, with
-                this run's --param/--set taking precedence, and its version
-                is incremented. A hash must match the rest of the state.
+                - for stdin): its events are replayed in order (later wins),
+                this run's --param/--set are appended as events of the
+                incremented version. A hash must match the rest of the state.
   --out         Also write the JSON to this file (replacing it) when the
                 document fully resolves to { "data": … }; a { "query" } or
                 { "errors" } result leaves the file untouched.
@@ -112,15 +113,41 @@ export interface Inputs {
   overrides: Record<string, unknown>;
 }
 
-/** Stamp a `{ data }` envelope with its version, the inputs that produced it
+/** One `--param` or `--set` given on the run that produced `version`. */
+export interface InputEvent {
+  version: number;
+  type: 'param' | 'set';
+  path: string;
+  value: unknown;
+}
+
+/** This run's flags as events: params, then sets, each in the order given. */
+export function toEvents(inputs: Inputs, version: number): InputEvent[] {
+  return [
+    ...Object.entries(inputs.parameters).map(([path, value]) => ({ version, type: 'param' as const, path, value })),
+    ...Object.entries(inputs.overrides).map(([path, value]) => ({ version, type: 'set' as const, path, value })),
+  ];
+}
+
+/** Replay an event stream into the inputs it amounts to; later events win. */
+export function fold(events: InputEvent[]): Inputs {
+  const inputs: Inputs = { parameters: {}, overrides: {} };
+  for (const { type, path, value } of events) {
+    if (type === 'param') inputs.parameters[path] = value;
+    else inputs.overrides[path] = value;
+  }
+  return inputs;
+}
+
+/** Stamp a `{ data }` envelope with its version, the input events that produced it
  * and a sha256 over the rest, so a saved state can be replayed and checked for edits. */
 export function withHash<T>(
   state: T,
-  inputs: Inputs = { parameters: {}, overrides: {} },
+  events: InputEvent[] = [],
   version = 1,
-): T | ({ hash: string; version: number } & Inputs) {
+): T | { hash: string; version: number; events: InputEvent[] } {
   if (state === null || typeof state !== 'object' || !('data' in state)) return state;
-  const body = { version, parameters: inputs.parameters, overrides: inputs.overrides, data: state.data };
+  const body = { version, events, data: state.data };
   return { hash: hashOf(body), ...body };
 }
 
@@ -128,26 +155,33 @@ function hashOf(body: unknown): string {
   return `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}`;
 }
 
-/** The `version`, `parameters` and `overrides` of a prior `{ hash, version, … data }`
- * output; re-resolving the entry recomputes the rest. A missing version reads as 0. */
-export function rehydrate(state: unknown): Inputs & { version: number } {
-  if (state === null || typeof state !== 'object' || !('data' in state))
-    throw new Error('--in expects a resolved { "data": … } envelope');
-  const {
-    hash,
-    version,
-    parameters = {},
-    overrides = {},
-    data,
-  } = state as { hash?: unknown; version?: unknown } & Partial<Inputs> & { data: unknown };
-  const isRecord = (value: unknown) => value !== null && typeof value === 'object' && !Array.isArray(value);
-  if (!isRecord(parameters) || !isRecord(overrides)) throw new Error('--in parameters and overrides must be objects');
-  if (version !== undefined && !(Number.isInteger(version) && (version as number) >= 0))
-    throw new Error('--in version must be a non-negative integer');
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+const isVersion = (value: unknown): value is number => Number.isInteger(value) && (value as number) >= 0;
+
+function isEvent(event: unknown): event is InputEvent {
+  return (
+    isRecord(event) &&
+    isVersion(event.version) &&
+    (event.type === 'param' || event.type === 'set') &&
+    typeof event.path === 'string' &&
+    event.path !== '' &&
+    'value' in event
+  );
+}
+
+/** The `version` and `events` of a prior `{ hash, version, events, data }` output;
+ * re-resolving the entry recomputes the rest. A missing version reads as 0. */
+export function rehydrate(state: unknown): { version: number; events: InputEvent[] } {
+  if (!isRecord(state) || !('data' in state)) throw new Error('--in expects a resolved { "data": … } envelope');
+  const { hash, version, events = [], data } = state;
+  if (version !== undefined && !isVersion(version)) throw new Error('--in version must be a non-negative integer');
+  if (!Array.isArray(events) || !events.every(isEvent))
+    throw new Error('--in events must be { version, type: "param" | "set", path, value } objects');
   // Stringify drops an undefined version, so states predating it still verify.
-  if (hash !== undefined && hash !== hashOf({ version, parameters, overrides, data }))
+  if (hash !== undefined && hash !== hashOf({ version, events, data }))
     throw new Error('--in state hash does not match its contents');
-  return { version: (version as number | undefined) ?? 0, parameters, overrides };
+  return { version: version ?? 0, events };
 }
 
 /** Resolution envelope plus `{ errors }` for sheets failing `!validate`. */
@@ -215,18 +249,13 @@ if (import.meta.main) {
     }
     const prior =
       args.in === undefined
-        ? { version: 0, parameters: {}, overrides: {} }
+        ? { version: 0, events: [] }
         : rehydrate(JSON.parse(args.in === '-' ? await Bun.stdin.text() : await Bun.file(args.in).text()));
-    const inputs = {
-      parameters: { ...prior.parameters, ...args.params },
-      overrides: { ...prior.overrides, ...args.overrides },
-    };
+    const version = prior.version + 1;
+    const events = [...prior.events, ...toEvents({ parameters: args.params, overrides: args.overrides }, version)];
+    const inputs = fold(events);
     const state = await resolveAppState(process.cwd(), args.entry, inputs.parameters, inputs.overrides);
-    const out = withHash(
-      args.stripMetadata && 'data' in state ? { data: print(state.data) } : state,
-      inputs,
-      prior.version + 1,
-    );
+    const out = withHash(args.stripMetadata && 'data' in state ? { data: print(state.data) } : state, events, version);
     const json = `${JSON.stringify(out, null, args.compact ? 0 : 2)}\n`;
     // Only a full resolution is worth saving; Bun.write replaces the file.
     if (args.out !== undefined && 'data' in state) await Bun.write(args.out, json);

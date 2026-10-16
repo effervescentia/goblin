@@ -739,17 +739,18 @@ envelope that is either satisfied or asking:
   (satisfied ones are filtered out).
 - The CLI then validates `{ data }`: any failing `!validate` rule turns it
   into `{ errors }` (see Validation). A passing result prints as
-  `{ hash, version, parameters, overrides, data }`: `version` is `1` for a
-  fresh run and the prior state's version + 1 under `--in` (a state without
-  one counts as `0`), `parameters` / `overrides` are the
-  `--param` / `--set` values the run used (as given, keyed the same way),
-  and `hash` is `sha256:<hex>` of the compact
-  `JSON.stringify({ version, parameters, overrides, data })` (data after
+  `{ hash, version, events, data }`: `version` is `1` for a fresh run and
+  the prior state's version + 1 under `--in` (a state without one counts as
+  `0`); `events` is the append-only stream of every `--param` / `--set`
+  given so far, each `{ version, type: 'param' | 'set', path, value }`
+  (tagged with the run that gave it; a run's params precede its sets); and
+  `hash` is `sha256:<hex>` of the compact
+  `JSON.stringify({ version, events, data })` (data after
   `--strip-metadata`, when given).
 - `--in state.json` (or `--in -` for stdin) rehydrates from a prior output:
-  its `parameters` and `overrides` replay, its `version` increments, and
-  everything else recomputes from
-  the entry. This run's `--param`/`--set` win; a `hash` that doesn't match
+  its `events` replay in order (a later event for the same path wins), this
+  run's `--param`/`--set` append as events of the incremented `version`, and
+  everything else recomputes from the entry. A `hash` that doesn't match
   the rest of the state throws.
 - Provided values of the wrong `:type` — or violating `:options` / `:min` /
   `:max` / `:count` / `:unique` — still throw instead of resolving.

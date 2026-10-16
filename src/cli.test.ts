@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { type Inputs, parseArgs, parseParamValue, rehydrate, USAGE, withHash } from './cli';
+import { fold, type InputEvent, parseArgs, parseParamValue, rehydrate, toEvents, USAGE, withHash } from './cli';
 import { COMPANION_PARAMS } from './dnd5e.fixtures';
 import { print } from './nodes/serialize';
 
@@ -218,49 +218,73 @@ describe('parseParamValue', () => {
   });
 });
 
-describe('withHash', () => {
-  const inputs: Inputs = { parameters: { name: 'Aria' }, overrides: { level: 5 } };
+const sha = (body: unknown) => `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}`;
 
-  it('stamps data envelopes with their inputs and a sha256 over the rest', () => {
-    const body = { version: 1, ...inputs, data: { a: 1 } };
-    expect(withHash({ data: { a: 1 } }, inputs)).toEqual({
-      hash: `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}`,
-      ...body,
-    });
-    const hash = (data: unknown, given = inputs) => (withHash({ data }, given) as { hash: string }).hash;
+describe('toEvents / fold', () => {
+  it('records params then sets, tagged with the run version', () => {
+    expect(toEvents({ parameters: { name: 'Aria', level: 2 }, overrides: { 'hp.max': 14 } }, 3)).toEqual([
+      { version: 3, type: 'param', path: 'name', value: 'Aria' },
+      { version: 3, type: 'param', path: 'level', value: 2 },
+      { version: 3, type: 'set', path: 'hp.max', value: 14 },
+    ]);
+  });
+
+  it('replays events in order, later values winning', () => {
+    const events: InputEvent[] = [
+      { version: 1, type: 'param', path: 'level', value: 2 },
+      { version: 1, type: 'set', path: 'hp', value: 10 },
+      { version: 2, type: 'param', path: 'level', value: 5 },
+      { version: 3, type: 'set', path: 'level', value: 7 },
+    ];
+    expect(fold(events)).toEqual({ parameters: { level: 5 }, overrides: { hp: 10, level: 7 } });
+    expect(fold([])).toEqual({ parameters: {}, overrides: {} });
+  });
+});
+
+describe('withHash', () => {
+  const events: InputEvent[] = [
+    { version: 1, type: 'param', path: 'name', value: 'Aria' },
+    { version: 1, type: 'set', path: 'level', value: 5 },
+  ];
+
+  it('stamps data envelopes with their events and a sha256 over the rest', () => {
+    const body = { version: 1, events, data: { a: 1 } };
+    expect(withHash({ data: { a: 1 } }, events)).toEqual({ hash: sha(body), ...body });
+    const hash = (data: unknown, given = events) => (withHash({ data }, given) as { hash: string }).hash;
     expect(hash({ a: 2 })).not.toBe(hash({ a: 1 }));
-    expect(hash({ a: 1 }, { ...inputs, parameters: {} })).not.toBe(hash({ a: 1 }));
-    expect(withHash({ data: { a: 1 } }, inputs, 2)).toMatchObject({ version: 2 });
-    expect((withHash({ data: { a: 1 } }, inputs, 2) as { hash: string }).hash).not.toBe(hash({ a: 1 }));
+    expect(hash({ a: 1 }, events.slice(1))).not.toBe(hash({ a: 1 }));
+    expect(withHash({ data: { a: 1 } }, events, 2)).toMatchObject({ version: 2 });
+    expect((withHash({ data: { a: 1 } }, events, 2) as { hash: string }).hash).not.toBe(hash({ a: 1 }));
   });
 
   it('leaves query and errors envelopes alone', () => {
-    expect(withHash({ query: [] }, inputs)).toEqual({ query: [] });
-    expect(withHash({ errors: ['x'] }, inputs)).toEqual({ errors: ['x'] });
+    expect(withHash({ query: [] }, events)).toEqual({ query: [] });
+    expect(withHash({ errors: ['x'] }, events)).toEqual({ errors: ['x'] });
   });
 });
 
 describe('rehydrate', () => {
-  const inputs = { parameters: { name: 'Aria', starting_level: 2 }, overrides: { 'hp.max': 14 } };
+  const events: InputEvent[] = [
+    { version: 1, type: 'param', path: 'name', value: 'Aria' },
+    { version: 2, type: 'set', path: 'hp.max', value: 14 },
+  ];
 
-  it('returns the version, parameters and overrides a state was resolved with', () => {
-    expect(rehydrate(withHash({ data: { x: 1 } }, inputs, 3))).toEqual({ version: 3, ...inputs });
-    expect(rehydrate({ data: { x: 1 } })).toEqual({ version: 0, parameters: {}, overrides: {} });
-  });
-
-  it('accepts states hashed before version existed', () => {
-    const body = { ...inputs, data: { x: 1 } };
-    const hash = `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}`;
-    expect(rehydrate({ hash, ...body })).toEqual({ version: 0, ...inputs });
+  it('returns the version and events a state was resolved with', () => {
+    expect(rehydrate(withHash({ data: { x: 1 } }, events, 3))).toEqual({ version: 3, events });
+    expect(rehydrate({ data: { x: 1 } })).toEqual({ version: 0, events: [] });
   });
 
   it('rejects edited states, bad inputs, and non-data envelopes', () => {
-    const state = withHash({ data: { x: 1 } }, inputs) as Record<string, unknown>;
-    expect(() => rehydrate({ ...state, parameters: { name: 'Bob' } })).toThrow('hash does not match');
+    const state = withHash({ data: { x: 1 } }, events) as Record<string, unknown>;
+    expect(() => rehydrate({ ...state, events: events.slice(1) })).toThrow('hash does not match');
     expect(() => rehydrate({ ...state, data: { x: 2 } })).toThrow('hash does not match');
     expect(() => rehydrate({ ...state, version: 7 })).toThrow('hash does not match');
     expect(() => rehydrate({ data: {}, version: -1 })).toThrow('non-negative integer');
-    expect(() => rehydrate({ data: {}, parameters: [] })).toThrow('must be objects');
+    expect(() => rehydrate({ data: {}, events: {} })).toThrow('events must be');
+    expect(() => rehydrate({ data: {}, events: [{ version: 1, type: 'add', path: 'x', value: 1 }] })).toThrow(
+      'events must be',
+    );
+    expect(() => rehydrate({ data: {}, events: [{ version: 1, type: 'set', path: 'x' }] })).toThrow('events must be');
     expect(() => rehydrate({ query: [] })).toThrow('resolved { "data": … } envelope');
   });
 });
@@ -309,7 +333,7 @@ describe('cli', () => {
     writeFileSync(join(cwd, 'docs', 'nested', 'actor.yaml'), 'name: Config actor\n');
     try {
       const stdout = execFileSync('bun', [join(root, 'src/cli.ts')], { cwd, encoding: 'utf8' });
-      expect(JSON.parse(stdout)).toMatchObject({ parameters: {}, overrides: {}, data: { name: 'Config actor' } });
+      expect(JSON.parse(stdout)).toMatchObject({ version: 1, events: [], data: { name: 'Config actor' } });
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
@@ -371,7 +395,7 @@ describe('cli', () => {
     }
   });
 
-  it('--in replays the parameters and overrides saved in a prior output, file or stdin', () => {
+  it('--in replays the events saved in a prior output, file or stdin, appending new ones', () => {
     const dir = mkdtempSync(join(tmpdir(), 'goblin-in-'));
     const state = join(dir, 'state.json');
     try {
@@ -391,10 +415,14 @@ describe('cli', () => {
       );
       expect(first.status).toBe(0);
       expect(JSON.parse(first.stdout)).toMatchObject({
-        parameters: { hero_name: 'Aria', starting_level: 2, 'details.title': 'Sir' },
-        overrides: { 'hit_points.max': 12 },
+        version: 1,
+        events: [
+          { version: 1, type: 'param', path: 'hero_name', value: 'Aria' },
+          { version: 1, type: 'param', path: 'starting_level', value: 2 },
+          { version: 1, type: 'param', path: 'details.title', value: 'Sir' },
+          { version: 1, type: 'set', path: 'hit_points.max', value: 12 },
+        ],
       });
-      expect(JSON.parse(first.stdout).version).toBe(1);
       const replayed = JSON.parse(runCli('examples/08-parameters.yaml', '--compact', '--in', state).stdout);
       const { hash: _, version: __, ...rest } = JSON.parse(first.stdout);
       expect(replayed).toMatchObject({ version: 2, ...rest });
@@ -409,7 +437,9 @@ describe('cli', () => {
 
       // This run's flags win over the rehydrated state.
       const bumped = runCli('examples/08-parameters.yaml', '--in', state, '--param', 'starting_level=5');
-      expect((JSON.parse(bumped.stdout) as typeof next).data.level?.[':value']).toBe(5);
+      const after = JSON.parse(bumped.stdout) as typeof next & { events: InputEvent[] };
+      expect(after.data.level?.[':value']).toBe(5);
+      expect(after.events.slice(4)).toEqual([{ version: 2, type: 'param', path: 'starting_level', value: 5 }]);
 
       writeFileSync(state, first.stdout.replace('"Aria"', '"Bob"'));
       const tampered = runCli('examples/08-parameters.yaml', '--in', state);
