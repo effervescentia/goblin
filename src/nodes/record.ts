@@ -151,33 +151,44 @@ export class RecordNode extends Node<Record<string, unknown>> {
     }
   }
 
-  /** Every `:param` record in a raw tree, as `[{ path, doc?, type?, … }]`. */
-  static collectParams(raw: unknown): MissingParam[] {
+  /** Every `:param` record in a raw tree, as `[{ path, doc?, type?, … }]`.
+   * A namespaced actor's params report under its namespace (`aria.name`);
+   * with `provided`, params it fills by either key are left out. */
+  static collectParams(
+    raw: unknown,
+    namespaceOf?: (record: object) => string | undefined,
+    provided: Record<string, unknown> = {},
+  ): MissingParam[] {
     const missing: MissingParam[] = [];
-    eachParamRecord(raw, (record, key) => {
-      const def = record[DEFAULT_KEY];
-      if (def !== undefined && def !== null) return; // satisfied by default
-      const entry: MissingParam = { path: key };
-      const label = record[LABEL_KEY];
-      if (typeof label === 'string' && label) entry.label = label;
-      const doc = record[DOC_KEY];
-      if (typeof doc === 'string' && doc) entry.doc = doc;
-      const type = record[TYPE_KEY];
-      if (typeof type === 'string' && type) {
-        assertKnownParamType(type, key);
-        entry.type = type;
-      }
-      const options = record[OPTIONS_KEY];
-      if (Array.isArray(options)) entry.options = [...options];
-      const min = record[MIN_KEY];
-      if (typeof min === 'number') entry.min = min;
-      const max = record[MAX_KEY];
-      if (typeof max === 'number') entry.max = max;
-      const count = record[COUNT_KEY];
-      if (typeof count === 'number') entry.count = count;
-      if (record[UNIQUE_KEY] === true) entry.unique = true;
-      missing.push(entry);
-    });
+    eachParamRecord(
+      raw,
+      (record, key, full) => {
+        const def = record[DEFAULT_KEY];
+        if (def !== undefined && def !== null) return; // satisfied by default
+        if (provided[key] !== undefined || provided[full] !== undefined) return;
+        const entry: MissingParam = { path: key };
+        const label = record[LABEL_KEY];
+        if (typeof label === 'string' && label) entry.label = label;
+        const doc = record[DOC_KEY];
+        if (typeof doc === 'string' && doc) entry.doc = doc;
+        const type = record[TYPE_KEY];
+        if (typeof type === 'string' && type) {
+          assertKnownParamType(type, key);
+          entry.type = type;
+        }
+        const options = record[OPTIONS_KEY];
+        if (Array.isArray(options)) entry.options = [...options];
+        const min = record[MIN_KEY];
+        if (typeof min === 'number') entry.min = min;
+        const max = record[MAX_KEY];
+        if (typeof max === 'number') entry.max = max;
+        const count = record[COUNT_KEY];
+        if (typeof count === 'number') entry.count = count;
+        if (record[UNIQUE_KEY] === true) entry.unique = true;
+        missing.push(entry);
+      },
+      namespaceOf,
+    );
     return missing;
   }
 
@@ -305,16 +316,26 @@ function formatOption(value: unknown): string {
  * `:param` alias). Patch instructions (`@.…` keys) are not descended —
  * params belong in actor-defining (or merged) trees.
  */
-function eachParamRecord(raw: unknown, visit: (record: Record<string, unknown>, key: string) => void): void {
-  const visitNode = (node: unknown, path: string[]) => {
+function eachParamRecord(
+  raw: unknown,
+  visit: (record: Record<string, unknown>, key: string, full: string) => void,
+  namespaceOf?: (record: object) => string | undefined,
+): void {
+  // `path` restarts at each namespaced actor below the root; `full` never does.
+  const visitNode = (node: unknown, at: string[], full: string[]) => {
     if (Array.isArray(node)) {
-      node.forEach((item, index) => visitNode(item, [...path, String(index)]));
+      node.forEach((item, index) => visitNode(item, [...at, String(index)], [...full, String(index)]));
       return;
     }
     if (!node || typeof node !== 'object') return;
     const record = node as Record<string, unknown>;
+    const namespace = node === raw ? undefined : namespaceOf?.(record);
+    const path = namespace === undefined ? at : [namespace];
     const marker = record[PARAM_KEY];
-    if (marker) visit(record, typeof marker === 'string' && marker ? marker : path.join('.'));
+    if (marker) {
+      const alias = typeof marker === 'string' && marker ? marker : undefined;
+      visit(record, alias ?? path.join('.'), alias ?? full.join('.'));
+    }
     for (const [key, value] of Object.entries(record)) {
       if (
         key === PARAM_KEY ||
@@ -329,10 +350,10 @@ function eachParamRecord(raw: unknown, visit: (record: Record<string, unknown>, 
       if (isBareSigil(key) || key === ACTOR_KEY || isPathKey(key)) continue;
       // A definition's body holds params for its calls, not for this tree.
       if (FUNCTION_KEY.test(key)) continue;
-      visitNode(value, [...path, stripPlus(key)]);
+      visitNode(value, [...path, stripPlus(key)], [...full, stripPlus(key)]);
     }
   };
-  visitNode(raw, []);
+  visitNode(raw, [], []);
 }
 
 /**

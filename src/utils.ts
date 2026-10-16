@@ -37,6 +37,9 @@ export interface EvalRoots {
   provided?: Record<string, unknown>;
   /** `--set` values, applied to each nested actor as expansion enters it. */
   overrides?: Record<string, unknown>;
+  /** `--param` / `--set` values keyed by actor namespace (`aria.name`), read
+   * by whichever nested actor holds that namespace. */
+  namespaced?: { provided: Record<string, unknown>; overrides: Record<string, unknown> };
   /** Document that wrote the expression being evaluated — the only one that
    * may reach `_` fields it wrote. */
   source?: string;

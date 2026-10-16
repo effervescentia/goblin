@@ -51,11 +51,15 @@ export const STRING_LITERAL = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"/g;
 /** Whole-string call to a definition: `$tmpl('x.yaml')`, `$.feature.y()`. */
 export const CALL_EXPR = /^[#$@.][\w.]*\([^()]*\)$/;
 
-/** Whole-string template call: `$tmpl('file.yaml')`. */
-export const TEMPLATE_CALL = /^\$tmpl\(\s*['"]([^'"]+)['"]\s*\)$/;
+/** Whole-string template call: `$tmpl('file.yaml')`, or `$tmpl('file.yaml', 'name')`
+ * to give the actor it pulls in a namespace. */
+export const TEMPLATE_CALL = /^\$tmpl\(\s*['"]([^'"]+)['"]\s*(?:,\s*['"]([^'"]*)['"]\s*)?\)$/;
+
+/** A valid actor namespace: one path segment. */
+export const NAMESPACE = /^[A-Za-z_]\w*$/;
 
 /** Template references anywhere in file text (discovery scan). */
-export const TEMPLATE_SCAN = /\$(?:tmpl|mixin)\(\s*['"]([^'"]+)['"]\s*\)/g;
+export const TEMPLATE_SCAN = /\$(?:tmpl|mixin)\(\s*['"]([^'"]+)['"]\s*[,)]/g;
 
 /** `$mixin('file.yaml')`: merge a document into the actor of the nearest
  * document up the template chain declaring the actor its `@` names. */

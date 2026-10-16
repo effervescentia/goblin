@@ -291,6 +291,8 @@ are omitted, since the stdlib is implicit. `:source` is whitespace-trimmed
 ## Templates
 
 `$tmpl('file.yaml')` inlines a deep clone of another loaded document.
+A second argument names the actor document it pulls in (see Actor
+namespaces).
 References are discovered on load — the engine follows `$tmpl('…')` shapes
 recursively (relative to the referring file), so no manual preloading is
 needed. Keep `$tmpl('…')` shapes out of comments: the scan is textual.
@@ -567,6 +569,37 @@ party:
 lead_pace: $.party.scout.pace # the scout's `@.speed` → 40
 ```
 
+### Actor namespaces
+
+A second `$tmpl` argument names the actor it pulls in:
+`$tmpl('character.yaml', 'aria')`. The namespace is an address for
+`--param` and `--set`, and nothing more. The actor still lives at its path,
+and expressions still read it there (`$.characters.character_1.level`).
+
+- Its params are reported under the namespace (`aria.name`, not
+  `characters.character_1.name`). `--param` / `--set` take either key, and
+  the namespaced one wins when both are given. Overrides keyed by the
+  namespace still land before its mixins gate on anything.
+- A namespace is one plain identifier (`[A-Za-z_]\w*`), and only an actor
+  document (`$actor: X`) takes one. Anything else throws
+  (`invalid actor namespace …`, `only an actor document … takes a
+  namespace`).
+- Namespaces are checked at runtime, as calls expand: two actors with the
+  same namespace anywhere in the tree throw (`duplicate actor namespace aria:
+  party.a and party.b`). That includes a template used twice that names an
+  actor inside itself. A namespace that matches a top-level key of the entry
+  throws too, since `--set aria.x` would be ambiguous.
+- A key is routed by its first segment, matched against the namespaces that
+  the loaded documents declare.
+
+```yaml
+# Examples (examples/16-actor-namespaces.yaml)
+party:
+  scout: $tmpl('15-nested-hero.yaml') # query: party.scout.name
+  guide: $tmpl('15-nested-hero.yaml', 'bree') # query: bree.name
+guide_pace: $.party.guide.pace # → 40, or 20 with --set bree.speed=20
+```
+
 ## Mixins
 
 `$mixin('file.yaml')` merges another document into an actor. The mixin must
@@ -655,8 +688,8 @@ constraints, so a UI can prompt with a display name rather than a path.
   patch files can declare params reported against the merged actor.
 - A definition's body (`name(args):` holding a record) is not asked for:
   its params belong to each call's copy, reported where the call lands.
-- In a nested actor, params are keyed by their path from the root (see
-  Nested actors).
+- In a nested actor, params are keyed by their path from the root, or by
+  its namespace when it has one (see Nested actors).
 - Filled values are readable as `<path>` from other expressions — a bare ref
   to a `:param` node dereferences its filled value (provided, default, or
   `null` when missing), so `@.xp` just works. `!validate` rules, which read the

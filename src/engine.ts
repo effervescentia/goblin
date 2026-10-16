@@ -27,6 +27,7 @@ import {
   IF_KEY,
   LINE_KEY,
   MIXIN_CALL,
+  NAMESPACE,
   OVERRIDE_SOURCE,
   PARAM_KEY,
   PARAM_VALUE_KEY,
@@ -108,6 +109,8 @@ export class GoblinEngine {
   /** The document each `$tmpl` / `$mixin` clone was pulled in by: the
    * template chain a mixin walks up to find its actor. */
   private readonly parents = new WeakMap<object, unknown>();
+  /** The namespace each `$tmpl('…', 'name')` actor was given. */
+  private readonly namespaces = new WeakMap<object, string>();
   /** The actor each patch document is being applied to. */
   private readonly actorOf = new WeakMap<object, unknown>();
   /** Where each key was written in its source document. */
@@ -454,10 +457,11 @@ export class GoblinEngine {
     // `$tmpl('file.yaml')` — synchronous template lookup (must be loaded).
     const tmpl = trimmed.match(TEMPLATE_CALL);
     if (tmpl) {
-      const file = tmpl[1]!;
+      const [, file = '', namespace] = tmpl;
       const doc = this.docs.get(file);
       if (doc === undefined) throw new Error(`template not loaded: ${file}`);
       const clone = this.clone(doc);
+      if (namespace !== undefined) this.nameActor(clone, file, namespace);
       // The clone keeps the document's name so patch events can cite it.
       if (clone && typeof clone === 'object') {
         this.origins.set(clone, file);
@@ -594,10 +598,18 @@ export class GoblinEngine {
     const raw = this.docs.get(file);
     if (raw === undefined) throw new Error(`document not loaded: ${file}`);
     this.claim(raw, file);
-    const scope: EvalRoots = { doc: raw, actor: raw, app: this.appRoot, current: raw, provided };
+    const keyed = this.splitNamespaced(raw, provided ?? {}, {});
+    const scope: EvalRoots = {
+      doc: raw,
+      actor: raw,
+      app: this.appRoot,
+      current: raw,
+      provided: keyed.provided,
+      namespaced: keyed.namespaced,
+    };
     // Calls (and mixins) expand before params fill, so their params fill too.
     if (this.expandCalls(raw, scope)) this.cache.clear();
-    if (RecordNode.materializeParams(raw, provided)) this.cache.clear();
+    if (RecordNode.materializeParams(raw, keyed.provided)) this.cache.clear();
     return this.evaluate(raw, { ...scope, path: [] });
   }
 
@@ -614,7 +626,7 @@ export class GoblinEngine {
     if (loaded !== null && typeof loaded === 'object')
       this.origins.set(raw as object, this.origins.get(loaded) ?? file);
     this.expandCalls(raw, { doc: raw, actor: raw, app: this.appRoot, current: raw });
-    return RecordNode.collectParams(raw);
+    return RecordNode.collectParams(raw, this.namespaceOf);
   }
 
   /**
@@ -678,21 +690,98 @@ export class GoblinEngine {
     provided: Record<string, unknown> = {},
     overrides: Record<string, unknown> = {},
   ): { data: unknown } | { query: MissingParam[] } {
-    this.applyOverrides(actorRaw, overrides);
+    const keyed = this.splitNamespaced(actorRaw, provided, overrides);
+    this.applyOverrides(actorRaw, keyed.overrides);
     const scope: EvalRoots = {
       doc: actorRaw,
       actor: actorRaw,
       app: this.appRoot,
       current: actorRaw,
-      provided,
-      overrides,
+      provided: keyed.provided,
+      overrides: keyed.overrides,
+      namespaced: keyed.namespaced,
     };
     this.expandCalls(actorRaw, scope);
-    this.applyOverrides(actorRaw, overrides);
+    this.applyOverrides(actorRaw, keyed.overrides);
     this.shareWithApp(actorRaw);
-    const outstanding = RecordNode.collectParams(actorRaw).filter((param) => provided[param.path] === undefined);
+    const outstanding = RecordNode.collectParams(actorRaw, this.namespaceOf, provided);
     if (outstanding.length > 0) return { query: outstanding };
     return { data: debug(this.evaluate(actorRaw, scope)) };
+  }
+
+  /** Split `--param` / `--set` keys led by an actor namespace (`aria.name`)
+   * from path keys. Namespaces are found by scanning loaded documents, so the
+   * split happens before expansion creates the actors that hold them. */
+  private splitNamespaced(
+    root: unknown,
+    provided: Record<string, unknown>,
+    overrides: Record<string, unknown>,
+  ): {
+    provided: Record<string, unknown>;
+    overrides: Record<string, unknown>;
+    namespaced: NonNullable<EvalRoots['namespaced']>;
+  } {
+    const declared = new Set<string>();
+    const scan = (node: unknown): void => {
+      if (typeof node === 'string') {
+        const namespace = node.trim().match(TEMPLATE_CALL)?.[2];
+        if (namespace !== undefined) declared.add(namespace);
+      } else if (node !== null && typeof node === 'object') Object.values(node).forEach(scan);
+    };
+    this.docs.forEach(scan);
+    if (root !== null && typeof root === 'object' && !Array.isArray(root)) {
+      for (const namespace of declared) {
+        if (namespace in root) throw new Error(`actor namespace ${namespace} shadows a top-level key of the entry`);
+      }
+    }
+    const split = (values: Record<string, unknown>) => {
+      const byPath: Record<string, unknown> = {};
+      const byName: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(values)) {
+        if (declared.has(key.split('.')[0] ?? '')) byName[key] = value;
+        else byPath[key] = value;
+      }
+      return [byPath, byName] as const;
+    };
+    const [providedByPath, providedByName] = split(provided);
+    const [overridesByPath, overridesByName] = split(overrides);
+    return {
+      provided: providedByPath,
+      overrides: overridesByPath,
+      namespaced: { provided: providedByName, overrides: overridesByName },
+    };
+  }
+
+  /** The namespace a nested actor was given with `$tmpl('…', 'name')`. */
+  readonly namespaceOf = (record: object): string | undefined => this.namespaces.get(record);
+
+  /** Give the actor a `$tmpl` call pulls in its namespace; only actors take one. */
+  private nameActor(clone: unknown, file: string, namespace: string): void {
+    if (!NAMESPACE.test(namespace)) throw new Error(`$tmpl('${file}'): invalid actor namespace '${namespace}'`);
+    if (
+      clone === null ||
+      typeof clone !== 'object' ||
+      typeof (clone as Record<string, unknown>)[ACTOR_KEY] !== 'string'
+    )
+      throw new Error(`$tmpl('${file}', '${namespace}'): only an actor document ($actor: X) takes a namespace`);
+    this.namespaces.set(clone, namespace);
+  }
+
+  /** Namespaces name one actor each across the whole tree. */
+  private assertUniqueNamespaces(raw: unknown): void {
+    const seen = new Map<string, { node: object; path: string }>();
+    const visit = (node: unknown, path: string[]): void => {
+      if (node === null || typeof node !== 'object') return;
+      const namespace = this.namespaces.get(node);
+      if (namespace !== undefined) {
+        const prior = seen.get(namespace);
+        if (prior !== undefined && prior.node !== node)
+          throw new Error(`duplicate actor namespace ${namespace}: ${prior.path || '<root>'} and ${path.join('.')}`);
+        seen.set(namespace, { node, path: path.join('.') });
+      }
+      for (const [key, child] of Object.entries(node)) visit(child, [...path, key]);
+    };
+    visit(raw, []);
   }
 
   /** Point `$` at the resolved entry's own (expanded) top-level values in place
@@ -787,10 +876,13 @@ export class GoblinEngine {
     return copy;
   }
 
+  /** Homes and actor namespaces follow a copy of the records they mark. */
   private copyHomes(from: unknown, to: unknown): void {
     if (from === null || typeof from !== 'object' || to === null || typeof to !== 'object') return;
     const home = this.homes.get(from);
     if (home !== undefined && !this.homes.has(to)) this.homes.set(to, home);
+    const namespace = this.namespaces.get(from);
+    if (namespace !== undefined) this.namespaces.set(to, namespace);
     for (const [key, child] of Object.entries(from)) this.copyHomes(child, (to as Record<string, unknown>)[key]);
   }
 
@@ -893,7 +985,9 @@ export class GoblinEngine {
     try {
       const inlined = this.evalExpr(trimmed, scope);
       return FunctionNode.isRecordBody(inlined) ? inlined : value;
-    } catch {
+    } catch (error) {
+      // A template is always resolvable, so its errors (a bad namespace) are real.
+      if (TEMPLATE_CALL.test(trimmed)) throw error;
       return value; // not resolvable yet — leave the expression in place
     }
   }
@@ -980,6 +1074,7 @@ export class GoblinEngine {
       }
     };
     visit(raw, scope, []);
+    this.assertUniqueNamespaces(raw);
     return wrote;
   }
 
@@ -1009,14 +1104,19 @@ export class GoblinEngine {
   /** The scope inside a nested actor at `path` (relative to the outer actor):
    * `#` and `@` become it, and provided values are read relative to it. */
   enterActor(record: Record<string, unknown>, scope: EvalRoots, path: string[]): EvalRoots {
+    // A namespaced actor also reads values keyed by its namespace; those win.
+    const namespace = this.namespaces.get(record);
+    const named = (values: Record<string, unknown> | undefined) =>
+      namespace === undefined ? {} : RecordNode.nestProvided(values, [namespace]);
+    const overrides = { ...RecordNode.nestProvided(scope.overrides, path), ...named(scope.namespaced?.overrides) };
     return {
       ...scope,
       doc: record,
       actor: record,
       current: record,
       home: undefined,
-      provided: RecordNode.nestProvided(scope.provided, path),
-      overrides: scope.overrides && RecordNode.nestProvided(scope.overrides, path),
+      provided: { ...RecordNode.nestProvided(scope.provided, path), ...named(scope.namespaced?.provided) },
+      overrides: scope.overrides || scope.namespaced ? overrides : undefined,
       path: scope.path === undefined ? undefined : [],
     };
   }

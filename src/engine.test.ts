@@ -568,6 +568,62 @@ describe('nested actors', () => {
     expect(state.data).toMatchObject({ via_app: 40, via_doc: 40, via_actor: 40, via_current: 40, scout_name: 'Ash' });
   });
 
+  describe('namespaces', () => {
+    const named = (members: Record<string, unknown>) => {
+      const engine = party();
+      engine.register('party.yaml', { party: members });
+      return engine;
+    };
+
+    it('asks for a namespaced actor by its namespace', () => {
+      const engine = named({ scout: "$tmpl('hero.yaml')", guide: "$tmpl('hero.yaml', 'bree')" });
+      const state = engine.resolve('party.yaml') as { query: Array<{ path: string }> };
+      expect(state.query.map((param) => param.path)).toEqual(['party.scout.name', 'bree.name']);
+      expect(engine.missingParams('party.yaml').map((param) => param.path)).toEqual(['party.scout.name', 'bree.name']);
+    });
+
+    it('takes --param and --set by namespace or by path', () => {
+      for (const [provided, overrides] of [
+        [{ 'bree.name': 'Bree' }, { 'bree.speed': 20 }],
+        [{ 'party.guide.name': 'Bree' }, { 'party.guide.speed': 20 }],
+      ]) {
+        const engine = named({ guide: "$tmpl('hero.yaml', 'bree')" });
+        const state = engine.resolve('party.yaml', provided, overrides) as {
+          data: { party: Record<string, Record<string, unknown>> };
+        };
+        const guide = state.data.party.guide;
+        expect(fieldValue(guide?.name)).toBe('Bree');
+        // The override lands before the boon gates on it, either way.
+        expect(fieldValue(guide?.speed)).toBe(20);
+        expect(fieldValue(guide?.gold)).toBe(1);
+        expect(state.data).not.toHaveProperty('bree');
+      }
+    });
+
+    it('throws when two actors share a namespace', () => {
+      const engine = named({ scout: "$tmpl('hero.yaml', 'x')", guide: "$tmpl('hero.yaml', 'x')" });
+      expect(() => engine.resolve('party.yaml')).toThrow('duplicate actor namespace x: party.scout and party.guide');
+    });
+
+    it('throws when a template used twice names the actor inside it', () => {
+      const engine = party();
+      engine.register('pair.yaml', { $actor: 'Pair', lead: "$tmpl('hero.yaml', 'lead')" });
+      engine.register('party.yaml', { a: "$tmpl('pair.yaml')", b: "$tmpl('pair.yaml')" });
+      expect(() => engine.resolve('party.yaml')).toThrow('duplicate actor namespace lead: a.lead and b.lead');
+    });
+
+    it('only names actors, with a plain identifier that no top-level key shadows', () => {
+      const engine = party();
+      engine.register('gear.yaml', { weight: 1 });
+      engine.register('party.yaml', { gear: "$tmpl('gear.yaml', 'kit')" });
+      expect(() => engine.resolve('party.yaml')).toThrow('only an actor document');
+      engine.register('party.yaml', { a: "$tmpl('hero.yaml', 'not-ok')" });
+      expect(() => engine.resolve('party.yaml')).toThrow("invalid actor namespace 'not-ok'");
+      engine.register('party.yaml', { a: "$tmpl('hero.yaml', 'a')" });
+      expect(() => engine.resolve('party.yaml')).toThrow('actor namespace a shadows a top-level key');
+    });
+  });
+
   it("never asks for the params inside a definition's body", () => {
     expect(RecordNode.collectParams({ 'pick(x)': { choice: { ':param': true } } })).toEqual([]);
   });

@@ -80,6 +80,29 @@ describe('examples', () => {
     });
   });
 
+  it('16-actor-namespaces.yaml asks for and fills a named actor by its namespace', () => {
+    const query = cli('examples/16-actor-namespaces.yaml') as { query: Array<{ path: string }> };
+    expect(query.query.map((param) => param.path)).toEqual(['party.scout.name', 'bree.name']);
+
+    const data = cli(
+      'examples/16-actor-namespaces.yaml',
+      '--strip-metadata',
+      '--param',
+      'party.scout.name=Ash',
+      '--param',
+      'bree.name=Bree',
+      '--set',
+      'bree.speed=20',
+    ) as { data: unknown };
+    expect(data.data).toEqual({
+      party: {
+        scout: { name: 'Ash', speed: 40, gold: 15, pace: 40 },
+        guide: { name: 'Bree', speed: 20, gold: 10, pace: 20 },
+      },
+      guide_pace: 20,
+    });
+  });
+
   it('04-functions.yaml hands back a record body per call', () => {
     const data = (cli('examples/04-functions.yaml') as { data: Record<string, unknown> }).data;
     expect(data.off_hand).toEqual({
