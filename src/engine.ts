@@ -168,10 +168,8 @@ export class GoblinEngine {
    */
   private async discoverTemplates(file: string, text: string): Promise<void> {
     const dir = file.includes('/') ? file.slice(0, file.lastIndexOf('/')) : '';
-    const pattern = TEMPLATE_SCAN;
-    let match: RegExpExecArray | null;
-    match = pattern.exec(text);
-    while (match !== null) {
+    // `matchAll` scans a copy: the recursion below must not share `lastIndex`.
+    for (const match of text.matchAll(TEMPLATE_SCAN)) {
       const name = match[1]!;
       const path = dir ? `${dir}/${name}` : name;
       if (!this.docs.has(name) && !this.docs.has(path)) {
@@ -182,7 +180,6 @@ export class GoblinEngine {
         this.register(name, depData);
         await this.discoverTemplates(path, depText);
       }
-      match = pattern.exec(text);
     }
   }
 
@@ -627,6 +624,9 @@ export class GoblinEngine {
         if (path.length === 0) continue;
         const base = root === APP ? this.appRoot : actorRaw;
         if (base === null || typeof base !== 'object') continue;
+        // A path through a value not yet expanded (a `$tmpl` call) waits
+        // until expansion enters it.
+        if (crossesScalar(base, path)) continue;
         const existing = getPath(base, path);
         if (existing !== null && typeof existing === 'object' && PARAM_KEY in (existing as Record<string, unknown>)) {
           const record = existing as Record<string, unknown>;
@@ -668,8 +668,16 @@ export class GoblinEngine {
     overrides: Record<string, unknown> = {},
   ): { data: unknown } | { query: MissingParam[] } {
     this.applyOverrides(actorRaw, overrides);
-    const scope: EvalRoots = { doc: actorRaw, actor: actorRaw, app: this.appRoot, current: actorRaw, provided };
+    const scope: EvalRoots = {
+      doc: actorRaw,
+      actor: actorRaw,
+      app: this.appRoot,
+      current: actorRaw,
+      provided,
+      overrides,
+    };
     this.expandCalls(actorRaw, scope);
+    this.applyOverrides(actorRaw, overrides);
     const outstanding = RecordNode.collectParams(actorRaw).filter((param) => provided[param.path] === undefined);
     if (outstanding.length > 0) return { query: outstanding };
     return { data: debug(this.evaluate(actorRaw, scope)) };
@@ -909,42 +917,67 @@ export class GoblinEngine {
    * for them. Anything that is not a record call is left as written. */
   expandCalls(raw: unknown, scope: EvalRoots): boolean {
     let wrote = false;
-    const visit = (node: unknown) => {
+    const visit = (node: unknown, outer: EvalRoots, path: string[]) => {
       if (Array.isArray(node)) {
         node.forEach((item, index) => {
-          const next = this.inlinePatchValue(item, scope);
+          const next = this.inlinePatchValue(item, outer);
           if (next !== item) {
             node[index] = this.claim(next, this.owners.get(node) ?? '');
             wrote = true;
           }
-          visit(node[index]);
+          visit(node[index], outer, [...path, String(index)]);
         });
         return;
       }
       if (node === null || typeof node !== 'object') return;
       const record = node as Record<string, unknown>;
+      // A nested actor document is its own `#` and `@`: its mixins land on it.
+      const nested = this.isNestedActor(record, outer);
+      const inner = nested ? this.enterActor(record, outer, path) : outer;
+      if (nested && inner.overrides) this.applyOverrides(record, inner.overrides);
+      const base = nested ? [] : path;
       for (const [key, value] of Object.entries(record)) {
         if (isMetaKey(key) || isValidateKey(key)) continue;
         if (typeof value === 'string' && MIXIN_CALL.test(value.trim())) {
           delete record[key]; // consumed: the mixin merges into the actor instead
-          this.mixin(value, scope);
+          this.mixin(value, inner);
           wrote = true;
           continue;
         }
-        const next = this.inlinePatchValue(value, scope);
+        const next = this.inlinePatchValue(value, inner);
         if (next !== value) {
           record[key] = this.claim(next, this.fieldSource(record, key) ?? '');
           wrote = true;
         }
         const child = record[key];
         const mixins = child !== null && typeof child === 'object' && !Array.isArray(child) && hasMixin(child);
-        visit(child);
+        visit(child, inner, [...base, key]);
         // A record that only held mixin calls leaves nothing behind.
         if (mixins && Object.keys(child as object).length === 0) delete record[key];
       }
     };
-    visit(raw);
+    visit(raw, scope, []);
     return wrote;
+  }
+
+  /** Whether `record` declares an actor (`$actor: X`) other than the one in scope. */
+  isNestedActor(record: Record<string, unknown>, scope: EvalRoots): boolean {
+    return typeof record[ACTOR_KEY] === 'string' && record !== scope.actor;
+  }
+
+  /** The scope inside a nested actor at `path` (relative to the outer actor):
+   * `#` and `@` become it, and provided values are read relative to it. */
+  enterActor(record: Record<string, unknown>, scope: EvalRoots, path: string[]): EvalRoots {
+    return {
+      ...scope,
+      doc: record,
+      actor: record,
+      current: record,
+      home: undefined,
+      provided: RecordNode.nestProvided(scope.provided, path),
+      overrides: scope.overrides && RecordNode.nestProvided(scope.overrides, path),
+      path: scope.path === undefined ? undefined : [],
+    };
   }
 
   /**
@@ -1189,6 +1222,17 @@ export class GoblinEngine {
     });
     return failures;
   }
+}
+
+/** Whether walking `path` from `base` passes through a scalar before its last segment. */
+function crossesScalar(base: unknown, path: string[]): boolean {
+  let node = base;
+  for (const seg of path.slice(0, -1)) {
+    node = (node as Record<string, unknown>)[seg];
+    if (node === undefined || node === null) return false;
+    if (typeof node !== 'object') return true;
+  }
+  return false;
 }
 
 /** Whether a patch value holds a `$mixin('…')` call anywhere inside. */

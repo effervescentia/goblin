@@ -288,9 +288,10 @@ describe('cli', () => {
   });
 
   it('--strip-metadata drops metadata keys from data output', () => {
-    const args = [
-      '5e/main.yaml',
-      '--compact',
+    // 5e/main.yaml nests its character under `characters.character_1`.
+    const character = (data: Record<string, unknown>) =>
+      (data.characters as Record<string, Record<string, unknown>>).character_1 as Record<string, unknown>;
+    const params = [
       '--param',
       'class=fighter',
       '--param',
@@ -319,10 +320,11 @@ describe('cli', () => {
       'skills.trained=["athletics","perception"]',
       '--param',
       'improvements.level_4=["strength","strength"]',
-    ];
+    ].map((arg) => (arg === '--param' ? arg : `characters.character_1.${arg}`));
+    const args = ['5e/main.yaml', '--compact', ...params];
     const full = runCli(...args);
     expect(full.status).toBe(0);
-    const fullData = (JSON.parse(full.stdout) as { data: Record<string, unknown> }).data;
+    const fullData = character((JSON.parse(full.stdout) as { data: Record<string, unknown> }).data);
     expect(JSON.stringify(fullData)).toContain(':doc');
     expect(fullData.name).toEqual({
       ':doc': "Your hero's name, as sung by bards.",
@@ -353,10 +355,11 @@ describe('cli', () => {
     };
     visit(data);
     expect(metaKeys).toEqual([]);
-    expect(data.hit_points).toEqual({ current: 11, max: 11 }); // con 13 → +1
-    expect(data.name).toBe('Aria');
-    expect(data.level).toBe(5);
-    expect(data.initiative).toEqual({ base: 2, roll: '1d20 + .base' }); // dex 14 → +2
-    expect((data.features as Record<string, unknown>).second_wind).toBeNull();
+    const pc = character(data);
+    expect(pc.hit_points).toEqual({ current: 11, max: 11 }); // con 13 → +1
+    expect(pc.name).toBe('Aria');
+    expect(pc.level).toBe(5);
+    expect(pc.initiative).toEqual({ base: 2, roll: '1d20 + .base' }); // dex 14 → +2
+    expect((pc.features as Record<string, unknown>).second_wind).toBeNull();
   });
 });

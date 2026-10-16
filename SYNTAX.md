@@ -304,7 +304,7 @@ levels: $tmpl('level.yaml')
 level: '#.levels.level_for(@.xp.value)'
 ```
 
-…or leave it un-attached and call through the app binding (see Composition),
+…or leave it un-attached and call through the app binding (see Nested actors),
 which keeps the calling document free of the table:
 
 ```yaml
@@ -475,7 +475,7 @@ patch touched print bare, as before.
 - Metadata (`:doc`, `:label`, …) and function definitions are never wrapped.
 
 ```ts
-// 5e/main.yaml: actor character.yaml, adopt [class/fighter/fighter.yaml]
+// 5e/main.yaml: characters.character_1, a fighter
 "attacks": {                                   // a scalar pairs up
   ":value": 2,
   ":events": [
@@ -522,30 +522,43 @@ A wildcard target (`@.resources.*.current`) assigns each match, with the
 right side evaluated per match and `.` bound to that match's record (see
 Wildcards).
 
-## Composition
+## Nested actors
 
-A root entry may compose an actor from an `actor` base plus an `adopt` list
-of patches (each a `$tmpl('…')` expression or an inline object). A top-level
-`actor` key is reserved: any document carrying one is treated as a
-composition entry, so never use `actor` as ordinary data. The runner
-resolves the base, applies each patch in order, then resolves the merged
-result — gate per-level content with `$if` on actor state so choices declared
-by adopted patches surface in the `{ query }` envelope. Provided values fill in
-before each patch applies, so a later patch can gate on a choice an earlier
-one declared: `class/fighter/fighter.yaml` mixes in its subclasses (see Mixins),
-each gated on `@.level >= 3 && @.features.martial_archetype == '…'` (level
-first, since `&&` never reads the choice before the fighter declares it). Template paths are
-root-relative; nested references resolve relative to their own file.
+A document's root is its data: resolving an entry answers the whole tree.
+An actor document (`$actor: X`) pulled in anywhere below the root — usually
+with `$tmpl('…')` — is an actor of its own: inside it, `#` and `@` are that
+record, and its mixins (see Mixins) land on it, not on the document around
+it. Each `$tmpl` makes a fresh copy, so one file can fill several slots.
+
+- Its params are asked for by their path from the root
+  (`characters.character_1.class`), and `--param` / `--set` address it the
+  same way. Inside the actor those values read relative to it, so its own
+  expressions and gates (`$if: "@.class == 'fighter'"`) are unchanged.
+- Overrides reach it as it expands, before its mixins gate on anything, so
+  `--set characters.character_1.level=5` brings in level-5 features.
+- Provided values fill in before each mixin applies, so a later one can gate
+  on a choice an earlier one declared: `class/fighter/fighter.yaml` mixes in
+  its subclasses, each gated on
+  `@.level >= 3 && @.features.martial_archetype == '…'` (level first, since
+  `&&` never reads the choice before the fighter declares it).
+- Template paths are root-relative; nested references resolve relative to
+  their own file.
 
 ```yaml
 # Examples (5e/main.yaml)
-# Shared binding: merged into the `$` namespace on load, so every document
+# Shared bindings: merged into the `$` namespace on load, so every document
 # calls $.level.… without attaching the table itself.
 level: $tmpl('level.yaml')
 
-actor: $tmpl('character.yaml')
-adopt:
-  - $tmpl('class/fighter/fighter.yaml')
+characters:
+  character_1: $tmpl('character.yaml') # $actor: Character
+```
+
+```yaml
+# Examples (examples/15-nested-actors.yaml, examples/15-nested-hero.yaml)
+party:
+  scout: $tmpl('15-nested-hero.yaml') # query: party.scout.name
+  guide: $tmpl('15-nested-hero.yaml') # query: party.guide.name
 ```
 
 ## Mixins
@@ -553,7 +566,7 @@ adopt:
 `$mixin('file.yaml')` merges another document into an actor. The mixin must
 name the actor it attaches to with a top-level `@` (`'@': Character`); the
 engine walks up the template chain — the document holding the call, then
-whichever document pulled that one in with `$tmpl` or `adopt` — to the
+whichever document pulled that one in with `$tmpl` — to the
 nearest one declaring that actor, and applies the mixin to the actor that
 document builds (an actor document, `$actor: Character`) or patches (an
 applied one, `'@': Character`). Provided
@@ -634,6 +647,10 @@ constraints, so a UI can prompt with a display name rather than a path.
   `:count: 2`, `:unique: true` (see `examples/10-choice-params.yaml`).
 - `:param` records survive `apply()` (markers copy with other `:meta`), so
   patch files can declare params reported against the merged actor.
+- A definition's body (`name(args):` holding a record) is not asked for:
+  its params belong to each call's copy, reported where the call lands.
+- In a nested actor, params are keyed by their path from the root (see
+  Nested actors).
 - Filled values are readable as `<path>` from other expressions — a bare ref
   to a `:param` node dereferences its filled value (provided, default, or
   `null` when missing), so `@.xp` just works. `!validate` rules, which read the

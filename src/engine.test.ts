@@ -509,6 +509,53 @@ describe('mixins', () => {
   });
 });
 
+describe('nested actors', () => {
+  const engineWith = (docs: Record<string, unknown>) => {
+    const engine = new GoblinEngine('.');
+    for (const [file, doc] of Object.entries(docs)) engine.register(file, doc);
+    return engine;
+  };
+  const party = () =>
+    engineWith({
+      'boon.yaml': { '@': 'Hero', $if: '@.speed >= 30', '@.speed': 40, '+@.gold': 5 },
+      'hero.yaml': {
+        $actor: 'Hero',
+        name: { ':param': true, ':type': 'string' },
+        speed: 30,
+        gold: 1,
+        pace: '@.speed',
+        boon: "$mixin('boon.yaml')",
+      },
+      'party.yaml': { party: { scout: "$tmpl('hero.yaml')", guide: "$tmpl('hero.yaml')" } },
+    });
+
+  it("asks for each nested actor's params by their path from the root", () => {
+    const state = party().resolve('party.yaml') as { query: Array<{ path: string }> };
+    expect(state.query.map((param) => param.path)).toEqual(['party.scout.name', 'party.guide.name']);
+  });
+
+  it('gives each nested actor its own `@`, mixins, params and overrides', () => {
+    const provided = { 'party.scout.name': 'Ash', 'party.guide.name': 'Bree' };
+    const state = party().resolve('party.yaml', provided, { 'party.guide.speed': 20 }) as {
+      data: { party: Record<string, Record<string, unknown>> };
+    };
+    const { scout, guide } = state.data.party;
+    expect(fieldValue(scout?.name)).toBe('Ash');
+    expect(fieldValue(scout?.speed)).toBe(40);
+    expect(fieldValue(scout?.gold)).toBe(6);
+    expect(scout?.pace).toBe(40);
+    // The override lands before the boon gates on it, so the boon holds back.
+    expect(fieldValue(guide?.name)).toBe('Bree');
+    expect(fieldValue(guide?.speed)).toBe(20);
+    expect(fieldValue(guide?.gold)).toBe(1);
+    expect(guide?.pace).toBe(20);
+  });
+
+  it("never asks for the params inside a definition's body", () => {
+    expect(RecordNode.collectParams({ 'pick(x)': { choice: { ':param': true } } })).toEqual([]);
+  });
+});
+
 describe('private fields', () => {
   // `register` records which document wrote each node, as loadFile does.
   const engineWith = (docs: Record<string, unknown>) => {

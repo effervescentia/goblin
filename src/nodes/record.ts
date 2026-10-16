@@ -197,6 +197,17 @@ export class RecordNode extends Node<Record<string, unknown>> {
     return wrote;
   }
 
+  /** Provided values addressed under `path`, re-keyed relative to it. */
+  static nestProvided(provided: Record<string, unknown> | undefined, path: string[]): Record<string, unknown> {
+    if (provided === undefined || path.length === 0) return provided ?? {};
+    const prefix = `${path.join('.')}.`;
+    return Object.fromEntries(
+      Object.entries(provided)
+        .filter(([key]) => key.startsWith(prefix))
+        .map(([key, value]) => [key.slice(prefix.length), value]),
+    );
+  }
+
   override debug(each: (value: unknown) => unknown): Record<string, unknown> {
     return Object.fromEntries(Object.entries(this.raw).map(([key, value]) => [key, each(value)]));
   }
@@ -215,8 +226,9 @@ export class RecordNode extends Node<Record<string, unknown>> {
     return Object.keys(out).length === 0 ? null : out;
   }
 
-  override evaluate(engine: GoblinEngine, scope: EvalRoots): unknown {
+  override evaluate(engine: GoblinEngine, outer: EvalRoots): unknown {
     const record = this.raw;
+    const scope = engine.isNestedActor(record, outer) ? engine.enterActor(record, outer, outer.path ?? []) : outer;
     if (record[PARAM_KEY]) {
       return fillParam(engine, record, scope, scope.path ?? []);
     }
@@ -315,8 +327,9 @@ function eachParamRecord(raw: unknown, visit: (record: Record<string, unknown>, 
       )
         continue;
       if (isBareSigil(key) || key === ACTOR_KEY || isPathKey(key)) continue;
-      const fnMatch = key.match(FUNCTION_KEY);
-      visitNode(value, [...path, fnMatch ? fnMatch[1]! : stripPlus(key)]);
+      // A definition's body holds params for its calls, not for this tree.
+      if (FUNCTION_KEY.test(key)) continue;
+      visitNode(value, [...path, stripPlus(key)]);
     }
   };
   visitNode(raw, []);

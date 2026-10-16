@@ -35,6 +35,8 @@ export interface EvalRoots {
   path?: string[];
   /** User-provided values for `:param` nodes, keyed by dotted path or alias. */
   provided?: Record<string, unknown>;
+  /** `--set` values, applied to each nested actor as expansion enters it. */
+  overrides?: Record<string, unknown>;
   /** Document that wrote the expression being evaluated — the only one that
    * may reach `_` fields it wrote. */
   source?: string;

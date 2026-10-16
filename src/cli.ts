@@ -12,7 +12,6 @@
  * with a non-zero exit code.
  */
 import { GoblinEngine } from './engine';
-import { RecordNode } from './nodes/record';
 import { print } from './nodes/serialize';
 
 export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--strip-metadata] [--help]
@@ -128,11 +127,8 @@ export async function resolveApp(
   }
   const engine = new GoblinEngine(root);
   await engine.loadFile(main);
-  const raw = engine.docs.get(main);
-  const actor =
-    raw !== null && typeof raw === 'object' && !Array.isArray(raw) && 'actor' in raw
-      ? composeActor(engine, raw as Record<string, unknown>, provided, overrides)
-      : raw;
+  // The entry's whole root is the answer; actors nest in it as `$actor` documents.
+  const actor = engine.docs.get(main);
   const state = engine.resolveRaw(actor, provided, overrides);
   // A resolved sheet must also hold: `!validate` rules are part of the answer,
   // not a separate pass the caller might skip.
@@ -141,54 +137,6 @@ export async function resolveApp(
     if (errors.length > 0) return { state: { errors }, actor };
   }
   return { state, actor };
-}
-
-/**
- * Entry composition (`actor` + `adopt` keys): resolve the base actor, apply
- * each patch in order, then resolve the merged result. Overrides apply
- * before the first pass (so level derivation and `$if` conditions read them)
- * and again inside `resolveRaw` (so explicit values always win). Patch
- * entries are `$tmpl('…')` expressions (or inline objects); provided values
- * flow into every pass.
- */
-export async function resolveComposed(
-  engine: GoblinEngine,
-  entry: Record<string, unknown>,
-  provided: Record<string, unknown> = {},
-  overrides: Record<string, unknown> = {},
-): Promise<ReturnType<GoblinEngine['resolve']>> {
-  return engine.resolveRaw(composeActor(engine, entry, provided, overrides), provided, overrides);
-}
-
-/** The merged raw actor of an `actor` + `adopt` entry, ready to resolve. */
-export function composeActor(
-  engine: GoblinEngine,
-  entry: Record<string, unknown>,
-  provided: Record<string, unknown> = {},
-  overrides: Record<string, unknown> = {},
-): unknown {
-  const scope = { doc: entry, actor: entry, app: engine.appRoot, current: entry, provided };
-  const actorRaw = typeof entry.actor === 'string' ? engine.evalExpr(entry.actor, scope) : structuredClone(entry.actor);
-  const adopt = Array.isArray(entry.adopt) ? entry.adopt : [entry.adopt];
-  const patches = adopt.map((patch) =>
-    typeof patch === 'string' ? engine.evalExpr(patch, scope) : structuredClone(patch),
-  );
-  engine.applyOverrides(actorRaw, overrides);
-  // First pass materializes provided values; patches then gate on the actor.
-  engine.evaluate(actorRaw, {
-    doc: actorRaw,
-    actor: actorRaw,
-    app: engine.appRoot,
-    current: actorRaw,
-    provided,
-  });
-  for (const patch of patches) {
-    // A patch may gate on a choice an earlier one declared (a subclass file
-    // on the fighter's `martial_archetype`), so fill provided values first.
-    RecordNode.materializeParams(actorRaw, provided);
-    engine.applyRaw(actorRaw, patch, undefined, provided);
-  }
-  return actorRaw;
 }
 
 // Entry point only — no-op when imported (e.g. by tests).

@@ -8,13 +8,30 @@ import { describe, expect, it } from 'vitest';
 // choices, and progression.
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-function cli(entry: string, ...extra: string[]): unknown {
+// 5e/main.yaml nests its character at this path: params are addressed under
+// it, and `cli` answers relative to it.
+const PC = 'characters.character_1';
+
+function run(entry: string, ...extra: string[]): unknown {
   const out = execFileSync('bun', ['src/cli.ts', entry, '--compact', ...extra], {
     cwd: root,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   return JSON.parse(out);
+}
+
+/** Play the main entry's character: `--param`/`--set` keys gain the `PC`
+ * prefix, and the `{ data }` / `{ query }` envelope comes back without it. */
+function cli(entry: string, ...extra: string[]): unknown {
+  const args = extra.map((arg, i) => (extra[i - 1] === '--param' || extra[i - 1] === '--set' ? `${PC}.${arg}` : arg));
+  const state = run(entry, ...args) as {
+    data?: { characters: Record<string, unknown> };
+    query?: Array<{ path: string }>;
+  };
+  if (state.data) return { data: state.data.characters.character_1 };
+  if (state.query) return { query: state.query.map((param) => ({ ...param, path: param.path.slice(PC.length + 1) })) };
+  return state;
 }
 
 /** Run the CLI expecting failure; returns stderr for message assertions. */

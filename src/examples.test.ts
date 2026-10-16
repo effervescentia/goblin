@@ -57,6 +57,28 @@ describe('examples', () => {
     });
   });
 
+  it('15-nested-actors.yaml resolves each nested actor on its own', () => {
+    const query = cli('examples/15-nested-actors.yaml') as { query: Array<{ path: string }> };
+    expect(query.query.map((param) => param.path)).toEqual(['party.scout.name', 'party.guide.name']);
+
+    const data = cli(
+      'examples/15-nested-actors.yaml',
+      '--strip-metadata',
+      '--param',
+      'party.scout.name=Ash',
+      '--param',
+      'party.guide.name=Bree',
+      '--set',
+      'party.guide.speed=20',
+    ) as { data: unknown };
+    expect(data.data).toEqual({
+      party: {
+        scout: { name: 'Ash', speed: 40, gold: 15, pace: 40 },
+        guide: { name: 'Bree', speed: 20, gold: 10, pace: 20 },
+      },
+    });
+  });
+
   it('04-functions.yaml hands back a record body per call', () => {
     const data = (cli('examples/04-functions.yaml') as { data: Record<string, unknown> }).data;
     expect(data.off_hand).toEqual({

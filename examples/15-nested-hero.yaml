@@ -1,0 +1,14 @@
+# Nested-actor side of 15-nested-actors.yaml: an ordinary actor document,
+# runnable on its own. Pulled into another document, it stays its own `#`
+# and `@`, so its mixin lands on this hero, not on the document around it.
+
+$actor: Adventurer
+
+name:
+  :doc: The hero's name.
+  :param: true
+  :type: string
+speed: 30
+gold: 10
+pace: '@.speed' # this hero's speed, wherever it is nested
+boon: $mixin('14-mixin-boon.yaml') # → gone; speed 40, gold 15

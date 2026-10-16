@@ -1,22 +1,26 @@
-# 5e/main.yaml — root entry: a complete playable fighter.
+# 5e/main.yaml — root entry: the whole tree resolves as { data }, with each
+# character a nested Character actor under `characters`.
 #
-# The character template includes Fighter as a Character mixin.
-# Template paths resolve relative to their own file.
+# Each character mixes in the class it picks. Template paths resolve
+# relative to their own file.
 #
-# Play: goblin 5e/main.yaml --param name=Aria --param xp=6500 \
-#         --param ability_method=point_buy \
-#         --param abilities.strength.bought=7 … (points over 8, 27 total) \
-#         --param features.fighting_style=dueling \
-#         --param features.martial_archetype=champion \
-#         --param skills.trained='["athletics", "perception"]' \
-#         --param improvements.level_4='["strength", "strength"]'
+# Play: P=characters.character_1
+#       goblin 5e/main.yaml --param $P.name=Aria --param $P.xp=6500 \
+#         --param $P.class=fighter \
+#         --param $P.ability_method=point_buy \
+#         --param $P.abilities.strength.bought=7 … (points over 8, 27 total) \
+#         --param $P.features.fighting_style=dueling \
+#         --param $P.features.martial_archetype=champion \
+#         --param $P.skills.trained='["athletics", "perception"]' \
+#         --param $P.improvements.level_4='["strength", "strength"]'
 #   (or ability_method=standard_array with abilities.<name>.assigned=15 …,
 #    or ability_method=roll to roll 4d6 drop lowest for each,
 #    or ability_method=roll_assign with abilities.<name>.roll=1..6)
-# Missing choices come back as { query }; a full sheet as { data }.
+# Missing choices come back as { query }; a full tree as { data }.
 
 level: $tmpl('level.yaml')
 feature: $tmpl('feature.yaml')
 ability: $tmpl('ability/ability.yaml')
 
-actor: $tmpl('character.yaml')
+characters:
+  character_1: $tmpl('character.yaml')
