@@ -499,6 +499,25 @@ describe('cli', () => {
     }
   });
 
+  it('--in replays every recorded roll, so dice land as they did', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'goblin-rolls-'));
+    const state = join(dir, 'state.json');
+    try {
+      const first = JSON.parse(runCli('examples/03-dice.yaml', '--compact', '--out', state).stdout);
+      expect(first.events.map(({ type, path, sides }: Record<string, unknown>) => [type, path, sides])).toEqual([
+        ['roll', 'initiative', 20],
+        ['roll', 'heal', 8],
+      ]);
+      for (let i = 0; i < 3; i++) {
+        const replayed = JSON.parse(runCli('examples/03-dice.yaml', '--compact', '--in', state).stdout);
+        expect(replayed.events).toEqual(first.events);
+        expect(replayed.data).toEqual(first.data);
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('--in replays the events saved in a prior output, file or stdin, appending new ones', () => {
     const dir = mkdtempSync(join(tmpdir(), 'goblin-in-'));
     const state = join(dir, 'state.json');

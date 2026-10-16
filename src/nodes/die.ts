@@ -2,14 +2,42 @@ import { DIE_LITERAL } from '../constants';
 import { Node } from './node';
 
 /** A die value: arithmetic rolls it, a standalone literal keeps its spec. */
+/** Where a face is rolled: it may hand back a recorded face instead of a fresh one. */
+export interface RollFrame {
+  face(sides: number): number;
+}
+
 export class Die {
   /** Faces rolled so far, process-wide: a value computed while it rose came from dice. */
   static rolled = 0;
 
+  /** Open roll frames, innermost last (evaluation is synchronous, so one stack serves). */
+  private static readonly frames: RollFrame[] = [];
+
   /** One face of a `sides`-sided die. Every roll goes through here. */
   static face(sides: number): number {
     Die.rolled++;
+    const frame = Die.frames.at(-1);
+    return frame === undefined ? Die.fresh(sides) : frame.face(sides);
+  }
+
+  static fresh(sides: number): number {
     return 1 + Math.floor(Math.random() * sides);
+  }
+
+  /** Run `body` with `frame` answering its rolls. */
+  static within<T>(frame: RollFrame, body: () => T): T {
+    Die.frames.push(frame);
+    try {
+      return body();
+    } finally {
+      Die.frames.pop();
+    }
+  }
+
+  /** The frame `body` would roll in, for one that passes rolls outward. */
+  static current(): RollFrame | undefined {
+    return Die.frames.at(-1);
   }
 
   constructor(

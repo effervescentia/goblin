@@ -167,12 +167,14 @@ missing: '#.ranked[5]'            # → null
   must contain a sigil ref to be an expression (see above): `1d20 + 2` alone
   is plain text, `1d20 + #.dex_bonus` rolls.
 - A die used in arithmetic rolls (`hit_points + hit_die` rolls the die).
-- An expression field rolls **once per evaluation**: every ref to it, and the
+- An expression field rolls **once per resolve**: every ref to it, and the
   evaluated sheet itself, reads the same number (`base: .start` matches a
-  rolled `start`). List items count as fields, so a list of rolls holds
-  still too. Each new resolve rolls afresh — except a roll written to a
-  field, which a replayed stream keeps (see Resolution) — and function
-  calls (`'roll()': 1d20 + .base`) roll on every call.
+  rolled `start`), however often it re-evaluates. List items count as
+  fields, so a list of rolls holds still too. Function calls
+  (`'roll()': 1d20 + .base`) roll on every call.
+- Every face rolled is recorded as a `roll` event (see Resolution), and a
+  replayed stream hands each one back, so nothing re-rolls under `--in`;
+  without one, each new resolve rolls afresh.
 
 ```yaml
 # Examples (examples/03-dice.yaml)
@@ -771,20 +773,30 @@ envelope that is either satisfied or asking:
   `invoke` (at the end, with none), and each invoke's after it. A write
   takes its invoke's version, or this run's — unless the replayed stream
   already held it with the same value, which keeps the recorded version.
+- Every die face rolled joins `events` too, as `{ version, type: 'roll',
+  path, sides, value }`, ordered and versioned like writes. `path` is the
+  context it rolled in: the expression field whose evaluation rolled it
+  (`initiative`, or `strength` for a patch's `keep_highest(4, 6, 3)`, one
+  event per die), or — for a roll an invoked call made itself — the invoke's
+  `path`, under its `version`. Faces count from the first within one
+  evaluation of a field, and within one invoke call; rolls outside both
+  (a `$if`, say) share the root context `''`.
 - `--in state.json` (or `--in -` for stdin) rehydrates from a prior output
   and replays all of its events. Inputs replay in order (a later parameter
   or override for the same path wins); writes are made again by the inputs,
   each paired with the recorded write in the same place — the nth write of
-  its type to its path with the nth recorded one. A recorded write that is
-  fixed history hands back its value instead of recomputing: any `rolled`
-  write (rolled ability scores, healing rolls), and every write an invoked
-  function made — a rest replayed after a level-up still heals to the max
-  it had then. Other writes (patches, mixins) without dice recompute, so
-  they follow changed inputs. This run's `--param`/`--set`/`--invoke`
+  its type to its path with the nth recorded one. Every recorded roll
+  replays: the nth face in a context hands back the recorded nth face when
+  its sides match (else it rolls afresh and joins the stream), so rolled
+  ability scores, initiative and healing land as they did. Every write an
+  invoked function made also keeps its recorded value — a rest replayed
+  after a level-up still heals to the max it had then. Other writes
+  recompute from the inputs (and replayed rolls), so they follow changed
+  inputs. This run's `--param`/`--set`/`--invoke`
   append as events of the incremented `version`. A `hash` that doesn't
   match the rest of the state throws.
-- `resolve(file, events)` takes the whole stream: write events in it are
-  the recorded rolls it reuses.
+- `resolve(file, events)` takes the whole stream: its roll events are the
+  tape it rolls from, and its write events hold what invokes wrote.
 - Param values of the wrong `:type` — or violating `:options` / `:min` /
   `:max` / `:count` / `:unique` — still throw instead of resolving.
 - `override` events write their values into the tree first (`.`/`#`/`@` target

@@ -1394,7 +1394,7 @@ describe('parameters', () => {
     const rest = invoke('rest', [], 2);
     const state = engine.resolve('hero.yaml', [rest]) as { data: unknown };
     const actor = engine.docs.get('hero.yaml');
-    expect(engine.writes(actor, state.data)).toEqual([
+    expect(engine.events(actor, state.data)).toEqual([
       { event: { type: 'set', path: 'speed', value: 40, source: 'boon.yaml' } },
       { event: { type: 'add', path: 'gold', value: 5, source: 'boon.yaml' } },
       { cause: rest, phase: rest, event: { type: 'set', path: 'hp.current', value: 9, source: 'hero.yaml' } },
@@ -1415,7 +1415,7 @@ describe('parameters', () => {
     const run = (events: StateEvent[]) => {
       const engine = hero();
       const state = engine.resolve('hero.yaml', events) as { data: { hp: Record<string, unknown> } };
-      const writes = engine.writes(engine.docs.get('hero.yaml'), state.data);
+      const writes = engine.events(engine.docs.get('hero.yaml'), state.data);
       return {
         hp: { max: state.data.hp.max, current: fieldValue(state.data.hp.current) },
         writes: writes.map(({ cause, version, event }) => ({ version: version ?? cause?.version ?? 1, ...event })),
@@ -1429,44 +1429,77 @@ describe('parameters', () => {
     expect(levelled.writes).toEqual(rested.writes);
   });
 
-  it('replays the rolls a recorded stream wrote to fields, rolling afresh only what it did not record', () => {
+  it('records every die rolled and replays it, wherever it rolled', () => {
     const hero = () => {
       const engine = new GoblinEngine('.');
       engine.register('boon.yaml', { '@': 'Hero', '@.strength': '$lib.dice.keep_highest(4, 6, 3)' });
       engine.register('hero.yaml', {
         $actor: 'Hero',
         hp: 10,
+        bonus: 2,
         strength: 0,
+        initiative: '1d20 + .bonus',
         boon: "$mixin('boon.yaml')",
         'heal()': '@.hp += 1d10',
+        'luck()': '1d6 + .bonus',
       });
       return engine;
     };
-    const heal = invoke('heal', [], 2);
     const run = (events: StateEvent[]) => {
       const engine = hero();
-      const state = engine.resolve('hero.yaml', events) as { data: Record<string, unknown> };
-      const writes = engine.writes(engine.docs.get('hero.yaml'), state.data);
+      const state = engine.resolve('hero.yaml', events) as { data: Record<string, unknown>; result?: unknown };
+      const made = engine.events(engine.docs.get('hero.yaml'), state.data);
       return {
         strength: fieldValue(state.data.strength),
         hp: fieldValue(state.data.hp),
-        writes: writes.map(({ cause, version, event }) => ({ version: version ?? cause?.version ?? 3, ...event })),
+        initiative: state.data.initiative,
+        result: state.result,
+        made: made.map(({ cause, version, event }) => ({ version: version ?? cause?.version ?? 9, ...event })),
       };
     };
+    const heal = invoke('heal', [], 2);
+    const luck = invoke('luck', [], 3);
     const random = vi.spyOn(Math, 'random');
     try {
-      random.mockReturnValue(0.99); // every face a 6, or a 10
-      const first = run([heal]);
-      expect(first).toMatchObject({ strength: 18, hp: 20 });
-      expect(first.writes).toEqual([
-        { version: 3, type: 'set', path: 'strength', value: 18, rolled: true, source: 'boon.yaml' },
-        { version: 2, type: 'add', path: 'hp', value: 10, rolled: true, source: 'hero.yaml' },
+      random.mockReturnValue(0.99); // every face a 6, a 10 or a 20
+      const first = run([heal, luck]);
+      expect(first).toMatchObject({ strength: 18, hp: 20, initiative: 22, result: 8 });
+      const rolls = first.made.filter((event) => event.type === 'roll');
+      expect(rolls.map(({ path, sides }) => `${path}:d${sides}`)).toEqual([
+        'heal:d10',
+        'luck:d6',
+        'strength:d6',
+        'strength:d6',
+        'strength:d6',
+        'strength:d6',
+        'initiative:d20',
       ]);
       random.mockReturnValue(0); // every face a 1
-      const replayed = run([heal, ...first.writes]);
-      expect(replayed).toMatchObject({ strength: 18, hp: 20, writes: first.writes });
-      // Without the recorded writes, the dice roll again.
-      expect(run([heal])).toMatchObject({ strength: 3, hp: 11 });
+      // Every recorded roll comes back: fields, invoked calls, and what they wrote.
+      expect(run([heal, luck, ...first.made])).toMatchObject({
+        strength: 18,
+        hp: 20,
+        initiative: 22,
+        result: 8,
+        made: first.made,
+      });
+      // Without them, the dice roll again.
+      expect(run([heal, luck])).toMatchObject({ strength: 3, hp: 11, initiative: 3, result: 3 });
+    } finally {
+      random.mockRestore();
+    }
+  });
+
+  it('rolls afresh for each invoke of the same function', () => {
+    const engine = new GoblinEngine('.');
+    engine.register('hero.yaml', { $actor: 'Hero', hp: 0, 'heal()': '@.hp += 1d10' });
+    const random = vi.spyOn(Math, 'random');
+    try {
+      random.mockReturnValueOnce(0.15).mockReturnValueOnce(0.65); // 2, then 7
+      const state = engine.resolve('hero.yaml', [invoke('heal', [], 1), invoke('heal', [], 2)]) as {
+        data: Record<string, unknown>;
+      };
+      expect(fieldValue(state.data.hp)).toBe(9);
     } finally {
       random.mockRestore();
     }

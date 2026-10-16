@@ -12,8 +12,8 @@
  * with a non-zero exit code.
  */
 import { createHash } from 'node:crypto';
-import { type EngineWrite, GoblinEngine } from './engine';
-import type { InputEvent, StateEvent, WriteEvent } from './inputs';
+import { type EngineEvent, GoblinEngine } from './engine';
+import type { InputEvent, RollEvent, StateEvent, WriteEvent } from './inputs';
 import { print } from './nodes/serialize';
 
 export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--help]
@@ -24,7 +24,8 @@ satisfied (version counts runs since the first, bumped by each --in; events
 is the stream of every --param/--set/--invoke given so far, in order, each
 as { version, type: "parameter" | "override" | "invoke", path, value }, with the
 engine's writes woven in as { version, type: "set" | "add" | "subtract",
-path, value, rolled, source, line, column } — in the order made, an
+path, value, rolled, source, line, column } and every die rolled as
+{ version, type: "roll", path, sides, value } — in the order made, an
 invoke's right after it; hash is a sha256 over the compact JSON of the rest,
 plus "result" under --invoke), or
 { "query": […] } listing the outstanding parameters. A resolved sheet must
@@ -49,8 +50,8 @@ Arguments:
                 their source expression; records left empty collapse to null.
   --in          Rehydrate from a prior { "data": … } output (a file, or
                 - for stdin): all its events replay. Inputs apply in order
-                (later wins) and make the writes again; a write recorded as
-                rolled, or made by an invoke, keeps its recorded value. This
+                (later wins) and make the writes again; every recorded roll
+                lands as it did, and an invoke's writes keep their values. This
                 run's --param/--set/--invoke are appended as events of the
                 incremented version. A hash must match the rest of the state.
   --out         Also write the JSON to this file (replacing it) when the
@@ -179,11 +180,25 @@ function isWrite(event: unknown): event is WriteEvent {
   );
 }
 
-/** Thread the engine's writes into the input stream in the order made:
- * resolving writes ahead of the first invoke (or last, with none), each
- * invoke's after it. A write keeps the version a replayed stream recorded
+function isRoll(event: unknown): event is RollEvent {
+  return (
+    isRecord(event) &&
+    isVersion(event.version) &&
+    event.type === 'roll' &&
+    typeof event.path === 'string' &&
+    Number.isInteger(event.sides) &&
+    (event.sides as number) > 0 &&
+    Number.isInteger(event.value) &&
+    (event.value as number) >= 1 &&
+    (event.value as number) <= (event.sides as number)
+  );
+}
+
+/** Thread the engine's writes and rolls into the input stream in the order
+ * made: those from resolving ahead of the first invoke (or last, with none),
+ * each invoke's after it. One keeps the version a replayed stream recorded
  * for it, else takes its invoke's, else this run's `version`. */
-export function weave(inputs: InputEvent[], writes: EngineWrite[], version: number): StateEvent[] {
+export function weave(inputs: InputEvent[], writes: EngineEvent[], version: number): StateEvent[] {
   const first = inputs.find((input) => input.type === 'invoke');
   const after = (phase: InputEvent | undefined) =>
     writes
@@ -205,9 +220,9 @@ export function rehydrate(state: unknown): { version: number; events: StateEvent
   if (!isRecord(state) || !('data' in state)) throw new Error('--in expects a resolved { "data": … } envelope');
   const { hash, version, events = [], result, data } = state;
   if (version !== undefined && !isVersion(version)) throw new Error('--in version must be a non-negative integer');
-  if (!Array.isArray(events) || !events.every((event) => isInput(event) || isWrite(event)))
+  if (!Array.isArray(events) || !events.every((event) => isInput(event) || isWrite(event) || isRoll(event)))
     throw new Error(
-      '--in events must be { version, type, path, value } objects of type param, override, invoke, set, add or subtract',
+      '--in events must be { version, type, path, value } objects of type parameter, override, invoke, set, add, subtract or roll (with sides)',
     );
   // Stringify drops an undefined version or result, so states without them still verify.
   if (hash !== undefined && hash !== hashOf({ version, events, result, data }))
@@ -286,10 +301,10 @@ if (import.meta.main) {
       'data' in state
         ? { ...(invoked && 'result' in state ? { result: show(state.result) } : {}), data: show(state.data) }
         : state;
-    const writes = 'data' in state ? engine.writes(actor, state.data) : [];
+    const made = 'data' in state ? engine.events(actor, state.data) : [];
     const stream = weave(
       events.filter(isInput),
-      writes.map((write) => ({ ...write, event: { ...write.event, value: show(write.event.value) } })),
+      made.map((entry) => ({ ...entry, event: { ...entry.event, value: show(entry.event.value) } }) as EngineEvent),
       version,
     );
     const out = withHash(shown, stream, version);

@@ -4,14 +4,14 @@
 
 /** A write the engine made while resolving — a patch value or `=` (`set`),
  * `+` (`add`), `-=` (`subtract`) — at `path` from the entry root. Replay makes
- * it again from the inputs, reusing the recorded value when it `rolled` or an
- * invoke made it. */
+ * it again from the inputs, reusing the recorded value when an invoke made it
+ * (rolls replay on their own, as roll events). */
 export interface WriteEvent {
   version: number;
   type: 'set' | 'add' | 'subtract';
   path: string;
   value: unknown;
-  /** The value came from dice: replay writes it back instead of rolling again. */
+  /** The value came from dice (rolled by the write itself, not read from a rolled field). */
   rolled?: boolean;
   source?: string;
   line?: number;
@@ -22,8 +22,27 @@ export function isWriteEvent(event: StateEvent): event is WriteEvent {
   return event.type === 'set' || event.type === 'add' || event.type === 'subtract';
 }
 
-/** The state JSON's `events`: inputs, with the writes they led to woven in. */
-export type StateEvent = InputEvent | WriteEvent;
+/** One die face rolled while resolving, in the context it rolled in: the
+ * field whose evaluation rolled it (`path` from the entry root), or the
+ * invoke whose call did (its `version` and `path`). Replay hands it back. */
+export interface RollEvent {
+  version: number;
+  type: 'roll';
+  path: string;
+  sides: number;
+  value: number;
+}
+
+/** The state JSON's `events`: inputs, with the writes and rolls they led to woven in. */
+export type StateEvent = InputEvent | WriteEvent | RollEvent;
+
+export function isRollEvent(event: StateEvent): event is RollEvent {
+  return event.type === 'roll';
+}
+
+export function isInputEvent(event: StateEvent): event is InputEvent {
+  return event.type === 'parameter' || event.type === 'override' || event.type === 'invoke';
+}
 
 /** One `--param`, `--set` or `--invoke` (`value` holds its arguments), given
  * on the run that produced `version`. */

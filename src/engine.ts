@@ -43,10 +43,20 @@ import {
   VALUE_KEY,
   VERSION_KEY,
 } from './constants';
-import { type InputEvent, isWriteEvent, latest, nest, type StateEvent, type WriteEvent } from './inputs';
+import {
+  type InputEvent,
+  isInputEvent,
+  isRollEvent,
+  isWriteEvent,
+  latest,
+  nest,
+  type RollEvent,
+  type StateEvent,
+  type WriteEvent,
+} from './inputs';
 import { withNatives } from './lib';
 import { collectLocations, copyLocations, type Location, type Locations } from './locations';
-import { Die, DieNode } from './nodes/die';
+import { Die, DieNode, type RollFrame } from './nodes/die';
 import { ExpressionNode } from './nodes/expression';
 import { FunctionNode } from './nodes/function';
 import { parse } from './nodes/parse';
@@ -98,6 +108,8 @@ function isAdditiveList(items: unknown[], label = 'list'): boolean {
 
 /** A write as the engine logged it (see `recordEvent`). */
 interface LoggedWrite {
+  /** Order made, among writes and rolls. */
+  seq: number;
   record: object;
   key: string;
   kind: string;
@@ -107,17 +119,37 @@ interface LoggedWrite {
   /** The latest invoke to start before it was made. */
   phase?: InputEvent;
   rolled: boolean;
-  /** The recorded write whose roll it reused. */
+  /** The recorded write whose value it reused. */
   replayed?: WriteEvent;
 }
 
-/** A logged write as a stream event, with where it belongs in the stream. */
-export interface EngineWrite {
+/** A die face on the roll tape: recorded by a replayed stream, or rolled here. */
+interface Face {
+  sides: number;
+  value: number;
+  /** The run that first rolled it, when a replayed stream recorded it. */
+  version?: number;
+  /** Already in this run's log (a field re-evaluated reads it again). */
+  logged?: boolean;
+}
+
+/** A face as the engine logged it, the first time this run used it. */
+interface LoggedRoll {
+  seq: number;
+  path: string;
+  face: Face;
+  /** The invoke whose call rolled it, outside any field. */
   cause?: InputEvent;
   phase?: InputEvent;
-  /** The recorded version, when a replayed stream already held this write. */
+}
+
+/** A logged write or roll as a stream event, with where it belongs in the stream. */
+export interface EngineEvent {
+  cause?: InputEvent;
+  phase?: InputEvent;
+  /** The recorded version, when a replayed stream already held this event. */
   version?: number;
-  event: Omit<WriteEvent, 'version'>;
+  event: Omit<WriteEvent, 'version'> | Omit<RollEvent, 'version'>;
 }
 
 function writeType(kind: string): WriteEvent['type'] {
@@ -135,11 +167,17 @@ export class GoblinEngine {
   private readonly fieldEvents = new WeakMap<object, Map<string, unknown[]>>();
   /** Every patch and assignment write in the order made. */
   private readonly writeLog: LoggedWrite[] = [];
+  /** Every die face, the first time this run used it. */
+  private readonly rollLog: LoggedRoll[] = [];
+  /** Order of writes and rolls together. */
+  private seq = 0;
+  /** Faces by roll context (`field:<path>` or `invoke:<version>:<path>`), nth in its place. */
+  private tape = new Map<string, Face[]>();
   /** The invoke event whose call is running, if any. */
   private invoking: InputEvent | undefined;
   /** The latest invoke to start: writes made since follow it in the stream. */
   private phase: InputEvent | undefined;
-  /** Writes a replayed stream recorded, whose rolls this resolution reuses. */
+  /** Writes a replayed stream recorded: an invoke's keep their values. */
   private recorded: WriteEvent[] = [];
   /** The tree being resolved, which write paths run from. */
   private entryRoot: unknown;
@@ -576,7 +614,7 @@ export class GoblinEngine {
     const mark = this.rollMark();
     let value: unknown;
     try {
-      value = this.evaluate(raw, scope);
+      value = Die.within(this.fieldFrame(record, key), () => this.evaluate(raw, scope));
     } finally {
       if (this.rolledSince(mark)) {
         const keys = this.rolledFields.get(record) ?? new Set();
@@ -778,18 +816,35 @@ export class GoblinEngine {
     actorRaw: unknown,
     events: StateEvent[] = [],
   ): { data: unknown; result?: unknown } | { query: MissingParam[] } {
-    const inputs = events.filter((event): event is InputEvent => !isWriteEvent(event));
-    // Recorded writes are not replayed as such — the inputs regenerate them —
-    // but their rolls are, so dice written to a field stay put.
+    const inputs = events.filter(isInputEvent);
+    // Recorded writes are not replayed as such — the inputs make them again —
+    // but recorded rolls are, so every die lands as it did.
     this.recorded = events.filter(isWriteEvent);
+    this.tape = new Map();
+    for (const roll of events.filter(isRollEvent)) {
+      const invoked = inputs.some((e) => e.type === 'invoke' && e.version === roll.version && e.path === roll.path);
+      const context = invoked ? `invoke:${roll.version}:${roll.path}` : `field:${roll.path}`;
+      const faces = this.tape.get(context) ?? [];
+      faces.push({ sides: roll.sides, value: roll.value, version: roll.version });
+      this.tape.set(context, faces);
+    }
     this.entryRoot = actorRaw;
     this.phase = undefined;
+    // Rolls outside any field (a `$if`, say) take their turn in one run-wide context.
+    let n = 0;
+    const run: RollFrame = { face: (sides) => this.tapeFace('field:', '', n++, sides) };
+    return Die.within(run, () => this.resolveInputs(actorRaw, inputs));
+  }
+
+  private resolveInputs(
+    actorRaw: unknown,
+    inputs: InputEvent[],
+  ): { data: unknown; result?: unknown } | { query: MissingParam[] } {
     const keyed = this.splitNamespaced(actorRaw, inputs);
     this.applyOverrides(actorRaw, keyed.inputs);
     const scope: EvalRoots = { doc: actorRaw, actor: actorRaw, app: this.appRoot, current: actorRaw, ...keyed };
     this.expandCalls(actorRaw, scope);
     this.applyOverrides(actorRaw, keyed.inputs);
-    this.replayPending();
     this.shareWithApp(actorRaw);
     const outstanding = RecordNode.collectParams(actorRaw, this.namespaceOf, inputs);
     if (outstanding.length > 0) return { query: outstanding };
@@ -825,8 +880,12 @@ export class GoblinEngine {
     this.invoking = event;
     this.phase = event;
     let result: unknown;
+    let n = 0;
+    const frame: RollFrame = {
+      face: (sides) => this.tapeFace(`invoke:${event.version}:${event.path}`, event.path, n++, sides, event),
+    };
     try {
-      result = fn(...(Array.isArray(event.value) ? event.value : []));
+      result = Die.within(frame, () => fn(...(Array.isArray(event.value) ? event.value : [])));
     } finally {
       this.invoking = outer;
     }
@@ -1030,10 +1089,43 @@ export class GoblinEngine {
   ): unknown {
     const event = this.event(source, kind, value, at);
     this.seedEvents(target, key, origin).push(event);
-    const entry: LoggedWrite = { record: target, key, kind, event, cause, phase: this.phase, rolled };
+    const entry: LoggedWrite = { seq: this.seq++, record: target, key, kind, event, cause, phase: this.phase, rolled };
     this.writeLog.push(entry);
-    const replayed = this.recorded.length > 0 && this.replayRoll(entry, this.treePaths());
+    const replayed = cause !== undefined && this.recorded.length > 0 && this.replayInvokeWrite(entry);
     return replayed ? deepClone(entry.event[kind]) : value;
+  }
+
+  /** The nth face rolled in `context`: the tape's, when it holds one of the
+   * same sides, else a fresh roll that joins it. Logged the first time used. */
+  private tapeFace(context: string, path: string, n: number, sides: number, cause?: InputEvent): number {
+    const faces = this.tape.get(context) ?? [];
+    this.tape.set(context, faces);
+    let face = faces[n];
+    if (face === undefined || face.sides !== sides) {
+      face = { sides, value: Die.fresh(sides) };
+      faces[n] = face;
+    }
+    if (!face.logged) {
+      face.logged = true;
+      this.rollLog.push({ seq: this.seq++, path, face, cause, phase: this.phase });
+    }
+    return face.value;
+  }
+
+  /** The roll context of one evaluation of `record[key]`: faces count from 0
+   * each time, so a field rolls the same however often it is evaluated. A
+   * field outside the entry tree rolls in its caller's context. */
+  private fieldFrame(record: object, key: string): RollFrame {
+    const outer = Die.current();
+    let n = 0;
+    return {
+      face: (sides) => {
+        const at = this.treePaths().get(record);
+        if (at === undefined) return outer === undefined ? Die.fresh(sides) : outer.face(sides);
+        const path = [...at, key].join('.');
+        return this.tapeFace(`field:${path}`, path, n++, sides);
+      },
+    };
   }
 
   /** Paths from `root` (the entry by default) to every record and list in it. */
@@ -1064,40 +1156,25 @@ export class GoblinEngine {
     return this.recorded.filter((event) => event.type === type && event.path === path)[nth];
   }
 
-  /** Swap a write's fresh value for its recorded twin's, when that one is
-   * fixed history: a roll, or anything an invoked call wrote (a rest heals to
-   * the max it had then, not the max a later level-up gives). */
-  private replayRoll(entry: LoggedWrite, paths: Map<object, string[]>): boolean {
-    if (entry.replayed !== undefined || this.recorded.length === 0) return entry.replayed !== undefined;
-    const recorded = this.recordedFor(entry, paths);
-    if (recorded === undefined || !(recorded.rolled === true || entry.cause !== undefined)) return false;
+  /** Swap an invoked call's write for its recorded twin's value: what a call
+   * did is history (a rest heals to the max it had then, not the max a later
+   * level-up gives). */
+  private replayInvokeWrite(entry: LoggedWrite): boolean {
+    const recorded = this.recordedFor(entry, this.treePaths());
+    if (recorded === undefined) return false;
     entry.event[entry.kind] = deepClone(recorded.value);
     entry.replayed = recorded;
-    entry.rolled ||= recorded.rolled === true;
     return true;
   }
 
-  /** Writes made onto a clone before it joined the tree had no path to
-   * match by; once expansion places them, their rolls replay too. */
-  private replayPending(): void {
-    if (this.recorded.length === 0) return;
-    const paths = this.treePaths();
-    for (const entry of this.writeLog) {
-      if (entry.replayed !== undefined || !this.replayRoll(entry, paths)) continue;
-      // Only the field's latest write is what it holds.
-      if (entry.kind === SET_KEY && this.fieldEvents.get(entry.record)?.get(entry.key)?.at(-1) === entry.event)
-        (entry.record as Record<string, unknown>)[entry.key] = deepClone(entry.event[entry.kind]);
-    }
-  }
-
   /**
-   * The logged writes that landed in `root`, in the order made, as stream
-   * events read back from `data` (`root`'s `debug` output), so their values
-   * match the printed `:events`. Each keeps the invoke that caused it, the
-   * invoke it followed (`phase`), and the recorded version when a replayed
-   * stream already held the same write.
+   * The logged writes that landed in `root` and every die rolled, in the
+   * order made, as stream events. Write values read back from `data`
+   * (`root`'s `debug` output), so they match the printed `:events`. Each
+   * keeps the invoke that caused it, the invoke it followed (`phase`), and
+   * the recorded version when a replayed stream already held it.
    */
-  writes(root: unknown, data: unknown): EngineWrite[] {
+  events(root: unknown, data: unknown): EngineEvent[] {
     const paths = this.treePaths(root);
     const printedAt = (path: string[]) => {
       let node = data as Record<string, unknown> | undefined;
@@ -1109,8 +1186,8 @@ export class GoblinEngine {
       }
       return node;
     };
-    return this.writeLog.flatMap((entry) => {
-      const { record, key, kind, event, cause, phase } = entry;
+    const writes = this.writeLog.flatMap((entry) => {
+      const { seq, record, key, kind, event, cause, phase } = entry;
       const at = paths.get(record);
       const log = this.fieldEvents.get(record)?.get(key);
       const index = log?.indexOf(event) ?? -1;
@@ -1134,8 +1211,16 @@ export class GoblinEngine {
       if (typeof printed[COLUMN_KEY] === 'number') write.column = printed[COLUMN_KEY];
       const recorded = entry.replayed ?? this.recordedFor(entry, paths);
       const version = recorded !== undefined && sameValue(recorded.value, write.value) ? recorded.version : undefined;
-      return [{ cause, phase, version, event: write }];
+      return [{ seq, cause, phase, version, event: write }];
     });
+    const rolls = this.rollLog.map(({ seq, path, face, cause, phase }) => ({
+      seq,
+      cause,
+      phase,
+      version: face.version,
+      event: { type: 'roll' as const, path, sides: face.sides, value: face.value },
+    }));
+    return [...writes, ...rolls].sort((a, b) => a.seq - b.seq).map(({ seq: _, ...rest }) => rest);
   }
 
   /** Open a field's log, recording what it already holds as the first event.
@@ -1205,7 +1290,9 @@ export class GoblinEngine {
     const trimmed = value.trim();
     if (!CALL_EXPR.test(trimmed)) return value;
     try {
-      const inlined = this.evalExpr(trimmed, scope);
+      // A probe: anything it rolls is thrown away with a non-record result,
+      // so it rolls scratch dice rather than taking the field's.
+      const inlined = Die.within({ face: Die.fresh }, () => this.evalExpr(trimmed, scope));
       return FunctionNode.isRecordBody(inlined) ? inlined : value;
     } catch (error) {
       // A template is always resolvable, so its errors (a bad namespace) are real.
