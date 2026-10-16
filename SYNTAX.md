@@ -534,6 +534,11 @@ it. Each `$tmpl` makes a fresh copy, so one file can fill several slots.
   (`characters.character_1.class`), and `--param` / `--set` address it the
   same way. Inside the actor those values read relative to it, so its own
   expressions and gates (`$if: "@.class == 'fighter'"`) are unchanged.
+- Reading into it from outside (`$.characters.character_1.level`, or the
+  same through `#`, `@` or `.`) evaluates the target as that actor: its `@`
+  and `#` are the nested actor, not the reader's document. The entry's
+  top-level values are shared with `$` once they expand, so `$.x` and `#.x`
+  read the same tree.
 - Overrides reach it as it expands, before its mixins gate on anything, so
   `--set characters.character_1.level=5` brings in level-5 features.
 - Provided values fill in before each mixin applies, so a later one can gate
@@ -559,6 +564,7 @@ characters:
 party:
   scout: $tmpl('15-nested-hero.yaml') # query: party.scout.name
   guide: $tmpl('15-nested-hero.yaml') # query: party.guide.name
+lead_pace: $.party.scout.pace # the scout's `@.speed` → 40
 ```
 
 ## Mixins

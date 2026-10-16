@@ -76,6 +76,7 @@ describe('examples', () => {
         scout: { name: 'Ash', speed: 40, gold: 15, pace: 40 },
         guide: { name: 'Bree', speed: 20, gold: 10, pace: 20 },
       },
+      lead_pace: 40,
     });
   });
 

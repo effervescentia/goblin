@@ -315,7 +315,7 @@ export class GoblinEngine {
       const rawTarget = this.derefValue(found?.value);
       // Every sigil names exactly one tree: a missing path never falls back.
       if (rawTarget === undefined) return undefined;
-      const targetScope = {
+      const ownScope = {
         ...scope,
         source: found === null ? scope.source : this.fieldSource(found.parent, found.key),
         // The target reads `#` as its own document, not the reader's.
@@ -325,6 +325,17 @@ export class GoblinEngine {
         // values by where they live, not where the reference was written.
         path: root === CURRENT ? [...(scope.path ?? []), ...segments] : segments,
       };
+      // A target inside a nested actor reads `#` and `@` as that actor.
+      const nested = this.nestedActorOn(base, segments, scope);
+      const targetScope =
+        nested === undefined
+          ? ownScope
+          : {
+              ...this.enterActor(nested.actor, scope, base === scope.actor ? segments.slice(0, nested.depth) : []),
+              source: ownScope.source,
+              current: ownScope.current,
+              path: segments.slice(nested.depth),
+            };
       const value =
         found !== null && found.parent === targetScope.current
           ? this.evaluateField(found.parent, found.key, rawTarget, targetScope)
@@ -678,9 +689,21 @@ export class GoblinEngine {
     };
     this.expandCalls(actorRaw, scope);
     this.applyOverrides(actorRaw, overrides);
+    this.shareWithApp(actorRaw);
     const outstanding = RecordNode.collectParams(actorRaw).filter((param) => provided[param.path] === undefined);
     if (outstanding.length > 0) return { query: outstanding };
     return { data: debug(this.evaluate(actorRaw, scope)) };
+  }
+
+  /** Point `$` at the resolved entry's own (expanded) top-level values in place
+   * of the copies taken on load, so `$.x` and `#.x` read the same tree. */
+  private shareWithApp(entry: unknown): void {
+    const source = this.sourceOf(entry);
+    if (source === undefined || entry === null || typeof entry !== 'object' || Array.isArray(entry)) return;
+    for (const [key, value] of Object.entries(entry)) {
+      const held = this.appRoot[key];
+      if (held !== null && typeof held === 'object' && this.owners.get(held) === source) this.appRoot[key] = value;
+    }
   }
 
   // -- patches (class files, levels, conditions) ----------------------------
@@ -958,6 +981,24 @@ export class GoblinEngine {
     };
     visit(raw, scope, []);
     return wrote;
+  }
+
+  /** The innermost nested actor `path` passes through from `base`, and how
+   * many segments in it starts. */
+  private nestedActorOn(
+    base: unknown,
+    path: string[],
+    scope: EvalRoots,
+  ): { actor: Record<string, unknown>; depth: number } | undefined {
+    let found: { actor: Record<string, unknown>; depth: number } | undefined;
+    let node = base;
+    for (const [index, seg] of path.slice(0, -1).entries()) {
+      node = getChild(node, seg);
+      if (node === null || typeof node !== 'object' || Array.isArray(node)) break;
+      const record = node as Record<string, unknown>;
+      if (this.isNestedActor(record, scope)) found = { actor: record, depth: index + 1 };
+    }
+    return found;
   }
 
   /** Whether `record` declares an actor (`$actor: X`) other than the one in scope. */

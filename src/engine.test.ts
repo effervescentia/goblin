@@ -551,6 +551,23 @@ describe('nested actors', () => {
     expect(guide?.pace).toBe(20);
   });
 
+  it('reads into a nested actor as that actor, through any sigil', () => {
+    const engine = party();
+    const root = engine.docs.get('party.yaml') as Record<string, unknown>;
+    Object.assign(root, {
+      via_app: '$.party.scout.pace',
+      via_doc: '#.party.scout.pace',
+      via_actor: '@.party.scout.pace',
+      via_current: '.party.scout.pace',
+      scout_name: '$.party.scout.name',
+    });
+    const state = engine.resolve('party.yaml', { 'party.scout.name': 'Ash', 'party.guide.name': 'Bree' }) as {
+      data: Record<string, unknown>;
+    };
+    // `pace: '@.speed'` reads the scout, boon included, not the party root.
+    expect(state.data).toMatchObject({ via_app: 40, via_doc: 40, via_actor: 40, via_current: 40, scout_name: 'Ash' });
+  });
+
   it("never asks for the params inside a definition's body", () => {
     expect(RecordNode.collectParams({ 'pick(x)': { choice: { ':param': true } } })).toEqual([]);
   });
