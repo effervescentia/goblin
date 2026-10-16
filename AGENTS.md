@@ -75,11 +75,12 @@ apart. Treat a missing spec update as an incomplete change.
   `DieNode.parse`, `RecordNode.collectParams`, each node's `serialize`) — not as
   loose helpers in `src/utils.ts`. Keep `src/utils.ts` for genuinely shared,
   node-agnostic code (refs, paths, expression compilation, serialization).
-- `GoblinEngine` (`src/engine.ts`) keeps resolution, evaluation, inputs and
-  patching; it delegates to `src/journal.ts` (per-field `:events`, the
-  write/roll stream, the roll tape), `src/provenance.ts` (WeakMap side tables:
-  origins, owners, homes, namespaces, locations) and `src/documents.ts`
-  (loading, `$tmpl` discovery, `$`/`$lib` binding). New history state goes in
+- `GoblinEngine` (`src/engine.ts`) keeps resolution, evaluation and inputs;
+  it delegates to `src/patcher.ts` (applying patches and mixins, call
+  expansion), `src/journal.ts` (per-field `:events`, the write/roll stream,
+  the roll tape), `src/provenance.ts` (WeakMap side tables: origins, owners,
+  homes, namespaces, locations) and `src/documents.ts` (loading, `$tmpl`
+  discovery, `$`/`$lib` binding). New history state goes in
   the journal and new "where did this come from" state in provenance, not on the engine.
 - The standard library (`$lib`) lives in `src/lib/`: one file per namespace
   (`math.ts`), listed in `src/lib/index.ts`, plus `src/lib/lib.yaml` for

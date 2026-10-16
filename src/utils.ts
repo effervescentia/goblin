@@ -158,6 +158,26 @@ export function setPath(root: unknown, path: string[], value: unknown): void {
   node[path[path.length - 1]!] = value;
 }
 
+/** The record owning the path's last segment and the key within it,
+ * creating parents the way `setPath` does so events can be filed first. */
+export function ownerOf(base: unknown, path: string[]): { owner: Record<string, unknown>; key: string } | null {
+  const key = path.at(-1);
+  if (key === undefined || base === null || typeof base !== 'object') return null;
+  let node = base as Record<string, unknown>;
+  for (const seg of path.slice(0, -1)) {
+    if (typeof node[seg] !== 'object' || node[seg] === null) node[seg] = {};
+    node = node[seg] as Record<string, unknown>;
+  }
+  return { owner: node, key };
+}
+
+/** The tree a sigil reads from. */
+export function rootFor(root: string, scope: EvalRoots): unknown {
+  if (root === CURRENT) return scope.current;
+  if (root === DOCUMENT) return scope.home ?? scope.doc;
+  return root === ACTOR ? scope.actor : scope.app;
+}
+
 /** Join a root dir and file, collapsing `.`/`..` (Bun.file won't). */
 export function joinPath(root: string, file: string): string {
   const out: string[] = [];

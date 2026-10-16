@@ -15,16 +15,12 @@
  */
 
 import {
-  ACTOR,
   ACTOR_KEY,
   ADD_KEY,
   APP,
-  CALL_EXPR,
   CURRENT,
   DIE_LITERAL,
-  DOCUMENT,
   IF_KEY,
-  MIXIN_CALL,
   OVERRIDE_SOURCE,
   PARAM_KEY,
   PARAM_VALUE_KEY,
@@ -47,6 +43,7 @@ import { FunctionNode } from './nodes/function';
 import { parse } from './nodes/parse';
 import { type MissingParam, RecordNode } from './nodes/record';
 import { debug } from './nodes/serialize';
+import { Patcher } from './patcher';
 import { Provenance } from './provenance';
 import {
   type AssignOp,
@@ -61,39 +58,20 @@ import {
   isPathKey,
   isPrivateKey,
   isValidateKey,
+  ownerOf,
   parentOf,
   parseRef,
   parseWildcard,
   type ResolveHooks,
+  rootFor,
   sameValue,
   setPath,
-  stripPlus,
 } from './utils';
-
-/** `+field` on a scalar: two numbers sum, anything else composes an
- * expression so an added expression stays lazy. */
-function addRaw(existing: unknown, value: unknown, label: string): unknown {
-  if (existing === undefined || existing === null) return deepClone(value);
-  if (typeof existing === 'number' && typeof value === 'number') return existing + value;
-  if (typeof existing === 'object' || typeof value === 'object') {
-    throw new Error(`cannot add to ${label}: a record or list is not a value to add to`);
-  }
-  return `(${String(existing)}) + (${String(value)})`;
-}
-
-/** `+item` entries add, a plain list replaces; mixing the two readings in one
- * list is rejected rather than silently picking one. */
-function isAdditiveList(items: unknown[], label = 'list'): boolean {
-  const additions = items.filter((item) => typeof item === 'string' && item.startsWith('+'));
-  if (additions.length > 0 && additions.length < items.length) {
-    throw new Error(`mixed list patch: ${label} combines '+item' additions with plain items — use one or the other`);
-  }
-  return additions.length > 0;
-}
 
 export class GoblinEngine {
   private readonly provenance = new Provenance();
   private readonly journal = new Journal(this.provenance);
+  private readonly patcher = new Patcher(this, this.journal, this.provenance);
   private readonly documents: Documents;
   /** Raw (unevaluated) documents by file name. */
   readonly docs: Map<string, unknown>;
@@ -171,13 +149,6 @@ export class GoblinEngine {
     return this.docs.get(source) ?? scope.home;
   }
 
-  /** The tree a sigil reads from. */
-  private rootFor(root: string, scope: EvalRoots): unknown {
-    if (root === CURRENT) return scope.current;
-    if (root === DOCUMENT) return scope.home ?? scope.doc;
-    return root === ACTOR ? scope.actor : scope.app;
-  }
-
   /** Mark a record call's copy as written in `doc`, so its `#` stays there. */
   settle<T>(tree: T, doc: unknown): T {
     return this.provenance.settle(tree, doc);
@@ -185,7 +156,7 @@ export class GoblinEngine {
 
   resolveRef(ref: string, scope: EvalRoots): unknown {
     const { root, path } = parseRef(ref);
-    let base = this.rootFor(root, scope);
+    let base = rootFor(root, scope);
     let segments = path;
     // `$lib.…` addresses the standard library (only when written as $lib, not $.lib),
     // unless the base document defines its own `lib` table (explicit bindings win).
@@ -318,14 +289,14 @@ export class GoblinEngine {
       },
       assign: (ref: string, value: unknown, op: AssignOp) => {
         const { root, path } = parseRef(ref);
-        const base = this.rootFor(root, scope);
+        const base = rootFor(root, scope);
         const next = this.write(base, root, path, value, op, scope, this.journal.rolledSince(mark));
         mark = this.journal.mark();
         return next;
       },
       assignEach: (ref: string, expr: string, op: AssignOp) => {
         const { root, path } = parseRef(ref);
-        const base = this.rootFor(root, scope);
+        const base = rootFor(root, scope);
         for (const target of this.expandPaths(base, path, scope)) {
           const owner = getPath(base, target.slice(0, -1));
           if (owner === null || typeof owner !== 'object') continue;
@@ -351,7 +322,7 @@ export class GoblinEngine {
   ): unknown {
     // Dice roll once here, so the event and the field hold the same number.
     let amount = op === '=' ? value : Number(value);
-    const slot = this.ownerOf(base, path);
+    const slot = ownerOf(base, path);
     if (slot) {
       const kind = op === '=' ? SET_KEY : op === '+' ? ADD_KEY : SUBTRACT_KEY;
       amount = this.journal.record(slot.owner, slot.key, kind, deepClone(amount), {
@@ -412,7 +383,7 @@ export class GoblinEngine {
    */
   evaluate(raw: unknown, scope: EvalRoots): unknown {
     if (scope.path === undefined) {
-      if (this.expandCalls(raw, scope)) this.cache.clear();
+      if (this.patcher.expandCalls(raw, scope)) this.cache.clear();
       if (RecordNode.materializeParams(raw, scope.inputs, this.namespaceOf)) this.cache.clear();
       return this.evaluate(raw, { ...scope, path: [] });
     }
@@ -521,7 +492,7 @@ export class GoblinEngine {
     );
     const scope: EvalRoots = { doc: raw, actor: raw, app: this.appRoot, current: raw, ...keyed };
     // Calls (and mixins) expand before params fill, so their params fill too.
-    if (this.expandCalls(raw, scope)) this.cache.clear();
+    if (this.patcher.expandCalls(raw, scope)) this.cache.clear();
     if (RecordNode.materializeParams(raw, keyed.inputs, this.namespaceOf)) this.cache.clear();
     return this.evaluate(raw, { ...scope, path: [] });
   }
@@ -538,7 +509,7 @@ export class GoblinEngine {
     const raw = this.provenance.clone(loaded);
     if (loaded !== null && typeof loaded === 'object')
       this.provenance.origins.set(raw as object, this.provenance.origins.get(loaded) ?? file);
-    this.expandCalls(raw, { doc: raw, actor: raw, app: this.appRoot, current: raw });
+    this.patcher.expandCalls(raw, { doc: raw, actor: raw, app: this.appRoot, current: raw });
     return RecordNode.collectParams(raw, this.namespaceOf);
   }
 
@@ -571,7 +542,7 @@ export class GoblinEngine {
           if (typeof type === 'string' && type) RecordNode.checkParamType(type, value, path.join('.'));
           RecordNode.checkParamConstraints(record, value, path.join('.'));
         }
-        const slot = this.ownerOf(base, path);
+        const slot = ownerOf(base, path);
         if (slot && !sameValue(existing, value)) this.journal.override(slot.owner, slot.key, deepClone(value), version);
         setPath(base as Record<string, unknown>, path, deepClone(value));
       }
@@ -614,7 +585,7 @@ export class GoblinEngine {
     const keyed = this.splitNamespaced(actorRaw, inputs);
     this.applyOverrides(actorRaw, keyed.inputs);
     const scope: EvalRoots = { doc: actorRaw, actor: actorRaw, app: this.appRoot, current: actorRaw, ...keyed };
-    this.expandCalls(actorRaw, scope);
+    this.patcher.expandCalls(actorRaw, scope);
     this.applyOverrides(actorRaw, keyed.inputs);
     this.shareWithApp(actorRaw);
     const outstanding = RecordNode.collectParams(actorRaw, this.namespaceOf, inputs);
@@ -623,7 +594,7 @@ export class GoblinEngine {
     if (invokes.length === 0) return { data: debug(this.evaluate(actorRaw, scope)) };
     // The expansion `evaluate` would run: it re-applies nested actors'
     // overrides over the mixins that wrote under them.
-    this.expandCalls(actorRaw, scope);
+    this.patcher.expandCalls(actorRaw, scope);
     RecordNode.materializeParams(actorRaw, keyed.inputs, this.namespaceOf);
     this.cache.clear();
     let result: unknown;
@@ -634,7 +605,7 @@ export class GoblinEngine {
       const after = (events: InputEvent[]) => events.filter((e) => inputs.indexOf(e) > inputs.indexOf(event));
       const later = { inputs: after(keyed.inputs), namespaced: after(keyed.namespaced) };
       this.applyOverrides(actorRaw, later.inputs);
-      this.expandCalls(actorRaw, { ...scope, ...later });
+      this.patcher.expandCalls(actorRaw, { ...scope, ...later });
       this.cache.clear();
     }
     // Already expanded: a fresh expansion would re-apply every set.
@@ -713,22 +684,7 @@ export class GoblinEngine {
   /** Apply an in-memory patch (e.g. a `$tmpl('…')` clone) onto an actor.
    * `source` names it in the event logs; defaults to the document it came from. */
   applyRaw(actorRaw: unknown, patch: unknown, source?: string, inputs?: InputEvent[]): unknown {
-    const scope: EvalRoots = {
-      doc: patch,
-      actor: actorRaw,
-      app: this.appRoot,
-      current: actorRaw,
-      inputs: inputs?.filter((event) => event.type === 'parameter'),
-    };
-    if (patch !== null && typeof patch === 'object') this.provenance.actorOf.set(patch, actorRaw);
-    const patchSource = source ?? this.provenance.sourceOf(patch);
-    this.provenance.claim(actorRaw, this.provenance.sourceOf(actorRaw) ?? '');
-    this.journal.asSource(patchSource, actorRaw, () =>
-      this.applyNode(actorRaw, patch, { ...scope, source: patchSource }),
-    );
-    // Whatever is still unowned was created by the patch.
-    this.provenance.claim(actorRaw, patchSource ?? '');
-    return actorRaw;
+    return this.patcher.applyRaw(actorRaw, patch, source, inputs);
   }
 
   // -- change events --------------------------------------------------------
@@ -771,129 +727,6 @@ export class GoblinEngine {
     return raw;
   }
 
-  /** The record owning the path's last segment and the key within it,
-   * creating parents the way `setPath` does so events can be filed first. */
-  private ownerOf(base: unknown, path: string[]): { owner: Record<string, unknown>; key: string } | null {
-    const key = path.at(-1);
-    if (key === undefined || base === null || typeof base !== 'object') return null;
-    let node = base as Record<string, unknown>;
-    for (const seg of path.slice(0, -1)) {
-      if (typeof node[seg] !== 'object' || node[seg] === null) node[seg] = {};
-      node = node[seg] as Record<string, unknown>;
-    }
-    return { owner: node, key };
-  }
-
-  /** A patch value that is one call to a definition (`$tmpl('…')`,
-   * `$.feature.x()`) inlines here, so `:param` nodes inside it land in the
-   * actor tree instead of staying an expression. Calls that yield anything
-   * but a record stay as written, and so stay lazy. */
-  private inlinePatchValue(value: unknown, scope: EvalRoots): unknown {
-    if (typeof value !== 'string') return value;
-    const trimmed = value.trim();
-    if (!CALL_EXPR.test(trimmed)) return value;
-    try {
-      // A probe: anything it rolls is thrown away with a non-record result,
-      // so it rolls scratch dice rather than taking the field's.
-      const inlined = Die.within({ roll: Die.fresh }, () => this.evalExpr(trimmed, scope));
-      return FunctionNode.isRecordBody(inlined) ? inlined : value;
-    } catch (error) {
-      // A template is always resolvable, so its errors (a bad namespace) are real.
-      if (TEMPLATE_CALL.test(trimmed)) throw error;
-      return value; // not resolvable yet — leave the expression in place
-    }
-  }
-
-  /**
-   * Merge `$mixin('file')` into the actor of the nearest document up the
-   * template chain — the calling document first — declaring the actor the
-   * mixin's `@` names (`$actor: X`, or `@: X` on an applied document). Choices fill in first, so the mixin can gate on one an earlier
-   * patch just declared.
-   */
-  private mixin(call: string, scope: EvalRoots): void {
-    const file = call.trim().match(MIXIN_CALL)?.[1] ?? '';
-    const doc = this.docs.get(file);
-    if (doc === null || typeof doc !== 'object') throw new Error(`mixin not loaded: ${file}`);
-    const type = (doc as Record<string, unknown>)[ACTOR];
-    if (typeof type !== 'string')
-      throw new Error(`mixin ${file} must name the actor it attaches to with a top-level \`@\``);
-    const actor = this.mixinTarget(type, scope);
-    if (actor === undefined) throw new Error(`$mixin('${file}'): no parent document defines actor ${type}`);
-    // Cite the document by its loaded path, so its events open the right file.
-    const source = this.provenance.origins.get(doc) ?? file;
-    const patch = this.provenance.claim(this.provenance.clone(doc as object), source);
-    this.provenance.origins.set(patch, source);
-    if (scope.doc !== null && typeof scope.doc === 'object') this.provenance.parents.set(patch, scope.doc);
-    RecordNode.materializeParams(actor, scope.inputs, this.namespaceOf);
-    this.applyRaw(actor, patch, source, scope.inputs);
-  }
-
-  /** The actor built (`$actor: type`) or patched (`@: type`) by the nearest such document. */
-  private mixinTarget(type: string, scope: EvalRoots): unknown {
-    const seen = new Set<unknown>();
-    for (
-      let doc = scope.doc;
-      doc !== null && typeof doc === 'object' && !seen.has(doc);
-      doc = this.provenance.parents.get(doc)
-    ) {
-      seen.add(doc);
-      const record = doc as Record<string, unknown>;
-      if ((record[ACTOR_KEY] ?? record[ACTOR]) !== type) continue;
-      const actor = this.provenance.actorOf.get(doc) ?? (doc === scope.actor ? doc : undefined);
-      if (actor !== undefined) return actor;
-    }
-    return undefined;
-  }
-
-  /** Expand calls written as plain document values, so the nodes they hand
-   * back — `:param` records included — are in the tree before anything looks
-   * for them. Anything that is not a record call is left as written. */
-  expandCalls(raw: unknown, scope: EvalRoots): boolean {
-    let wrote = false;
-    const visit = (node: unknown, outer: EvalRoots, path: string[]) => {
-      if (Array.isArray(node)) {
-        node.forEach((item, index) => {
-          const next = this.inlinePatchValue(item, outer);
-          if (next !== item) {
-            node[index] = this.provenance.claim(next, this.provenance.owners.get(node) ?? '');
-            wrote = true;
-          }
-          visit(node[index], outer, [...path, String(index)]);
-        });
-        return;
-      }
-      if (node === null || typeof node !== 'object') return;
-      const record = node as Record<string, unknown>;
-      // A nested actor document is its own `#` and `@`: its mixins land on it.
-      const nested = this.isNestedActor(record, outer);
-      const inner = nested ? this.enterActor(record, outer, path) : outer;
-      if (nested && inner.inputs) this.applyOverrides(record, inner.inputs);
-      const base = nested ? [] : path;
-      for (const [key, value] of Object.entries(record)) {
-        if (isMetaKey(key) || isValidateKey(key)) continue;
-        if (typeof value === 'string' && MIXIN_CALL.test(value.trim())) {
-          delete record[key]; // consumed: the mixin merges into the actor instead
-          this.mixin(value, inner);
-          wrote = true;
-          continue;
-        }
-        const next = this.inlinePatchValue(value, inner);
-        if (next !== value) {
-          record[key] = this.provenance.claim(next, this.fieldSource(record, key) ?? '');
-          wrote = true;
-        }
-        const child = record[key];
-        const mixins = child !== null && typeof child === 'object' && !Array.isArray(child) && hasMixin(child);
-        visit(child, inner, [...base, key]);
-        // A record that only held mixin calls leaves nothing behind.
-        if (mixins && Object.keys(child as object).length === 0) delete record[key];
-      }
-    };
-    visit(raw, scope, []);
-    this.provenance.assertUniqueNamespaces(raw);
-    return wrote;
-  }
-
   /** The innermost nested actor `path` passes through from `base`, and how
    * many segments in it starts. */
   private nestedActorOn(
@@ -933,198 +766,6 @@ export class GoblinEngine {
       inputs: [...nest(scope.inputs, path), ...named],
       path: scope.path === undefined ? undefined : [],
     };
-  }
-
-  /**
-   * A `$if` wrapper gates its whole node: false applies nothing (not even
-   * `:meta`), so gated-out content leaves no residue. Missing or empty
-   * `$if` (comment-only `null`) counts as unconditional.
-   */
-  private condPasses(value: Record<string, unknown>, scope: EvalRoots): boolean {
-    if (!(IF_KEY in value)) return true;
-    const rawCond = value[IF_KEY];
-    return rawCond == null || rawCond === '' ? true : Boolean(this.evaluate(rawCond, scope));
-  }
-
-  private applyNode(actorRaw: unknown, patch: unknown, scope: EvalRoots): void {
-    if (Array.isArray(patch)) {
-      this.applyArray(actorRaw as unknown[], patch);
-      return;
-    }
-    if (typeof patch !== 'object' || patch === null) return;
-    // A root `$if` gates the whole document, like any other patch node.
-    const rec = patch as Record<string, unknown>;
-    if (!this.condPasses(rec, scope)) return;
-    if (THEN_KEY in rec) this.applyPatchObject(rec[THEN_KEY], scope);
-    const target = actorRaw as Record<string, unknown>;
-    for (const [key, value] of Object.entries(rec)) {
-      if (isBareSigil(key) || key === ACTOR_KEY) continue;
-      if (isMetaKey(key) || isValidateKey(key)) {
-        target[key] = deepClone(value);
-        continue;
-      }
-      if (key === IF_KEY || key === THEN_KEY) continue; // handled by mergeInto
-      this.journal.writing(patch, key, () => this.mergeEntry(target, key, value, scope));
-    }
-  }
-
-  private applyAtPath(pathKey: string, rawValue: unknown, scope: EvalRoots): void {
-    const value = this.inlinePatchValue(rawValue, scope);
-    // A path key written `+@.attacks` adds to what is there.
-    const adds = pathKey.startsWith('+');
-    const { root, path } = parseRef(stripPlus(pathKey));
-    const base = this.rootFor(root, scope);
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-      if (!this.condPasses(value as Record<string, unknown>, scope)) return;
-      let target = getPath(base, path);
-      if (typeof target !== 'object' || target === null) {
-        setPath(base, path, {});
-        target = getPath(base, path);
-      }
-      this.mergeInto(target, value, { ...scope, current: target });
-      return;
-    }
-    if (Array.isArray(value)) {
-      const slot = this.ownerOf(base, path);
-      if (slot) this.journal.seed(slot.owner, slot.key); // before the append, not after
-      let target = getPath(base, path);
-      if (!Array.isArray(target)) {
-        setPath(base, path, []);
-        target = getPath(base, path);
-      }
-      this.applyArrayWrite(target as unknown[], value, slot, pathKey);
-      return;
-    }
-    const slot = this.ownerOf(base, path);
-    if (adds) {
-      const added = slot ? this.journal.record(slot.owner, slot.key, ADD_KEY, deepClone(value)) : value;
-      setPath(base, path, addRaw(slot ? slot.owner[slot.key] : undefined, added, pathKey));
-      return;
-    }
-    const written = slot ? this.journal.record(slot.owner, slot.key, SET_KEY, deepClone(value)) : value;
-    setPath(base, path, deepClone(written));
-  }
-
-  /**
-   * Merge a patch object into an existing target record, honoring
-   * `+` additions, nested path keys, `:meta`, `!validate` and the
-   * `$if` / `$then` condition wrapper.
-   */
-  private mergeInto(target: unknown, value: unknown, scope: EvalRoots): void {
-    if (Array.isArray(value)) {
-      if (Array.isArray(target)) this.applyArray(target, value);
-      return;
-    }
-    if (!value || typeof value !== 'object' || typeof target !== 'object' || target === null) return;
-    const rec = value as Record<string, unknown>;
-    const tgt = target as Record<string, unknown>;
-    if (IF_KEY in rec || THEN_KEY in rec) {
-      if (!this.condPasses(rec, scope)) return;
-      if (THEN_KEY in rec) this.applyPatchObject(rec[THEN_KEY], scope);
-      for (const [k, v] of Object.entries(rec)) {
-        if (k === IF_KEY || k === THEN_KEY) continue;
-        this.journal.writing(rec, k, () => this.mergeEntry(tgt, k, v, scope));
-      }
-      return;
-    }
-    for (const [k, v] of Object.entries(rec)) {
-      this.journal.writing(rec, k, () => this.mergeEntry(tgt, k, v, scope));
-    }
-  }
-
-  /** A `$then` block is itself a patch: path keys are absolute. */
-  private applyPatchObject(patch: unknown, scope: EvalRoots): void {
-    if (Array.isArray(patch)) return;
-    if (!patch || typeof patch !== 'object') return;
-    for (const [k, v] of Object.entries(patch as Record<string, unknown>)) {
-      if (isBareSigil(k) || k === ACTOR_KEY || k === IF_KEY || k === THEN_KEY) continue;
-      if (isMetaKey(k) || isValidateKey(k)) continue;
-      const record = patch as Record<string, unknown>;
-      if (isPathKey(k)) {
-        this.journal.writing(record, k, () => this.applyAtPath(k, v, scope));
-        continue;
-      }
-      this.journal.writing(record, k, () => this.mergeEntry(scope.actor as Record<string, unknown>, k, v, scope));
-    }
-  }
-
-  private mergeEntry(target: Record<string, unknown>, key: string, rawValue: unknown, scope: EvalRoots): void {
-    if (typeof rawValue === 'string' && MIXIN_CALL.test(rawValue.trim())) {
-      this.mixin(rawValue, scope); // the key holding the call is consumed
-      return;
-    }
-    const value = this.inlinePatchValue(rawValue, scope);
-    if (isMetaKey(key) || isValidateKey(key)) {
-      target[key] = deepClone(value);
-      return;
-    }
-    if (isPathKey(key)) {
-      this.applyAtPath(key, value, scope);
-      return;
-    }
-    const k = stripPlus(key);
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-      if (!this.condPasses(value as Record<string, unknown>, scope)) return;
-      // A record of pure metadata writes no field events, so the addition
-      // itself is the only trace. Scalars and lists log their own content.
-      if (key !== k) this.journal.record(target, k, ADD_KEY, k);
-      // Always merge through mergeInto so nested `+`, path keys and
-      // `$if`/`$then` wrappers are consumed rather than stored raw.
-      const created = typeof target[k] !== 'object' || target[k] === null || Array.isArray(target[k]);
-      if (created) target[k] = {};
-      this.mergeInto(target[k], value, { ...scope, current: target[k] });
-      // A record that only held mixin calls leaves nothing behind.
-      if (created && Object.keys(target[k] as object).length === 0 && hasMixin(value)) delete target[k];
-      return;
-    }
-    if (Array.isArray(value)) {
-      this.journal.seed(target, k); // before the append, not after
-      if (!Array.isArray(target[k])) target[k] = [];
-      this.applyArrayWrite(target[k] as unknown[], value, { owner: target, key: k }, key);
-      return;
-    }
-    target[k] = deepClone(this.journal.record(target, k, SET_KEY, deepClone(value)));
-  }
-
-  /** Apply an array patch and file it: `+item` entries as `:add`, a plain
-   * list as `:set` — the document stating what the list is. */
-  private applyArrayWrite(
-    target: unknown[],
-    items: unknown[],
-    slot: { owner: Record<string, unknown>; key: string } | null,
-    label = slot?.key,
-  ): void {
-    const additive = isAdditiveList(items, label);
-    const added = this.applyArray(target, items, label);
-    if (slot === null) return;
-    if (!additive) this.journal.record(slot.owner, slot.key, SET_KEY, deepClone(items));
-    else if (added.length > 0) this.journal.record(slot.owner, slot.key, ADD_KEY, added);
-  }
-
-  /** A plain list replaces the target; `+item` entries append deduplicated
-   * (plain items alongside them append raw). Returns what was written. */
-  private applyArray(target: unknown[], items: unknown[], label?: string): unknown[] {
-    if (!isAdditiveList(items, label)) {
-      const replacement = items.map(deepClone);
-      target.length = 0;
-      target.push(...replacement);
-      return replacement;
-    }
-    const added: unknown[] = [];
-    for (const item of items) {
-      if (typeof item === 'string' && item.startsWith('+')) {
-        const name = item.slice(1);
-        if (!target.includes(name)) {
-          target.push(name);
-          added.push(name);
-        }
-      } else {
-        const clone = deepClone(item);
-        target.push(clone);
-        added.push(clone);
-      }
-    }
-    return added;
   }
 
   // -- validation ------------------------------------------------------------
@@ -1186,11 +827,4 @@ function crossesScalar(base: unknown, path: string[]): boolean {
     if (typeof node !== 'object') return true;
   }
   return false;
-}
-
-/** Whether a patch value holds a `$mixin('…')` call anywhere inside. */
-function hasMixin(value: unknown): boolean {
-  if (typeof value === 'string') return MIXIN_CALL.test(value.trim());
-  if (value === null || typeof value !== 'object') return false;
-  return Object.values(value).some(hasMixin);
 }
