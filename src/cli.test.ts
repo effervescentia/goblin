@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -153,6 +153,12 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['--set', '=novalue'])).toThrow('--set expects key=value');
   });
 
+  it('accepts --out with a path', () => {
+    expect(parseArgs(['main.yaml', '--out', 'out/sheet.json']).out).toBe('out/sheet.json');
+    expect(() => parseArgs(['--out'])).toThrow('--out expects a file path');
+    expect(() => parseArgs(['--out', '--compact'])).toThrow('--out expects a file path');
+  });
+
   it('rejects unexpected arguments', () => {
     expect(() => parseArgs(['--bogus'])).toThrow('unexpected argument');
     expect(() => parseArgs(['a.yaml', 'b.yaml'])).toThrow('unexpected argument');
@@ -207,8 +213,9 @@ describe('parseParamValue', () => {
 describe('USAGE', () => {
   it('documents the CLI', () => {
     expect(USAGE).toContain(
-      'goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--strip-metadata] [--help]',
+      'goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--strip-metadata] [--out file.json] [--help]',
     );
+    expect(USAGE).toContain('--out');
     expect(USAGE).toContain('--compact');
     expect(USAGE).toContain('--strip-metadata');
     expect(USAGE).toContain('--param');
@@ -286,6 +293,26 @@ describe('cli', () => {
     expect(pretty.status).toBe(0);
     expect(pretty.stdout.trimEnd().includes('\n')).toBe(true);
     expect(JSON.parse(pretty.stdout)).toEqual(JSON.parse(compact.stdout));
+  });
+
+  it('--out replaces the file with the output only when the document fully resolves', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'goblin-out-'));
+    const out = join(dir, 'nested', 'sheet.json');
+    try {
+      mkdirSync(join(dir, 'nested'));
+      writeFileSync(out, 'stale');
+      const res = runCli('examples/02-expressions.yaml', '--compact', '--out', out);
+      expect(res.status).toBe(0);
+      expect(readFileSync(out, 'utf8')).toBe(res.stdout);
+
+      const pending = join(dir, 'pending.json');
+      const query = runCli('examples/08-parameters.yaml', '--out', pending);
+      expect(query.status).toBe(0);
+      expect(JSON.parse(query.stdout)).toHaveProperty('query');
+      expect(existsSync(pending)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('--strip-metadata drops metadata keys from data output', () => {

@@ -3,7 +3,7 @@
  * Goblin CLI — resolves the application state and prints it as JSON.
  *
  * Usage:
- *   goblin [entry.yaml] [--compact] [--help]
+ *   goblin [entry.yaml] [--compact] [--out file.json] [--help]
  *
  * With no entry file, `.goblin.yaml` in the current directory is required.
  * An entry containing a directory (`examples/foo.yaml`) is resolved with
@@ -14,7 +14,7 @@
 import { GoblinEngine } from './engine';
 import { print } from './nodes/serialize';
 
-export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--strip-metadata] [--help]
+export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--strip-metadata] [--out file.json] [--help]
 
 Resolves a goblin document and prints the result as JSON: either
 { "data": … } when all :param values are satisfied, or
@@ -33,6 +33,9 @@ Arguments:
   --strip-metadata  Drop metadata keys (:doc, :type, !validate, …) from the
                 printed data, leaving plain values only. Functions print as
                 their source expression; records left empty collapse to null.
+  --out         Also write the JSON to this file (replacing it) when the
+                document fully resolves to { "data": … }; a { "query" } or
+                { "errors" } result leaves the file untouched.
   --help, -h    Show this help.`;
 
 export interface CliArgs {
@@ -40,6 +43,7 @@ export interface CliArgs {
   compact: boolean;
   stripMetadata: boolean;
   help: boolean;
+  out?: string;
   params: Record<string, unknown>;
   overrides: Record<string, unknown>;
 }
@@ -71,6 +75,11 @@ export function parseArgs(argv: string[]): CliArgs {
       args.stripMetadata = true;
     } else if (arg === '--help' || arg === '-h') {
       args.help = true;
+    } else if (arg === '--out') {
+      const path = argv[++i];
+      if (path === undefined || path.startsWith('-'))
+        throw new Error(`--out expects a file path, got: ${path ?? '(nothing)'}`);
+      args.out = path;
     } else if (arg === '--param' || arg === '--set') {
       const [key, value] = parseKeyValue(arg, argv[++i]);
       if (arg === '--param') args.params[key] = value;
@@ -149,7 +158,10 @@ if (import.meta.main) {
     }
     const state = await resolveAppState(process.cwd(), args.entry, args.params, args.overrides);
     const out = args.stripMetadata && 'data' in state ? { data: print((state as { data: unknown }).data) } : state;
-    process.stdout.write(`${JSON.stringify(out, null, args.compact ? 0 : 2)}\n`);
+    const json = `${JSON.stringify(out, null, args.compact ? 0 : 2)}\n`;
+    // Only a full resolution is worth saving; Bun.write replaces the file.
+    if (args.out !== undefined && 'data' in state) await Bun.write(args.out, json);
+    process.stdout.write(json);
   } catch (err) {
     console.error(err instanceof Error ? err.message : err);
     process.exit(1);
