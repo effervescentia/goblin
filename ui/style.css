@@ -8,6 +8,8 @@
   --accent-soft: #e3f0eb;
   --bad: #a3352b;
   --bad-soft: #f8e7e4;
+  --actor: #5b4bb7;
+  --actor-soft: #ece9fb;
   --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
   --source-l: 38%;
@@ -26,6 +28,8 @@
     --accent-soft: #1f3530;
     --bad: #f08b7f;
     --bad-soft: #3a2220;
+    --actor: #b3a6f5;
+    --actor-soft: #2a2540;
     --source-l: 72%;
     --source-bg-l: 20%;
     color-scheme: dark;
@@ -314,6 +318,12 @@ main {
 
 .kind.param {
   color: var(--bad);
+}
+
+.kind.actor {
+  color: var(--actor);
+  background: var(--actor-soft);
+  border-color: var(--actor);
 }
 
 .kind.forced {

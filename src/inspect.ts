@@ -25,10 +25,14 @@ import { isBareSigil, isMetaKey, isPathKey, isPrivateKey, isValidateKey } from '
 export type InspectKind = 'record' | 'list' | 'param' | 'expression' | 'function' | 'value';
 
 export interface InspectNode {
-  /** Dotted path from the actor root; `''` is the root itself. */
+  /** Dotted path from the entry root; `''` is the root itself. */
   path: string;
   key: string;
   kind: InspectKind;
+  /** The actor a record declares (`$actor: Character`). */
+  actor?: string;
+  /** That actor's namespace, when its `$tmpl` gave it one. */
+  namespace?: string;
   /** Printed value, without its `:events` wrapper (absent on records and lists). */
   value?: unknown;
   /** Expression or function body as written. */
@@ -104,7 +108,13 @@ function unwrap(printed: unknown): { value: unknown; events?: Record<string, unk
   return { value: printed, events };
 }
 
-export function inspect(actor: unknown, data: unknown): InspectNode[] {
+/** `namespaceOf` is the engine's (`engine.namespaceOf`): namespaces live on
+ * the resolved tree's records, not in its data. */
+export function inspect(
+  actor: unknown,
+  data: unknown,
+  namespaceOf?: (record: object) => string | undefined,
+): InspectNode[] {
   const nodes: InspectNode[] = [];
   const visit = (raw: unknown, printed: unknown, path: string, key: string, holder: string) => {
     const { value, events } = unwrap(printed);
@@ -162,6 +172,9 @@ export function inspect(actor: unknown, data: unknown): InspectNode[] {
       }
     }
     if (record) {
+      if (typeof record[ACTOR_KEY] === 'string') node.actor = record[ACTOR_KEY] as string;
+      const namespace = namespaceOf?.(record);
+      if (namespace !== undefined) node.namespace = namespace;
       if (typeof record[LABEL_KEY] === 'string') node.label = record[LABEL_KEY] as string;
       if (typeof record[DOC_KEY] === 'string') node.doc = record[DOC_KEY] as string;
     }

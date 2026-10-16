@@ -47,8 +47,8 @@ const server = Bun.serve({
       POST: async (req) => {
         const { entry, params = {}, overrides = {} } = (await req.json()) as ResolveRequest;
         try {
-          const { state, actor } = await resolveApp(root, entry, params, overrides);
-          const nodes = 'data' in state ? inspect(actor, state.data) : undefined;
+          const { state, actor, engine } = await resolveApp(root, entry, params, overrides);
+          const nodes = 'data' in state ? inspect(actor, state.data, engine.namespaceOf) : undefined;
           return Response.json({ ...state, nodes });
         } catch (err) {
           return Response.json({ failure: err instanceof Error ? err.message : String(err) }, { status: 400 });

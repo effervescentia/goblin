@@ -1,7 +1,7 @@
 /// <reference lib="dom" />
 /**
  * Goblin inspector: resolves an entry through `/api/resolve`, answers its
- * `{ query }` turn by turn, and renders the resolved actor — every field, the
+ * `{ query }` turn by turn, and renders the resolved app — every field, the
  * fields each one reads (and is read by), and the `:events` behind it.
  */
 import type { InspectNode } from '../src/inspect';
@@ -511,9 +511,9 @@ function renderTree(nodes: InspectNode[], select: (path: string) => void): HTMLE
         h(
           'span',
           { className: `key${node.private ? ' private' : ''}` },
-          filter ? node.path || '(actor)' : node.key || '(actor)',
+          filter ? node.path || '(app)' : node.key || '(app)',
         ),
-        h('span', { className: `kind ${node.kind}` }, node.kind),
+        kindBadge(node),
         node.path in state.overrides ? h('span', { className: 'kind forced' }, 'override') : null,
         node.kind !== 'record' && node.kind !== 'list' && node.kind !== 'function'
           ? h('span', { className: 'val' }, preview(node.value, 28))
@@ -541,11 +541,20 @@ function renderTree(nodes: InspectNode[], select: (path: string) => void): HTMLE
   );
 }
 
+/** A node's kind, or the actor it declares (`Character`, or `Character(aria)` when namespaced). */
+function kindBadge(node: InspectNode): HTMLElement {
+  if (node.actor) {
+    const name = node.namespace ? `${node.actor}(${node.namespace})` : node.actor;
+    return h('span', { className: 'kind actor', title: `$actor: ${node.actor}` }, name);
+  }
+  return h('span', { className: `kind ${node.kind}` }, node.kind);
+}
+
 function pathLink(
   path: string,
   byPath: Map<string, InspectNode>,
   select: (path: string) => void,
-  label = path || '(actor)',
+  label = path || '(app)',
 ): HTMLElement {
   if (!byPath.has(path)) return h('code', { className: 'muted' }, label);
   return h('button', { type: 'button', className: 'link', onclick: () => select(path) }, label);
@@ -602,9 +611,9 @@ function renderDetail(
     h(
       'h2',
       {},
-      node.label ?? (node.key || 'Actor'),
+      node.label ?? (node.key || 'App'),
       ' ',
-      h('span', { className: `kind ${node.kind}` }, node.kind),
+      kindBadge(node),
       node.path in state.overrides ? h('span', { className: 'kind forced' }, 'override') : null,
       node.private ? h('span', { className: 'kind private' }, 'private') : null,
     ),

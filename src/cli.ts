@@ -103,7 +103,7 @@ export async function resolveApp(
   entry?: string,
   provided: Record<string, unknown> = {},
   overrides: Record<string, unknown> = {},
-): Promise<{ state: AppState; actor: unknown }> {
+): Promise<{ state: AppState; actor: unknown; engine: GoblinEngine }> {
   // Bun-only: the CLI entry point always runs under Bun (or compiled).
   const { YAML } = await import('bun');
   let root = cwd;
@@ -134,9 +134,9 @@ export async function resolveApp(
   // not a separate pass the caller might skip.
   if ('data' in state) {
     const errors = engine.validate(state.data);
-    if (errors.length > 0) return { state: { errors }, actor };
+    if (errors.length > 0) return { state: { errors }, actor, engine };
   }
-  return { state, actor };
+  return { state, actor, engine };
 }
 
 // Entry point only — no-op when imported (e.g. by tests).

@@ -69,4 +69,24 @@ describe('inspect', () => {
     });
     expect(nodes['stats.bonus']?.events).toBeUndefined();
   });
+
+  it('marks each record that declares an actor with its name and namespace', () => {
+    const engine = new GoblinEngine('.');
+    engine.register('hero.yaml', { $actor: 'Character', speed: 30 });
+    engine.register('app.yaml', { party: { aria: "$tmpl('hero.yaml', 'aria')", npc: "$tmpl('hero.yaml')" } });
+    const app = engine.docs.get('app.yaml');
+    const state = engine.resolveRaw(app);
+    if (!('data' in state)) throw new Error('expected data');
+    const nodes = Object.fromEntries(inspect(app, state.data, engine.namespaceOf).map((node) => [node.path, node]));
+    expect(nodes['']?.actor).toBeUndefined();
+    expect(nodes.party?.actor).toBeUndefined();
+    expect(nodes['party.aria']).toMatchObject({
+      kind: 'record',
+      actor: 'Character',
+      namespace: 'aria',
+      children: ['speed'],
+    });
+    expect(nodes['party.npc']?.actor).toBe('Character');
+    expect(nodes['party.npc']?.namespace).toBeUndefined();
+  });
 });
