@@ -12,8 +12,9 @@
  * with a non-zero exit code.
  */
 import { createHash } from 'node:crypto';
-import { type EngineEvent, GoblinEngine } from './engine';
+import { GoblinEngine } from './engine';
 import { type InputEvent, parseDice, type RollEvent, type StateEvent, type WriteEvent } from './inputs';
+import type { EngineEvent } from './journal';
 import { print } from './nodes/serialize';
 
 export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--help]
