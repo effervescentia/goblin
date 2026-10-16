@@ -371,7 +371,7 @@ export function compileBody(body: string, paramNames: string[] = []) {
   return (hooks: ResolveHooks, params: Record<string, unknown> = {}) => {
     const roll = (count: number, sides: number) => {
       let total = 0;
-      for (let i = 0; i < count; i++) total += 1 + Math.floor(Math.random() * sides);
+      for (let i = 0; i < count; i++) total += Die.face(sides);
       return total;
     };
     const args = [hooks.resolve, hooks.assign, hooks.assignEach, roll, indexList, ...paramNames.map((p) => params[p])];

@@ -43,7 +43,7 @@ import {
   VALUE_KEY,
   VERSION_KEY,
 } from './constants';
-import { type InputEvent, latest, nest, type WriteEvent } from './inputs';
+import { type InputEvent, isWriteEvent, latest, nest, type StateEvent, type WriteEvent } from './inputs';
 import { withNatives } from './lib';
 import { collectLocations, copyLocations, type Location, type Locations } from './locations';
 import { Die, DieNode } from './nodes/die';
@@ -96,6 +96,34 @@ function isAdditiveList(items: unknown[], label = 'list'): boolean {
   return additions.length > 0;
 }
 
+/** A write as the engine logged it (see `recordEvent`). */
+interface LoggedWrite {
+  record: object;
+  key: string;
+  kind: string;
+  event: Record<string, unknown>;
+  /** The invoke whose call assigned it. */
+  cause?: InputEvent;
+  /** The latest invoke to start before it was made. */
+  phase?: InputEvent;
+  rolled: boolean;
+  /** The recorded write whose roll it reused. */
+  replayed?: WriteEvent;
+}
+
+/** A logged write as a stream event, with where it belongs in the stream. */
+export interface EngineWrite {
+  cause?: InputEvent;
+  phase?: InputEvent;
+  /** The recorded version, when a replayed stream already held this write. */
+  version?: number;
+  event: Omit<WriteEvent, 'version'>;
+}
+
+function writeType(kind: string): WriteEvent['type'] {
+  return kind === ADD_KEY ? 'add' : kind === SUBTRACT_KEY ? 'subtract' : 'set';
+}
+
 export class GoblinEngine {
   /** Raw (unevaluated) documents by file name. */
   readonly docs = new Map<string, unknown>();
@@ -105,10 +133,20 @@ export class GoblinEngine {
   readonly library: Record<string, unknown> = withNatives();
   /** Patch writes per field, keyed by the record holding the field. */
   private readonly fieldEvents = new WeakMap<object, Map<string, unknown[]>>();
-  /** Every patch and assignment write in the order made, with the invoke whose call assigned it. */
-  private readonly writeLog: { record: object; key: string; event: unknown; cause?: InputEvent }[] = [];
+  /** Every patch and assignment write in the order made. */
+  private readonly writeLog: LoggedWrite[] = [];
   /** The invoke event whose call is running, if any. */
   private invoking: InputEvent | undefined;
+  /** The latest invoke to start: writes made since follow it in the stream. */
+  private phase: InputEvent | undefined;
+  /** Writes a replayed stream recorded, whose rolls this resolution reuses. */
+  private recorded: WriteEvent[] = [];
+  /** The tree being resolved, which write paths run from. */
+  private entryRoot: unknown;
+  /** Rolls already credited to an inner field, so an outer one only counts its own. */
+  private attributedRolls = 0;
+  /** Expression fields whose own evaluation rolled dice. */
+  private readonly rolledFields = new WeakMap<object, Set<string>>();
   /** Source document of a raw tree: loaded documents and `$tmpl('…')` clones. */
   private readonly origins = new WeakMap<object, string>();
   /** The document a record call's copy was written in: its `#` wherever it lands. */
@@ -404,6 +442,9 @@ export class GoblinEngine {
   }
 
   private hooks(scope: EvalRoots): ResolveHooks {
+    // Each statement's value is computed just before its assign: rolls since
+    // the last one are that value's.
+    let mark = this.rollMark();
     return {
       resolve: (ref: string) => {
         const value = this.resolveRef(ref, scope);
@@ -413,7 +454,9 @@ export class GoblinEngine {
       assign: (ref: string, value: unknown, op: AssignOp) => {
         const { root, path } = parseRef(ref);
         const base = this.rootFor(root, scope);
-        return this.write(base, root, path, value, op, scope);
+        const next = this.write(base, root, path, value, op, scope, this.rolledSince(mark));
+        mark = this.rollMark();
+        return next;
       },
       assignEach: (ref: string, expr: string, op: AssignOp) => {
         const { root, path } = parseRef(ref);
@@ -421,28 +464,32 @@ export class GoblinEngine {
         for (const target of this.expandPaths(base, path, scope)) {
           const owner = getPath(base, target.slice(0, -1));
           if (owner === null || typeof owner !== 'object') continue;
-          this.write(base, root, target, this.evalExpr(expr, { ...scope, current: owner }), op, scope);
+          const before = this.rollMark();
+          const value = this.evalExpr(expr, { ...scope, current: owner });
+          this.write(base, root, target, value, op, scope, this.rolledSince(before));
         }
+        mark = this.rollMark();
       },
     };
   }
 
   /** One assignment, filed like a patch write under the document whose
    * expression made it: `=` as `:set`, `+=` as `:add`, `-=` as `:subtract`. */
-  private write(base: unknown, root: string, path: string[], value: unknown, op: AssignOp, scope: EvalRoots): unknown {
+  private write(
+    base: unknown,
+    root: string,
+    path: string[],
+    value: unknown,
+    op: AssignOp,
+    scope: EvalRoots,
+    rolled = false,
+  ): unknown {
     // Dice roll once here, so the event and the field hold the same number.
-    const amount = op === '=' ? value : Number(value);
-    let next = amount;
-    if (op !== '=') {
-      const held = Number(
-        this.resolveRef(root === CURRENT ? `.${path.join('.')}` : `${root}.${path.join('.')}`, scope),
-      );
-      next = op === '+' ? held + (amount as number) : held - (amount as number);
-    }
+    let amount = op === '=' ? value : Number(value);
     const slot = this.ownerOf(base, path);
     if (slot) {
       const kind = op === '=' ? SET_KEY : op === '+' ? ADD_KEY : SUBTRACT_KEY;
-      this.recordEvent(
+      amount = this.recordEvent(
         slot.owner,
         slot.key,
         kind,
@@ -452,7 +499,15 @@ export class GoblinEngine {
         scope.at,
         // Only the call's own assignments: lazy patch writes it triggers are not its doing.
         this.invoking,
+        rolled,
       );
+    }
+    let next = amount;
+    if (op !== '=') {
+      const held = Number(
+        this.resolveRef(root === CURRENT ? `.${path.join('.')}` : `${root}.${path.join('.')}`, scope),
+      );
+      next = op === '+' ? held + Number(amount) : held - Number(amount);
     }
     setPath(base, path, next);
     this.cache.clear();
@@ -518,9 +573,30 @@ export class GoblinEngine {
     if (!memoizable) return this.evaluate(raw, scope);
     const memo = `field|${this.idOf(scope.home ?? scope.doc)}|${this.idOf(scope.actor)}|${this.idOf(record)}|${key}`;
     if (this.cache.has(memo)) return this.cache.get(memo);
-    const value = this.evaluate(raw, scope);
+    const mark = this.rollMark();
+    let value: unknown;
+    try {
+      value = this.evaluate(raw, scope);
+    } finally {
+      if (this.rolledSince(mark)) {
+        const keys = this.rolledFields.get(record) ?? new Set();
+        keys.add(key);
+        this.rolledFields.set(record, keys);
+      }
+      // Everything rolled in here now belongs to this field, as far as outer ones can tell.
+      this.attributedRolls = mark.attributed + (Die.rolled - mark.rolled);
+    }
     this.cache.set(memo, value);
     return value;
+  }
+
+  private rollMark(): { rolled: number; attributed: number } {
+    return { rolled: Die.rolled, attributed: this.attributedRolls };
+  }
+
+  /** Whether dice rolled since `mark`, outside any inner field's own evaluation. */
+  private rolledSince(mark: { rolled: number; attributed: number }): boolean {
+    return Die.rolled - mark.rolled > this.attributedRolls - mark.attributed;
   }
 
   /** The document that wrote `record[key]`: its latest write's `:source`,
@@ -685,10 +761,10 @@ export class GoblinEngine {
    * otherwise `{ query }` holds only the outstanding params. Param values of
    * the wrong `:type` still throw.
    */
-  resolve(file: string, inputs: InputEvent[] = []): { data: unknown } | { query: MissingParam[] } {
+  resolve(file: string, events: StateEvent[] = []): { data: unknown; result?: unknown } | { query: MissingParam[] } {
     const raw = this.docs.get(file);
     if (raw === undefined) throw new Error(`document not loaded: ${file}`);
-    return this.resolveRaw(raw, inputs);
+    return this.resolveRaw(raw, events);
   }
 
   /**
@@ -700,19 +776,30 @@ export class GoblinEngine {
    */
   resolveRaw(
     actorRaw: unknown,
-    inputs: InputEvent[] = [],
+    events: StateEvent[] = [],
   ): { data: unknown; result?: unknown } | { query: MissingParam[] } {
+    const inputs = events.filter((event): event is InputEvent => !isWriteEvent(event));
+    // Recorded writes are not replayed as such — the inputs regenerate them —
+    // but their rolls are, so dice written to a field stay put.
+    this.recorded = events.filter(isWriteEvent);
+    this.entryRoot = actorRaw;
+    this.phase = undefined;
     const keyed = this.splitNamespaced(actorRaw, inputs);
     this.applyOverrides(actorRaw, keyed.inputs);
     const scope: EvalRoots = { doc: actorRaw, actor: actorRaw, app: this.appRoot, current: actorRaw, ...keyed };
     this.expandCalls(actorRaw, scope);
     this.applyOverrides(actorRaw, keyed.inputs);
+    this.replayPending();
     this.shareWithApp(actorRaw);
     const outstanding = RecordNode.collectParams(actorRaw, this.namespaceOf, inputs);
     if (outstanding.length > 0) return { query: outstanding };
     const invokes = keyed.inputs.filter((event) => event.type === 'invoke');
     if (invokes.length === 0) return { data: debug(this.evaluate(actorRaw, scope)) };
+    // The expansion `evaluate` would run: it re-applies nested actors'
+    // overrides over the mixins that wrote under them.
+    this.expandCalls(actorRaw, scope);
     RecordNode.materializeParams(actorRaw, keyed.inputs, this.namespaceOf);
+    this.cache.clear();
     let result: unknown;
     for (const event of invokes) {
       result = this.invoke(event, { ...scope, path: [] });
@@ -736,6 +823,7 @@ export class GoblinEngine {
     if (typeof fn !== 'function') throw new Error(`invoke: ${event.path} is not a function`);
     const outer = this.invoking;
     this.invoking = event;
+    this.phase = event;
     let result: unknown;
     try {
       result = fn(...(Array.isArray(event.value) ? event.value : []));
@@ -938,18 +1026,18 @@ export class GoblinEngine {
     origin = this.actorSource,
     at = this.writingAt,
     cause?: InputEvent,
-  ): void {
+    rolled = false,
+  ): unknown {
     const event = this.event(source, kind, value, at);
     this.seedEvents(target, key, origin).push(event);
-    this.writeLog.push({ record: target, key, event, cause });
+    const entry: LoggedWrite = { record: target, key, kind, event, cause, phase: this.phase, rolled };
+    this.writeLog.push(entry);
+    const replayed = this.recorded.length > 0 && this.replayRoll(entry, this.treePaths());
+    return replayed ? deepClone(entry.event[kind]) : value;
   }
 
-  /**
-   * The logged writes that landed in `root`, in the order made, as stream
-   * events read back from `data` (`root`'s `debug` output), so their values
-   * match the printed `:events`. Each keeps the invoke that caused it.
-   */
-  writes(root: unknown, data: unknown): { cause?: InputEvent; event: Omit<WriteEvent, 'version'> }[] {
+  /** Paths from `root` (the entry by default) to every record and list in it. */
+  private treePaths(root = this.entryRoot): Map<object, string[]> {
     const paths = new Map<object, string[]>();
     const visit = (node: unknown, path: string[]) => {
       if (node === null || typeof node !== 'object' || node instanceof Die || paths.has(node)) return;
@@ -957,6 +1045,60 @@ export class GoblinEngine {
       for (const [key, child] of Object.entries(node)) visit(child, [...path, key]);
     };
     visit(root, []);
+    return paths;
+  }
+
+  /** The recorded write in the same place as `entry`: the nth write of its
+   * kind to its path here pairs with the nth recorded one. */
+  private recordedFor(entry: LoggedWrite, paths: Map<object, string[]>): WriteEvent | undefined {
+    const at = paths.get(entry.record);
+    if (at === undefined) return undefined;
+    const path = [...at, entry.key].join('.');
+    const type = writeType(entry.kind);
+    let nth = 0;
+    for (const other of this.writeLog) {
+      if (other === entry) break;
+      const where = paths.get(other.record);
+      if (where !== undefined && other.kind === entry.kind && [...where, other.key].join('.') === path) nth++;
+    }
+    return this.recorded.filter((event) => event.type === type && event.path === path)[nth];
+  }
+
+  /** Swap a write's fresh value for its recorded twin's, when that one is
+   * fixed history: a roll, or anything an invoked call wrote (a rest heals to
+   * the max it had then, not the max a later level-up gives). */
+  private replayRoll(entry: LoggedWrite, paths: Map<object, string[]>): boolean {
+    if (entry.replayed !== undefined || this.recorded.length === 0) return entry.replayed !== undefined;
+    const recorded = this.recordedFor(entry, paths);
+    if (recorded === undefined || !(recorded.rolled === true || entry.cause !== undefined)) return false;
+    entry.event[entry.kind] = deepClone(recorded.value);
+    entry.replayed = recorded;
+    entry.rolled ||= recorded.rolled === true;
+    return true;
+  }
+
+  /** Writes made onto a clone before it joined the tree had no path to
+   * match by; once expansion places them, their rolls replay too. */
+  private replayPending(): void {
+    if (this.recorded.length === 0) return;
+    const paths = this.treePaths();
+    for (const entry of this.writeLog) {
+      if (entry.replayed !== undefined || !this.replayRoll(entry, paths)) continue;
+      // Only the field's latest write is what it holds.
+      if (entry.kind === SET_KEY && this.fieldEvents.get(entry.record)?.get(entry.key)?.at(-1) === entry.event)
+        (entry.record as Record<string, unknown>)[entry.key] = deepClone(entry.event[entry.kind]);
+    }
+  }
+
+  /**
+   * The logged writes that landed in `root`, in the order made, as stream
+   * events read back from `data` (`root`'s `debug` output), so their values
+   * match the printed `:events`. Each keeps the invoke that caused it, the
+   * invoke it followed (`phase`), and the recorded version when a replayed
+   * stream already held the same write.
+   */
+  writes(root: unknown, data: unknown): EngineWrite[] {
+    const paths = this.treePaths(root);
     const printedAt = (path: string[]) => {
       let node = data as Record<string, unknown> | undefined;
       for (const seg of path) {
@@ -967,22 +1109,32 @@ export class GoblinEngine {
       }
       return node;
     };
-    return this.writeLog.flatMap(({ record, key, event, cause }) => {
+    return this.writeLog.flatMap((entry) => {
+      const { record, key, kind, event, cause, phase } = entry;
       const at = paths.get(record);
-      const index = this.fieldEvents.get(record)?.get(key)?.indexOf(event) ?? -1;
-      if (at === undefined || index < 0) return [];
+      const log = this.fieldEvents.get(record)?.get(key);
+      const index = log?.indexOf(event) ?? -1;
+      if (at === undefined || log === undefined || index < 0) return [];
       const printed = (printedAt([...at, key])?.[EVENTS_KEY] as Record<string, unknown>[] | undefined)?.[index];
       if (printed === undefined) return [];
-      const kind = ADD_KEY in printed ? ADD_KEY : SUBTRACT_KEY in printed ? SUBTRACT_KEY : SET_KEY;
       const write: Omit<WriteEvent, 'version'> = {
-        type: kind === ADD_KEY ? 'add' : kind === SUBTRACT_KEY ? 'subtract' : 'set',
+        type: writeType(kind),
         path: [...at, key].join('.'),
         value: printed[kind],
       };
+      // A field's latest `:set` prints as the field itself; earlier writes evaluate on their own.
+      const rolled =
+        entry.rolled ||
+        (index === log.length - 1 && kind === SET_KEY
+          ? this.rolledFields.get(record)?.has(key)
+          : this.rolledFields.get(event)?.has(kind));
+      if (rolled) write.rolled = true;
       if (typeof printed[SOURCE_KEY] === 'string') write.source = printed[SOURCE_KEY];
       if (typeof printed[LINE_KEY] === 'number') write.line = printed[LINE_KEY];
       if (typeof printed[COLUMN_KEY] === 'number') write.column = printed[COLUMN_KEY];
-      return [{ cause, event: write }];
+      const recorded = entry.replayed ?? this.recordedFor(entry, paths);
+      const version = recorded !== undefined && sameValue(recorded.value, write.value) ? recorded.version : undefined;
+      return [{ cause, phase, version, event: write }];
     });
   }
 
@@ -1251,13 +1403,12 @@ export class GoblinEngine {
     }
     const slot = this.ownerOf(base, path);
     if (adds) {
-      const sum = addRaw(slot ? slot.owner[slot.key] : undefined, value, pathKey);
-      if (slot) this.recordEvent(slot.owner, slot.key, ADD_KEY, deepClone(value));
-      setPath(base, path, sum);
+      const added = slot ? this.recordEvent(slot.owner, slot.key, ADD_KEY, deepClone(value)) : value;
+      setPath(base, path, addRaw(slot ? slot.owner[slot.key] : undefined, added, pathKey));
       return;
     }
-    if (slot) this.recordEvent(slot.owner, slot.key, SET_KEY, deepClone(value));
-    setPath(base, path, deepClone(value));
+    const written = slot ? this.recordEvent(slot.owner, slot.key, SET_KEY, deepClone(value)) : value;
+    setPath(base, path, deepClone(written));
   }
 
   /**
@@ -1338,8 +1489,7 @@ export class GoblinEngine {
       this.applyArrayWrite(target[k] as unknown[], value, { owner: target, key: k }, key);
       return;
     }
-    this.recordEvent(target, k, SET_KEY, deepClone(value));
-    target[k] = deepClone(value);
+    target[k] = deepClone(this.recordEvent(target, k, SET_KEY, deepClone(value)));
   }
 
   /** Apply an array patch and file it: `+item` entries as `:add`, a plain

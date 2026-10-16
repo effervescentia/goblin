@@ -251,17 +251,31 @@ describe('inputs', () => {
 });
 
 describe('weave', () => {
-  it("follows each invoke with its writes, closing with the run's other writes", () => {
+  const write = (path: string, value: unknown) => ({ type: 'add' as const, path, value, source: 'a.yaml' });
+
+  it("places writes in the order made: resolving ones before the first invoke, each invoke's after it", () => {
     const heal = invoke('heal', [2], 2);
     const inputs = [parameter('name', 'Aria', 1), heal, override('hp', 1, 3)];
-    const write = (path: string, value: unknown) => ({ type: 'add' as const, path, value, source: 'a.yaml' });
-    expect(weave(inputs, [{ event: write('gold', 5) }, { cause: heal, event: write('hp', 2) }], 3)).toEqual([
+    const writes = [
+      { event: write('gold', 5) },
+      { version: 1, event: write('speed', 10) },
+      { cause: heal, phase: heal, event: write('hp', 2) },
+      { phase: heal, event: write('budget', 27) },
+    ];
+    expect(weave(inputs, writes, 3)).toEqual([
       inputs[0],
+      { version: 3, ...write('gold', 5) },
+      { version: 1, ...write('speed', 10) },
       heal,
       { version: 2, ...write('hp', 2) },
+      { version: 3, ...write('budget', 27) },
       inputs[2],
-      { version: 3, ...write('gold', 5) },
     ]);
+  });
+
+  it('closes the stream with the writes when nothing was invoked', () => {
+    const inputs = [parameter('name', 'Aria', 1)];
+    expect(weave(inputs, [{ event: write('gold', 5) }], 2)).toEqual([inputs[0], { version: 2, ...write('gold', 5) }]);
   });
 });
 
@@ -308,10 +322,11 @@ describe('rehydrate', () => {
     );
   });
 
-  it('replays only the input events, leaving writes to be regenerated', () => {
-    const writes = [{ version: 1, type: 'add', path: 'gold', value: 5, source: 'boon.yaml', line: 3, column: 1 }];
-    const state = withHash({ data: { x: 1 } }, [...events, ...(writes as never[])]);
-    expect(rehydrate(state)).toEqual({ version: 1, events });
+  it('keeps recorded writes, whose rolls the engine replays', () => {
+    const writes = [{ version: 1, type: 'add', path: 'gold', value: 5, rolled: true, source: 'boon.yaml' }];
+    const stream = [...events, ...(writes as never[])];
+    expect(rehydrate(withHash({ data: { x: 1 } }, stream))).toEqual({ version: 1, events: stream });
+    expect(() => rehydrate({ data: {}, events: [{ ...writes[0], rolled: 'yes' }] })).toThrow('events must be');
   });
 
   it('returns the version and events a state was resolved with', () => {
@@ -467,7 +482,7 @@ describe('cli', () => {
     }
   });
 
-  it("weaves the engine's writes into events, regenerating them on --in", () => {
+  it("weaves the engine's writes into events, keeping their versions on --in", () => {
     const dir = mkdtempSync(join(tmpdir(), 'goblin-writes-'));
     const state = join(dir, 'state.json');
     try {
@@ -478,7 +493,7 @@ describe('cli', () => {
       ];
       expect(first.events).toEqual(writes);
       const replayed = JSON.parse(runCli('examples/14-mixin-actor.yaml', '--compact', '--in', state).stdout);
-      expect(replayed.events).toEqual(writes.map((write) => ({ ...write, version: 2 })));
+      expect(replayed.events).toEqual(writes);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -3,16 +3,23 @@
  * all run, in order. */
 
 /** A write the engine made while resolving — a patch value or `=` (`set`),
- * `+` (`add`), `-=` (`subtract`) — at `path` from the entry root. Derived:
- * every run regenerates them, so replay skips them. */
+ * `+` (`add`), `-=` (`subtract`) — at `path` from the entry root. Replay makes
+ * it again from the inputs, reusing the recorded value when it `rolled` or an
+ * invoke made it. */
 export interface WriteEvent {
   version: number;
   type: 'set' | 'add' | 'subtract';
   path: string;
   value: unknown;
+  /** The value came from dice: replay writes it back instead of rolling again. */
+  rolled?: boolean;
   source?: string;
   line?: number;
   column?: number;
+}
+
+export function isWriteEvent(event: StateEvent): event is WriteEvent {
+  return event.type === 'set' || event.type === 'add' || event.type === 'subtract';
 }
 
 /** The state JSON's `events`: inputs, with the writes they led to woven in. */

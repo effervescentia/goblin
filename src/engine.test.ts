@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { parse as parseYaml } from 'yaml';
 import { GoblinEngine } from './engine';
-import { type InputEvent, invoke, override, parameter } from './inputs';
+import { type InputEvent, invoke, override, parameter, type StateEvent } from './inputs';
 import { Die, DieNode } from './nodes/die';
 import { ExpressionNode } from './nodes/expression';
 import { FunctionNode } from './nodes/function';
@@ -554,6 +554,23 @@ describe('nested actors', () => {
     expect(fieldValue(guide?.speed)).toBe(20);
     expect(fieldValue(guide?.gold)).toBe(1);
     expect(guide?.pace).toBe(20);
+  });
+
+  it("keeps a nested actor's overrides over its mixins' writes when something is invoked", () => {
+    // A namespaced override only lands as expansion enters its actor, so the
+    // boon's `+@.gold` writes over it until a later expansion re-applies it.
+    const gold = (...extra: InputEvent[]) => {
+      const engine = party();
+      engine.register('party.yaml', { party: { guide: "$tmpl('hero.yaml', 'bree')" } });
+      (engine.docs.get('hero.yaml') as Record<string, unknown>)['rest()'] = '@.speed = @.speed';
+      const inputs = [parameter('bree.name', 'Bree'), override('bree.gold', 100), ...extra];
+      const state = engine.resolve('party.yaml', inputs) as {
+        data: { party: Record<string, Record<string, unknown>> };
+      };
+      return fieldValue(state.data.party.guide?.gold);
+    };
+    expect(gold()).toBe(100);
+    expect(gold(invoke('party.guide.rest'))).toBe(100);
   });
 
   it('invokes a function inside a nested actor as that actor', () => {
@@ -1380,8 +1397,79 @@ describe('parameters', () => {
     expect(engine.writes(actor, state.data)).toEqual([
       { event: { type: 'set', path: 'speed', value: 40, source: 'boon.yaml' } },
       { event: { type: 'add', path: 'gold', value: 5, source: 'boon.yaml' } },
-      { cause: rest, event: { type: 'set', path: 'hp.current', value: 9, source: 'hero.yaml' } },
+      { cause: rest, phase: rest, event: { type: 'set', path: 'hp.current', value: 9, source: 'hero.yaml' } },
     ]);
+  });
+
+  it("freezes an invoke's writes on replay, while patch writes follow changed inputs", () => {
+    const hero = () => {
+      const engine = new GoblinEngine('.');
+      engine.register('hero.yaml', {
+        $actor: 'Hero',
+        level: 1,
+        hp: { max: '@.level * 10', current: 1 },
+        'rest()': '@.hp.current = @.hp.max',
+      });
+      return engine;
+    };
+    const run = (events: StateEvent[]) => {
+      const engine = hero();
+      const state = engine.resolve('hero.yaml', events) as { data: { hp: Record<string, unknown> } };
+      const writes = engine.writes(engine.docs.get('hero.yaml'), state.data);
+      return {
+        hp: { max: state.data.hp.max, current: fieldValue(state.data.hp.current) },
+        writes: writes.map(({ cause, version, event }) => ({ version: version ?? cause?.version ?? 1, ...event })),
+      };
+    };
+    const rested = run([invoke('rest', [], 1)]);
+    expect(rested.hp).toEqual({ max: 10, current: 10 });
+    // Levelling up later: the rest already happened, at the old max.
+    const levelled = run([invoke('rest', [], 1), ...rested.writes, override('level', 2, 2)]);
+    expect(levelled.hp).toEqual({ max: 20, current: 10 });
+    expect(levelled.writes).toEqual(rested.writes);
+  });
+
+  it('replays the rolls a recorded stream wrote to fields, rolling afresh only what it did not record', () => {
+    const hero = () => {
+      const engine = new GoblinEngine('.');
+      engine.register('boon.yaml', { '@': 'Hero', '@.strength': '$lib.dice.keep_highest(4, 6, 3)' });
+      engine.register('hero.yaml', {
+        $actor: 'Hero',
+        hp: 10,
+        strength: 0,
+        boon: "$mixin('boon.yaml')",
+        'heal()': '@.hp += 1d10',
+      });
+      return engine;
+    };
+    const heal = invoke('heal', [], 2);
+    const run = (events: StateEvent[]) => {
+      const engine = hero();
+      const state = engine.resolve('hero.yaml', events) as { data: Record<string, unknown> };
+      const writes = engine.writes(engine.docs.get('hero.yaml'), state.data);
+      return {
+        strength: fieldValue(state.data.strength),
+        hp: fieldValue(state.data.hp),
+        writes: writes.map(({ cause, version, event }) => ({ version: version ?? cause?.version ?? 3, ...event })),
+      };
+    };
+    const random = vi.spyOn(Math, 'random');
+    try {
+      random.mockReturnValue(0.99); // every face a 6, or a 10
+      const first = run([heal]);
+      expect(first).toMatchObject({ strength: 18, hp: 20 });
+      expect(first.writes).toEqual([
+        { version: 3, type: 'set', path: 'strength', value: 18, rolled: true, source: 'boon.yaml' },
+        { version: 2, type: 'add', path: 'hp', value: 10, rolled: true, source: 'hero.yaml' },
+      ]);
+      random.mockReturnValue(0); // every face a 1
+      const replayed = run([heal, ...first.writes]);
+      expect(replayed).toMatchObject({ strength: 18, hp: 20, writes: first.writes });
+      // Without the recorded writes, the dice roll again.
+      expect(run([heal])).toMatchObject({ strength: 3, hp: 11 });
+    } finally {
+      random.mockRestore();
+    }
   });
 
   it('replays sets and invokes in stream order', () => {

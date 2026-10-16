@@ -3,6 +3,15 @@ import { Node } from './node';
 
 /** A die value: arithmetic rolls it, a standalone literal keeps its spec. */
 export class Die {
+  /** Faces rolled so far, process-wide: a value computed while it rose came from dice. */
+  static rolled = 0;
+
+  /** One face of a `sides`-sided die. Every roll goes through here. */
+  static face(sides: number): number {
+    Die.rolled++;
+    return 1 + Math.floor(Math.random() * sides);
+  }
+
   constructor(
     public readonly count: number,
     public readonly sides: number,
@@ -15,7 +24,7 @@ export class Die {
 
   /** Each die's face, for rules that read them apart (drop the lowest). */
   rolls(): number[] {
-    return Array.from({ length: this.count }, () => 1 + Math.floor(Math.random() * this.sides));
+    return Array.from({ length: this.count }, () => Die.face(this.sides));
   }
 
   /** Arithmetic with a die rolls it (`hit_points + hit_die`). */
