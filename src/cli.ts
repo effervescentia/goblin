@@ -18,9 +18,10 @@ import { print } from './nodes/serialize';
 export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--strip-metadata] [--in state.json|-] [--out file.json] [--help]
 
 Resolves a goblin document and prints the result as JSON: either
-{ "hash", "parameters", "overrides", "data" } when all :param values are
-satisfied (parameters/overrides are this run's inputs; hash is a sha256 over
-the compact JSON of the rest), or
+{ "hash", "version", "parameters", "overrides", "data" } when all :param
+values are satisfied (version counts runs since the first, bumped by each
+--in; parameters/overrides are this run's inputs; hash is a sha256 over the
+compact JSON of the rest), or
 { "query": […] } listing the outstanding parameters. A resolved sheet must
 also pass its !validate rules; failing rules print as { "errors": […] }.
 
@@ -38,8 +39,8 @@ Arguments:
                 their source expression; records left empty collapse to null.
   --in          Rehydrate from a prior { "data": … } output (a file, or
                 - for stdin): its parameters and overrides are replayed, with
-                this run's --param/--set taking precedence. A hash must
-                match the rest of the state.
+                this run's --param/--set taking precedence, and its version
+                is incremented. A hash must match the rest of the state.
   --out         Also write the JSON to this file (replacing it) when the
                 document fully resolves to { "data": … }; a { "query" } or
                 { "errors" } result leaves the file untouched.
@@ -111,14 +112,15 @@ export interface Inputs {
   overrides: Record<string, unknown>;
 }
 
-/** Stamp a `{ data }` envelope with the inputs that produced it and a sha256
- * over the rest, so a saved state can be replayed and checked for edits. */
+/** Stamp a `{ data }` envelope with its version, the inputs that produced it
+ * and a sha256 over the rest, so a saved state can be replayed and checked for edits. */
 export function withHash<T>(
   state: T,
   inputs: Inputs = { parameters: {}, overrides: {} },
-): T | ({ hash: string } & Inputs) {
+  version = 1,
+): T | ({ hash: string; version: number } & Inputs) {
   if (state === null || typeof state !== 'object' || !('data' in state)) return state;
-  const body = { parameters: inputs.parameters, overrides: inputs.overrides, data: state.data };
+  const body = { version, parameters: inputs.parameters, overrides: inputs.overrides, data: state.data };
   return { hash: hashOf(body), ...body };
 }
 
@@ -126,22 +128,26 @@ function hashOf(body: unknown): string {
   return `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}`;
 }
 
-/** The `parameters` and `overrides` a prior `{ hash, parameters, overrides, data }`
- * output was resolved with; re-resolving the entry recomputes the rest. */
-export function rehydrate(state: unknown): Inputs {
+/** The `version`, `parameters` and `overrides` of a prior `{ hash, version, … data }`
+ * output; re-resolving the entry recomputes the rest. A missing version reads as 0. */
+export function rehydrate(state: unknown): Inputs & { version: number } {
   if (state === null || typeof state !== 'object' || !('data' in state))
     throw new Error('--in expects a resolved { "data": … } envelope');
   const {
     hash,
+    version,
     parameters = {},
     overrides = {},
     data,
-  } = state as { hash?: unknown } & Partial<Inputs> & { data: unknown };
+  } = state as { hash?: unknown; version?: unknown } & Partial<Inputs> & { data: unknown };
   const isRecord = (value: unknown) => value !== null && typeof value === 'object' && !Array.isArray(value);
   if (!isRecord(parameters) || !isRecord(overrides)) throw new Error('--in parameters and overrides must be objects');
-  if (hash !== undefined && hash !== hashOf({ parameters, overrides, data }))
+  if (version !== undefined && !(Number.isInteger(version) && (version as number) >= 0))
+    throw new Error('--in version must be a non-negative integer');
+  // Stringify drops an undefined version, so states predating it still verify.
+  if (hash !== undefined && hash !== hashOf({ version, parameters, overrides, data }))
     throw new Error('--in state hash does not match its contents');
-  return { parameters, overrides };
+  return { version: (version as number | undefined) ?? 0, parameters, overrides };
 }
 
 /** Resolution envelope plus `{ errors }` for sheets failing `!validate`. */
@@ -209,14 +215,18 @@ if (import.meta.main) {
     }
     const prior =
       args.in === undefined
-        ? { parameters: {}, overrides: {} }
+        ? { version: 0, parameters: {}, overrides: {} }
         : rehydrate(JSON.parse(args.in === '-' ? await Bun.stdin.text() : await Bun.file(args.in).text()));
     const inputs = {
       parameters: { ...prior.parameters, ...args.params },
       overrides: { ...prior.overrides, ...args.overrides },
     };
     const state = await resolveAppState(process.cwd(), args.entry, inputs.parameters, inputs.overrides);
-    const out = withHash(args.stripMetadata && 'data' in state ? { data: print(state.data) } : state, inputs);
+    const out = withHash(
+      args.stripMetadata && 'data' in state ? { data: print(state.data) } : state,
+      inputs,
+      prior.version + 1,
+    );
     const json = `${JSON.stringify(out, null, args.compact ? 0 : 2)}\n`;
     // Only a full resolution is worth saving; Bun.write replaces the file.
     if (args.out !== undefined && 'data' in state) await Bun.write(args.out, json);

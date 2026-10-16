@@ -739,13 +739,16 @@ envelope that is either satisfied or asking:
   (satisfied ones are filtered out).
 - The CLI then validates `{ data }`: any failing `!validate` rule turns it
   into `{ errors }` (see Validation). A passing result prints as
-  `{ hash, parameters, overrides, data }`: `parameters` / `overrides` are the
+  `{ hash, version, parameters, overrides, data }`: `version` is `1` for a
+  fresh run and the prior state's version + 1 under `--in` (a state without
+  one counts as `0`), `parameters` / `overrides` are the
   `--param` / `--set` values the run used (as given, keyed the same way),
   and `hash` is `sha256:<hex>` of the compact
-  `JSON.stringify({ parameters, overrides, data })` (data after
+  `JSON.stringify({ version, parameters, overrides, data })` (data after
   `--strip-metadata`, when given).
 - `--in state.json` (or `--in -` for stdin) rehydrates from a prior output:
-  its `parameters` and `overrides` replay, and everything else recomputes from
+  its `parameters` and `overrides` replay, its `version` increments, and
+  everything else recomputes from
   the entry. This run's `--param`/`--set` win; a `hash` that doesn't match
   the rest of the state throws.
 - Provided values of the wrong `:type` — or violating `:options` / `:min` /

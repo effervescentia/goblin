@@ -222,7 +222,7 @@ describe('withHash', () => {
   const inputs: Inputs = { parameters: { name: 'Aria' }, overrides: { level: 5 } };
 
   it('stamps data envelopes with their inputs and a sha256 over the rest', () => {
-    const body = { ...inputs, data: { a: 1 } };
+    const body = { version: 1, ...inputs, data: { a: 1 } };
     expect(withHash({ data: { a: 1 } }, inputs)).toEqual({
       hash: `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}`,
       ...body,
@@ -230,6 +230,8 @@ describe('withHash', () => {
     const hash = (data: unknown, given = inputs) => (withHash({ data }, given) as { hash: string }).hash;
     expect(hash({ a: 2 })).not.toBe(hash({ a: 1 }));
     expect(hash({ a: 1 }, { ...inputs, parameters: {} })).not.toBe(hash({ a: 1 }));
+    expect(withHash({ data: { a: 1 } }, inputs, 2)).toMatchObject({ version: 2 });
+    expect((withHash({ data: { a: 1 } }, inputs, 2) as { hash: string }).hash).not.toBe(hash({ a: 1 }));
   });
 
   it('leaves query and errors envelopes alone', () => {
@@ -241,15 +243,23 @@ describe('withHash', () => {
 describe('rehydrate', () => {
   const inputs = { parameters: { name: 'Aria', starting_level: 2 }, overrides: { 'hp.max': 14 } };
 
-  it('returns the parameters and overrides a state was resolved with', () => {
-    expect(rehydrate(withHash({ data: { x: 1 } }, inputs))).toEqual(inputs);
-    expect(rehydrate({ data: { x: 1 } })).toEqual({ parameters: {}, overrides: {} });
+  it('returns the version, parameters and overrides a state was resolved with', () => {
+    expect(rehydrate(withHash({ data: { x: 1 } }, inputs, 3))).toEqual({ version: 3, ...inputs });
+    expect(rehydrate({ data: { x: 1 } })).toEqual({ version: 0, parameters: {}, overrides: {} });
+  });
+
+  it('accepts states hashed before version existed', () => {
+    const body = { ...inputs, data: { x: 1 } };
+    const hash = `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}`;
+    expect(rehydrate({ hash, ...body })).toEqual({ version: 0, ...inputs });
   });
 
   it('rejects edited states, bad inputs, and non-data envelopes', () => {
     const state = withHash({ data: { x: 1 } }, inputs) as Record<string, unknown>;
     expect(() => rehydrate({ ...state, parameters: { name: 'Bob' } })).toThrow('hash does not match');
     expect(() => rehydrate({ ...state, data: { x: 2 } })).toThrow('hash does not match');
+    expect(() => rehydrate({ ...state, version: 7 })).toThrow('hash does not match');
+    expect(() => rehydrate({ data: {}, version: -1 })).toThrow('non-negative integer');
     expect(() => rehydrate({ data: {}, parameters: [] })).toThrow('must be objects');
     expect(() => rehydrate({ query: [] })).toThrow('resolved { "data": … } envelope');
   });
@@ -384,7 +394,10 @@ describe('cli', () => {
         parameters: { hero_name: 'Aria', starting_level: 2, 'details.title': 'Sir' },
         overrides: { 'hit_points.max': 12 },
       });
-      expect(runCli('examples/08-parameters.yaml', '--compact', '--in', state).stdout).toBe(first.stdout);
+      expect(JSON.parse(first.stdout).version).toBe(1);
+      const replayed = JSON.parse(runCli('examples/08-parameters.yaml', '--compact', '--in', state).stdout);
+      const { hash: _, version: __, ...rest } = JSON.parse(first.stdout);
+      expect(replayed).toMatchObject({ version: 2, ...rest });
 
       const piped = execFileSync('bun', ['src/cli.ts', 'examples/08-parameters.yaml', '--in', '-'], {
         cwd: root,
