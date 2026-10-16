@@ -1,0 +1,18 @@
+'@': Character
+$if: "@.species == 'dragonborn'"
+
+'@.size': medium
+'@.speed': 30
+
+'@.features':
+  +draconic_ancestry:
+    :label: Draconic Ancestry
+  +breath_weapon:
+    :label: Breath Weapon
+  +damage_resistance:
+    :label: Damage Resistance
+  +darkvision:
+    :label: Darkvision
+  +draconic_flight:
+    $if: '@.level >= 5'
+    :label: Draconic Flight

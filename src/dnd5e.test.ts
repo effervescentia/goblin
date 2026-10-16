@@ -287,7 +287,7 @@ describe('5e', () => {
       ':value': 2,
       ':events': [
         // Each write cites the key behind it: `attacks: 1`, then `'+@.attacks'`.
-        { ':source': 'character.yaml', ':line': 64, ':column': 1, ':set': 1 },
+        { ':source': 'character.yaml', ':line': 51, ':column': 1, ':set': 1 },
         { ':source': 'class/fighter/fighter.yaml', ':line': 113, ':column': 5, ':add': 1 },
       ],
     });
@@ -779,7 +779,7 @@ describe('5e', () => {
     expect(data.data.level).toEqual({
       ':value': 5,
       ':events': [
-        { ':source': 'character.yaml', ':line': 27, ':column': 1, ':set': 1 },
+        { ':source': 'character.yaml', ':line': 14, ':column': 1, ':set': 1 },
         // An override has no document line to cite.
         { ':source': 'override', ':set': 5 },
       ],

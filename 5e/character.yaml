@@ -1,23 +1,10 @@
-# D&D 5e (2014 SRD-ish) character basics.
-#
-# Play it:
-#   goblin 5e/character.yaml --param name=Aria --param xp=6500
-# Without params the CLI returns { query: [...] } (name); a class patch adds
-# its own choices (a fighter from level 4 asks for `improvements`).
-#
-# Adopt a class in code (the CLI does not apply patches): evaluate the actor
-# to read its derived level, then engine.apply(actor, 'class/fighter/fighter.yaml', level).
-# XP thresholds follow the standard progression (L2 at 300 … L20 at 355000).
-
 $actor: Character
 
-# Identity — provided by the player.
 name:
   :doc: Your hero's name, as sung by bards.
   :param: true
   :type: string
 
-# Experience — provided by the table, 0 if omitted.
 xp:
   :doc: Experience points earned in play.
   :param: true
@@ -99,18 +86,26 @@ species:
   :param: true
   :type: string
   :options:
+    - aasimar
+    - dragonborn
     - dwarf
     - elf
     - gnome
+    - goliath
     - halfling
+    - human
     - orc
     - tiefling
 
 _species:
+  aasimar: $mixin('species/aasimar/aasimar.yaml')
+  dragonborn: $mixin('species/dragonborn/dragonborn.yaml')
   dwarf: $mixin('species/dwarf/dwarf.yaml')
   elf: $mixin('species/elf/elf.yaml')
   gnome: $mixin('species/gnome/gnome.yaml')
+  goliath: $mixin('species/goliath/goliath.yaml')
   halfling: $mixin('species/halfling/halfling.yaml')
+  human: $mixin('species/human/human.yaml')
   orc: $mixin('species/orc/orc.yaml')
   tiefling: $mixin('species/tiefling/tiefling.yaml')
 

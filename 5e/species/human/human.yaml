@@ -1,0 +1,13 @@
+'@': Character
+$if: "@.species == 'human'"
+
+'@.size': medium
+'@.speed': 30
+
+'@.features':
+  +resourceful:
+    :label: Resourceful
+  +skillful:
+    :label: Skillful
+  +versatile:
+    :label: Versatile

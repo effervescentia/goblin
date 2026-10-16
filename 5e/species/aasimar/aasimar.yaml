@@ -1,0 +1,18 @@
+'@': Character
+$if: "@.species == 'aasimar'"
+
+'@.size': medium
+'@.speed': 30
+
+'@.features':
+  +celestial_resistance:
+    :label: Celestial Resistance
+  +darkvision:
+    :label: Darkvision
+  +healing_hands:
+    :label: Healing Hands
+  +light_bearer:
+    :label: Light Bearer
+  +celestial_revelation:
+    $if: '@.level >= 3'
+    :label: Celestial Revelation
