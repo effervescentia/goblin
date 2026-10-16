@@ -313,7 +313,7 @@ level: $.level.level_for(@.xp.value)
 
 A patch value that is a single call — `$tmpl('…')` or a call to a
 record-bodied function — inlines on the way in, so a repeated node can live
-in one place and still be filled: `5e/fighter/fighter.yaml` writes
+in one place and still be filled: `5e/class/fighter/fighter.yaml` writes
 `'@.improvements.level_4': '$.feature.ability_improvement()'`, and the
 `:param` record it hands back lands in the actor tree where the query finds
 it.
@@ -467,26 +467,26 @@ patch touched print bare, as before.
   expression made them: `=` as `:set` (the new value), `+=` as `:add` and
   `-=` as `:subtract` (the amount, with any dice rolled once — so the event
   and the field agree). Using Second Wind logs
-  `{ ":source": "fighter/fighter.yaml", ":add": 7 }` on `hit_points.current` and
-  `{ ":source": "fighter/fighter.yaml", ":subtract": 1 }` on its uses.
+  `{ ":source": "class/fighter/fighter.yaml", ":add": 7 }` on `hit_points.current` and
+  `{ ":source": "class/fighter/fighter.yaml", ":subtract": 1 }` on its uses.
 - The first event is the value the field already held when the first patch
   or assignment landed, so a history reads base-then-patch. A field a patch
   creates has no such origin event.
 - Metadata (`:doc`, `:label`, …) and function definitions are never wrapped.
 
 ```ts
-// 5e/main.yaml: actor character.yaml, adopt [fighter/fighter.yaml]
+// 5e/main.yaml: actor character.yaml, adopt [class/fighter/fighter.yaml]
 "attacks": {                                   // a scalar pairs up
   ":value": 2,
   ":events": [
     { ":source": "character.yaml", ":set": 1 },
-    { ":source": "fighter/fighter.yaml", ":add": 1 }     // `1 + (@.level >= 11) + …` at level 5
+    { ":source": "class/fighter/fighter.yaml", ":add": 1 }     // `1 + (@.level >= 11) + …` at level 5
   ]
 },
 "second_wind": {                               // a record takes the key in place
   ":label": "Second Wind",
   ":doc": "Regain hit points in a pinch, once per rest.",
-  ":events": [{ ":source": "fighter/fighter.yaml", ":add": "second_wind" }]
+  ":events": [{ ":source": "class/fighter/fighter.yaml", ":add": "second_wind" }]
 }
 ```
 
@@ -532,7 +532,7 @@ resolves the base, applies each patch in order, then resolves the merged
 result — gate per-level content with `$if` on actor state so choices declared
 by adopted patches surface in the `{ query }` envelope. Provided values fill in
 before each patch applies, so a later patch can gate on a choice an earlier
-one declared: `fighter/fighter.yaml` mixes in its subclasses (see Mixins),
+one declared: `class/fighter/fighter.yaml` mixes in its subclasses (see Mixins),
 each gated on `@.level >= 3 && @.features.martial_archetype == '…'` (level
 first, since `&&` never reads the choice before the fighter declares it). Template paths are
 root-relative; nested references resolve relative to their own file.
@@ -545,7 +545,7 @@ level: $tmpl('level.yaml')
 
 actor: $tmpl('character.yaml')
 adopt:
-  - $tmpl('fighter/fighter.yaml')
+  - $tmpl('class/fighter/fighter.yaml')
 ```
 
 ## Mixins
@@ -580,7 +580,7 @@ when the document first evaluates, so place it after the fields it merges
 into (`_ability_methods` follows `abilities`):
 
 ```yaml
-# 5e/fighter/fighter.yaml
+# 5e/class/fighter/fighter.yaml
 '@': Character
 _subclasses:
   champion: $mixin('champion.yaml')

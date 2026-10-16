@@ -1,5 +1,5 @@
 # Champion martial archetype, applied when the fighter picks
-# `features.martial_archetype: champion` (5e/fighter/fighter.yaml mixes in every
+# `features.martial_archetype: champion` (5e/class/fighter/fighter.yaml mixes in every
 # subclass; only the chosen one applies). Raw power: wider criticals and endurance.
 
 '@': Character

@@ -267,14 +267,14 @@ describe('5e', () => {
       ':events': [
         // Each write cites the key behind it: `attacks: 1`, then `'+@.attacks'`.
         { ':source': 'character.yaml', ':line': 64, ':column': 1, ':set': 1 },
-        { ':source': 'fighter/fighter.yaml', ':line': 113, ':column': 5, ':add': 1 },
+        { ':source': 'class/fighter/fighter.yaml', ':line': 113, ':column': 5, ':add': 1 },
       ],
     });
     // A `+key` addition is itself a change: the feature records who added it.
     expect(data.data.features.extra_attack).toEqual({
       ':label': 'Extra Attack',
       ':doc': 'Strike twice whenever you take the Attack action.',
-      ':events': [{ ':source': 'fighter/fighter.yaml', ':line': 109, ':column': 3, ':add': 'extra_attack' }],
+      ':events': [{ ':source': 'class/fighter/fighter.yaml', ':line': 109, ':column': 3, ':add': 'extra_attack' }],
     });
     expect(data.data.features.fighting_style).toEqual({
       ':label': 'Fighting Style',
@@ -294,7 +294,7 @@ describe('5e', () => {
         'unarmed_fighting',
       ],
       ':value': 'dueling',
-      ':events': [{ ':source': 'fighter/fighter.yaml', ':line': 34, ':column': 3, ':add': 'fighting_style' }],
+      ':events': [{ ':source': 'class/fighter/fighter.yaml', ':line': 34, ':column': 3, ':add': 'fighting_style' }],
     });
   });
 

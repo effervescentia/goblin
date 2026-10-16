@@ -6,7 +6,7 @@
 # its own choices (a fighter from level 4 asks for `improvements`).
 #
 # Adopt a class in code (the CLI does not apply patches): evaluate the actor
-# to read its derived level, then engine.apply(actor, 'fighter/fighter.yaml', level).
+# to read its derived level, then engine.apply(actor, 'class/fighter/fighter.yaml', level).
 # XP thresholds follow the standard progression (L2 at 300 … L20 at 355000).
 
 $actor: Character
@@ -114,18 +114,18 @@ class:
 
 # Every class mixes in; each gates on `class`, so only the chosen one applies.
 _classes:
-  barbarian: $mixin('barbarian/barbarian.yaml')
-  bard: $mixin('bard/bard.yaml')
-  cleric: $mixin('cleric/cleric.yaml')
-  druid: $mixin('druid/druid.yaml')
-  fighter: $mixin('fighter/fighter.yaml')
-  monk: $mixin('monk/monk.yaml')
-  paladin: $mixin('paladin/paladin.yaml')
-  ranger: $mixin('ranger/ranger.yaml')
-  rogue: $mixin('rogue/rogue.yaml')
-  sorcerer: $mixin('sorcerer/sorcerer.yaml')
-  warlock: $mixin('warlock/warlock.yaml')
-  wizard: $mixin('wizard/wizard.yaml')
+  barbarian: $mixin('class/barbarian/barbarian.yaml')
+  bard: $mixin('class/bard/bard.yaml')
+  cleric: $mixin('class/cleric/cleric.yaml')
+  druid: $mixin('class/druid/druid.yaml')
+  fighter: $mixin('class/fighter/fighter.yaml')
+  monk: $mixin('class/monk/monk.yaml')
+  paladin: $mixin('class/paladin/paladin.yaml')
+  ranger: $mixin('class/ranger/ranger.yaml')
+  rogue: $mixin('class/rogue/rogue.yaml')
+  sorcerer: $mixin('class/sorcerer/sorcerer.yaml')
+  warlock: $mixin('class/warlock/warlock.yaml')
+  wizard: $mixin('class/wizard/wizard.yaml')
 
 # A short rest refills the `short` resources; a long rest refills everything.
 rest:
