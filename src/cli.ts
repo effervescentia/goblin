@@ -11,13 +11,15 @@
  * Resolved state goes to stdout (always valid JSON); errors go to stderr
  * with a non-zero exit code.
  */
+import { createHash } from 'node:crypto';
 import { GoblinEngine } from './engine';
 import { print } from './nodes/serialize';
 
 export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--strip-metadata] [--out file.json] [--help]
 
 Resolves a goblin document and prints the result as JSON: either
-{ "data": … } when all :param values are satisfied, or
+{ "hash": "sha256:…", "data": … } when all :param values are satisfied
+(hash covers the compact JSON of data), or
 { "query": […] } listing the outstanding parameters. A resolved sheet must
 also pass its !validate rules; failing rules print as { "errors": […] }.
 
@@ -93,6 +95,14 @@ export function parseArgs(argv: string[]): CliArgs {
   return args;
 }
 
+/** Prefix a `{ data }` envelope with a sha256 of its compact JSON, so saved
+ * sheets can be compared or cache-checked without diffing them. */
+export function withHash<T>(state: T): T | { hash: string; data: unknown } {
+  if (state === null || typeof state !== 'object' || !('data' in state)) return state;
+  const hex = createHash('sha256').update(JSON.stringify(state.data)).digest('hex');
+  return { hash: `sha256:${hex}`, data: state.data };
+}
+
 /** Resolution envelope plus `{ errors }` for sheets failing `!validate`. */
 export type AppState = ReturnType<GoblinEngine['resolve']> | { errors: string[] };
 
@@ -157,7 +167,7 @@ if (import.meta.main) {
       process.exit(0);
     }
     const state = await resolveAppState(process.cwd(), args.entry, args.params, args.overrides);
-    const out = args.stripMetadata && 'data' in state ? { data: print((state as { data: unknown }).data) } : state;
+    const out = withHash(args.stripMetadata && 'data' in state ? { data: print(state.data) } : state);
     const json = `${JSON.stringify(out, null, args.compact ? 0 : 2)}\n`;
     // Only a full resolution is worth saving; Bun.write replaces the file.
     if (args.out !== undefined && 'data' in state) await Bun.write(args.out, json);

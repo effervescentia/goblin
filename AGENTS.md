@@ -52,7 +52,8 @@ apart. Treat a missing spec update as an incomplete change.
   (validation failures always log as errors).
 - `bun run build` compiles `src/cli.ts` to a `build/goblin` binary
   (`goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--out file.json] [--help]`) that prints
-  the resolution envelope (`{ data }`, `{ query }`, or `{ errors }` for failing `!validate` rules) as JSON to stdout, also writing it to `--out` when the document fully resolves. `src/cli.ts` is Bun-only; keep `parseArgs` pure
+  the resolution envelope (`{ hash, data }` — `hash` is `sha256:` of the compact data JSON — `{ query }`, or `{ errors }` for failing `!validate` rules) as JSON to stdout, also writing it to `--out` when the document fully resolves. Keep serialized key order deterministic (same input → same order) — the
+  `hash` is over `JSON.stringify`, so unstable ordering silently changes it. `src/cli.ts` is Bun-only; keep `parseArgs` pure
   so `src/cli.test.ts` stays runtime-agnostic.
 - `bun run ui` serves the inspector (`ui/`, Bun-only) at localhost:3000: it
   resolves an entry via `resolveApp` in `src/cli.ts`, answers `{ query }`

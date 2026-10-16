@@ -738,7 +738,9 @@ envelope that is either satisfied or asking:
 - Otherwise → `{ query }` with **only** the outstanding params
   (satisfied ones are filtered out).
 - The CLI then validates `{ data }`: any failing `!validate` rule turns it
-  into `{ errors }` (see Validation).
+  into `{ errors }` (see Validation). A passing result prints as
+  `{ hash, data }`, where `hash` is `sha256:<hex>` of the compact
+  `JSON.stringify(data)` (after `--strip-metadata`, when given).
 - Provided values of the wrong `:type` — or violating `:options` / `:min` /
   `:max` / `:count` / `:unique` — still throw instead of resolving.
 - `resolve(file, provided, overrides)` writes override values into the tree

@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { parseArgs, parseParamValue, USAGE } from './cli';
+import { parseArgs, parseParamValue, USAGE, withHash } from './cli';
 import { COMPANION_PARAMS } from './dnd5e.fixtures';
 import { print } from './nodes/serialize';
 
@@ -210,6 +211,20 @@ describe('parseParamValue', () => {
   });
 });
 
+describe('withHash', () => {
+  it('prefixes data envelopes with a sha256 of the compact data JSON', () => {
+    const { hash, data } = withHash({ data: { a: 1 } }) as { hash: string; data: unknown };
+    expect(hash).toBe(`sha256:${createHash('sha256').update('{"a":1}').digest('hex')}`);
+    expect(data).toEqual({ a: 1 });
+    expect((withHash({ data: { a: 2 } }) as { hash: string }).hash).not.toBe(hash);
+  });
+
+  it('leaves query and errors envelopes alone', () => {
+    expect(withHash({ query: [] })).toEqual({ query: [] });
+    expect(withHash({ errors: ['x'] })).toEqual({ errors: ['x'] });
+  });
+});
+
 describe('USAGE', () => {
   it('documents the CLI', () => {
     expect(USAGE).toContain(
@@ -253,7 +268,10 @@ describe('cli', () => {
     writeFileSync(join(cwd, 'docs', 'nested', 'actor.yaml'), 'name: Config actor\n');
     try {
       const stdout = execFileSync('bun', [join(root, 'src/cli.ts')], { cwd, encoding: 'utf8' });
-      expect(JSON.parse(stdout)).toEqual({ data: { name: 'Config actor' } });
+      expect(JSON.parse(stdout)).toEqual({
+        hash: `sha256:${createHash('sha256').update('{"name":"Config actor"}').digest('hex')}`,
+        data: { name: 'Config actor' },
+      });
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
