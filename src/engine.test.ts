@@ -1465,14 +1465,12 @@ describe('parameters', () => {
       const first = run([heal, luck]);
       expect(first).toMatchObject({ strength: 18, hp: 20, initiative: 22, result: 8 });
       const rolls = first.made.filter((event) => event.type === 'roll');
-      expect(rolls.map(({ path, sides }) => `${path}:d${sides}`)).toEqual([
-        'heal:d10',
-        'luck:d6',
-        'strength:d6',
-        'strength:d6',
-        'strength:d6',
-        'strength:d6',
-        'initiative:d20',
+      expect(rolls.map(({ path, dice, value }) => [path, dice, value])).toEqual([
+        ['heal', '1d10', [10]],
+        ['luck', '1d6', [6]],
+        // `keep_highest(4, 6, 3)` is one roll of four dice, every face kept.
+        ['strength', '4d6', [6, 6, 6, 6]],
+        ['initiative', '1d20', [20]],
       ]);
       random.mockReturnValue(0); // every face a 1
       // Every recorded roll comes back: fields, invoked calls, and what they wrote.

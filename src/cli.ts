@@ -13,7 +13,7 @@
  */
 import { createHash } from 'node:crypto';
 import { type EngineEvent, GoblinEngine } from './engine';
-import type { InputEvent, RollEvent, StateEvent, WriteEvent } from './inputs';
+import { type InputEvent, parseDice, type RollEvent, type StateEvent, type WriteEvent } from './inputs';
 import { print } from './nodes/serialize';
 
 export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--help]
@@ -24,10 +24,10 @@ satisfied (version counts runs since the first, bumped by each --in; events
 is the stream of every --param/--set/--invoke given so far, in order, each
 as { version, type: "parameter" | "override" | "invoke", path, value }, with the
 engine's writes woven in as { version, type: "set" | "add" | "subtract",
-path, value, rolled, source, line, column } and every die rolled as
-{ version, type: "roll", path, sides, value } — in the order made, an
-invoke's right after it; hash is a sha256 over the compact JSON of the rest,
-plus "result" under --invoke), or
+path, value, rolled, source, line, column } and every roll as
+{ version, type: "roll", path, dice: "XdY", value: [faces] } — in the order
+made, an invoke's right after it; hash is a sha256 over the compact JSON of
+the rest, plus "result" under --invoke), or
 { "query": […] } listing the outstanding parameters. A resolved sheet must
 also pass its !validate rules; failing rules print as { "errors": […] }.
 
@@ -181,16 +181,15 @@ function isWrite(event: unknown): event is WriteEvent {
 }
 
 function isRoll(event: unknown): event is RollEvent {
+  if (!isRecord(event) || !isVersion(event.version) || event.type !== 'roll' || typeof event.path !== 'string')
+    return false;
+  const [count, sides] = (typeof event.dice === 'string' && parseDice(event.dice)) || [];
+  const faces = event.value;
   return (
-    isRecord(event) &&
-    isVersion(event.version) &&
-    event.type === 'roll' &&
-    typeof event.path === 'string' &&
-    Number.isInteger(event.sides) &&
-    (event.sides as number) > 0 &&
-    Number.isInteger(event.value) &&
-    (event.value as number) >= 1 &&
-    (event.value as number) <= (event.sides as number)
+    sides !== undefined &&
+    Array.isArray(faces) &&
+    faces.length === count &&
+    faces.every((face) => Number.isInteger(face) && face >= 1 && face <= sides)
   );
 }
 
@@ -222,7 +221,7 @@ export function rehydrate(state: unknown): { version: number; events: StateEvent
   if (version !== undefined && !isVersion(version)) throw new Error('--in version must be a non-negative integer');
   if (!Array.isArray(events) || !events.every((event) => isInput(event) || isWrite(event) || isRoll(event)))
     throw new Error(
-      '--in events must be { version, type, path, value } objects of type parameter, override, invoke, set, add, subtract or roll (with sides)',
+      '--in events must be { version, type, path, value } objects of type parameter, override, invoke, set, add, subtract or roll (with dice)',
     );
   // Stringify drops an undefined version or result, so states without them still verify.
   if (hash !== undefined && hash !== hashOf({ version, events, result, data }))

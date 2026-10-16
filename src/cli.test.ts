@@ -504,9 +504,9 @@ describe('cli', () => {
     const state = join(dir, 'state.json');
     try {
       const first = JSON.parse(runCli('examples/03-dice.yaml', '--compact', '--out', state).stdout);
-      expect(first.events.map(({ type, path, sides }: Record<string, unknown>) => [type, path, sides])).toEqual([
-        ['roll', 'initiative', 20],
-        ['roll', 'heal', 8],
+      expect(first.events.map(({ type, path, dice }: Record<string, unknown>) => [type, path, dice])).toEqual([
+        ['roll', 'initiative', '1d20'],
+        ['roll', 'heal', '1d8'],
       ]);
       for (let i = 0; i < 3; i++) {
         const replayed = JSON.parse(runCli('examples/03-dice.yaml', '--compact', '--in', state).stdout);

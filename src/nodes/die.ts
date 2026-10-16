@@ -1,28 +1,28 @@
 import { DIE_LITERAL } from '../constants';
 import { Node } from './node';
 
-/** A die value: arithmetic rolls it, a standalone literal keeps its spec. */
-/** Where a face is rolled: it may hand back a recorded face instead of a fresh one. */
+/** Where dice are rolled: it may hand back recorded faces instead of fresh ones. */
 export interface RollFrame {
-  face(sides: number): number;
+  roll(count: number, sides: number): number[];
 }
 
+/** A die value: arithmetic rolls it, a standalone literal keeps its spec. */
 export class Die {
-  /** Faces rolled so far, process-wide: a value computed while it rose came from dice. */
+  /** Rolls made so far, process-wide: a value computed while it rose came from dice. */
   static rolled = 0;
 
   /** Open roll frames, innermost last (evaluation is synchronous, so one stack serves). */
   private static readonly frames: RollFrame[] = [];
 
-  /** One face of a `sides`-sided die. Every roll goes through here. */
-  static face(sides: number): number {
+  /** Each face of `count`d`sides`, rolled together. Every roll goes through here. */
+  static faces(count: number, sides: number): number[] {
     Die.rolled++;
     const frame = Die.frames.at(-1);
-    return frame === undefined ? Die.fresh(sides) : frame.face(sides);
+    return frame === undefined ? Die.fresh(count, sides) : frame.roll(count, sides);
   }
 
-  static fresh(sides: number): number {
-    return 1 + Math.floor(Math.random() * sides);
+  static fresh(count: number, sides: number): number[] {
+    return Array.from({ length: count }, () => 1 + Math.floor(Math.random() * sides));
   }
 
   /** Run `body` with `frame` answering its rolls. */
@@ -52,7 +52,7 @@ export class Die {
 
   /** Each die's face, for rules that read them apart (drop the lowest). */
   rolls(): number[] {
-    return Array.from({ length: this.count }, () => Die.face(this.sides));
+    return Die.faces(this.count, this.sides);
   }
 
   /** Arithmetic with a die rolls it (`hit_points + hit_die`). */

@@ -369,11 +369,7 @@ export function compileBody(body: string, paramNames: string[] = []) {
   ) => unknown;
 
   return (hooks: ResolveHooks, params: Record<string, unknown> = {}) => {
-    const roll = (count: number, sides: number) => {
-      let total = 0;
-      for (let i = 0; i < count; i++) total += Die.face(sides);
-      return total;
-    };
+    const roll = (count: number, sides: number) => Die.faces(count, sides).reduce((total, face) => total + face, 0);
     const args = [hooks.resolve, hooks.assign, hooks.assignEach, roll, indexList, ...paramNames.map((p) => params[p])];
     return fn(...args);
   };

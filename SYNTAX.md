@@ -172,7 +172,8 @@ missing: '#.ranked[5]'            # → null
   rolled `start`), however often it re-evaluates. List items count as
   fields, so a list of rolls holds still too. Function calls
   (`'roll()': 1d20 + .base`) roll on every call.
-- Every face rolled is recorded as a `roll` event (see Resolution), and a
+- Every roll — an inline `XdY`, a die in arithmetic, a `$lib.dice` call — is
+  recorded as one `roll` event with all its faces (see Resolution), and a
   replayed stream hands each one back, so nothing re-rolls under `--in`;
   without one, each new resolve rolls afresh.
 
@@ -773,21 +774,23 @@ envelope that is either satisfied or asking:
   `invoke` (at the end, with none), and each invoke's after it. A write
   takes its invoke's version, or this run's — unless the replayed stream
   already held it with the same value, which keeps the recorded version.
-- Every die face rolled joins `events` too, as `{ version, type: 'roll',
-  path, sides, value }`, ordered and versioned like writes. `path` is the
-  context it rolled in: the expression field whose evaluation rolled it
-  (`initiative`, or `strength` for a patch's `keep_highest(4, 6, 3)`, one
-  event per die), or — for a roll an invoked call made itself — the invoke's
-  `path`, under its `version`. Faces count from the first within one
-  evaluation of a field, and within one invoke call; rolls outside both
-  (a `$if`, say) share the root context `''`.
+- Every roll joins `events` too, as one `{ version, type: 'roll', path,
+  dice, value }` per roll: `dice` is `XdY` and `value` every face rolled, in
+  order — `1d20 + 2` is `{ dice: '1d20', value: [14] }`, and
+  `keep_highest(4, 6, 3)` one `4d6` event holding all four faces, the
+  dropped one included. They are ordered and versioned like writes. `path`
+  is the context it rolled in: the expression field whose evaluation rolled
+  it (`initiative`, `strength`), or — for a roll an invoked call made
+  itself — the invoke's `path`, under its `version`. Rolls count from the
+  first within one evaluation of a field, and within one invoke call; rolls
+  outside both (a `$if`, say) share the root context `''`.
 - `--in state.json` (or `--in -` for stdin) rehydrates from a prior output
   and replays all of its events. Inputs replay in order (a later parameter
   or override for the same path wins); writes are made again by the inputs,
   each paired with the recorded write in the same place — the nth write of
   its type to its path with the nth recorded one. Every recorded roll
-  replays: the nth face in a context hands back the recorded nth face when
-  its sides match (else it rolls afresh and joins the stream), so rolled
+  replays: the nth roll in a context hands back the recorded nth roll's
+  faces when its dice match (else it rolls afresh and joins the stream), so rolled
   ability scores, initiative and healing land as they did. Every write an
   invoked function made also keeps its recorded value — a rest replayed
   after a level-up still heals to the max it had then. Other writes

@@ -22,15 +22,22 @@ export function isWriteEvent(event: StateEvent): event is WriteEvent {
   return event.type === 'set' || event.type === 'add' || event.type === 'subtract';
 }
 
-/** One die face rolled while resolving, in the context it rolled in: the
- * field whose evaluation rolled it (`path` from the entry root), or the
- * invoke whose call did (its `version` and `path`). Replay hands it back. */
+/** One roll of `dice` (`XdY`) while resolving, its faces in `value`, in the
+ * context it rolled in: the field whose evaluation rolled it (`path` from the
+ * entry root), or the invoke whose call did (its `version` and `path`).
+ * Replay hands the faces back. */
 export interface RollEvent {
   version: number;
   type: 'roll';
   path: string;
-  sides: number;
-  value: number;
+  dice: string;
+  value: number[];
+}
+
+/** `XdY` → `[X, Y]`, or undefined when it is not one. */
+export function parseDice(dice: string): [number, number] | undefined {
+  const match = dice.match(/^([1-9]\d*)d([1-9]\d*)$/);
+  return match ? [Number(match[1]), Number(match[2])] : undefined;
 }
 
 /** The state JSON's `events`: inputs, with the writes and rolls they led to woven in. */
