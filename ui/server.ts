@@ -6,7 +6,7 @@
  */
 import { resolve as resolvePath } from 'node:path';
 import { resolveApp } from '../src/cli';
-import { param, set } from '../src/inputs';
+import { override, parameter } from '../src/inputs';
 import { inspect } from '../src/inspect';
 import index from './index.html';
 
@@ -49,8 +49,8 @@ const server = Bun.serve({
         const { entry, params = {}, overrides = {} } = (await req.json()) as ResolveRequest;
         try {
           const inputs = [
-            ...Object.entries(params).map(([path, value]) => param(path, value)),
-            ...Object.entries(overrides).map(([path, value]) => set(path, value)),
+            ...Object.entries(params).map(([path, value]) => parameter(path, value)),
+            ...Object.entries(overrides).map(([path, value]) => override(path, value)),
           ];
           const { state, actor, engine } = await resolveApp(root, entry, inputs);
           const nodes = 'data' in state ? inspect(actor, state.data, engine.namespaceOf) : undefined;

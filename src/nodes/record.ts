@@ -154,7 +154,7 @@ export class RecordNode extends Node<Record<string, unknown>> {
 
   /** Every `:param` record in a raw tree, as `[{ path, doc?, type?, … }]`.
    * A namespaced actor's params report under its namespace (`aria.name`);
-   * params an `inputs` param event fills by either key are left out. */
+   * params an `inputs` parameter event fills by either key are left out. */
   static collectParams(
     raw: unknown,
     namespaceOf?: (record: object) => string | undefined,
@@ -194,7 +194,7 @@ export class RecordNode extends Node<Record<string, unknown>> {
   }
 
   /**
-   * Fill raw `:param` records with `value` slots (a param event, else `:default`,
+   * Fill raw `:param` records with `value` slots (a parameter event, else `:default`,
    * else `null`) so `<path>.value` references resolve like any other node.
    * Returns true when anything was written. Idempotent.
    */
@@ -357,7 +357,7 @@ function eachParamRecord(
 
 /**
  * A `:param` record evaluates to its declaration metadata plus a `:value`
- * slot holding the filled value — a param event, else `:default`, else `null`.
+ * slot holding the filled value — a parameter event, else `:default`, else `null`.
  * Bare refs still read the filled value directly (see `derefParam`); the
  * wrapper is display only, and `--strip-metadata` collapses it to `:value`.
  */

@@ -1,22 +1,38 @@
 /** Goblin inputs — the append-only `--param` / `--set` / `--invoke` stream a
- * resolution replays. A later param or set for the same path wins; invokes
+ * resolution replays. A later parameter or override for the same path wins; invokes
  * all run, in order. */
+
+/** A write the engine made while resolving — a patch value or `=` (`set`),
+ * `+` (`add`), `-=` (`subtract`) — at `path` from the entry root. Derived:
+ * every run regenerates them, so replay skips them. */
+export interface WriteEvent {
+  version: number;
+  type: 'set' | 'add' | 'subtract';
+  path: string;
+  value: unknown;
+  source?: string;
+  line?: number;
+  column?: number;
+}
+
+/** The state JSON's `events`: inputs, with the writes they led to woven in. */
+export type StateEvent = InputEvent | WriteEvent;
 
 /** One `--param`, `--set` or `--invoke` (`value` holds its arguments), given
  * on the run that produced `version`. */
 export interface InputEvent {
   version: number;
-  type: 'param' | 'set' | 'invoke';
+  type: 'parameter' | 'override' | 'invoke';
   path: string;
   value: unknown;
 }
 
-export function param(path: string, value: unknown, version = 1): InputEvent {
-  return { version, type: 'param', path, value };
+export function parameter(path: string, value: unknown, version = 1): InputEvent {
+  return { version, type: 'parameter', path, value };
 }
 
-export function set(path: string, value: unknown, version = 1): InputEvent {
-  return { version, type: 'set', path, value };
+export function override(path: string, value: unknown, version = 1): InputEvent {
+  return { version, type: 'override', path, value };
 }
 
 export function invoke(path: string, args: unknown[] = [], version = 1): InputEvent {
@@ -34,10 +50,10 @@ export function latest(events: readonly InputEvent[], type: InputEvent['type']):
   return [...byPath.values()];
 }
 
-/** The value of the latest param event for the first of `paths` given one. */
+/** The value of the latest parameter event for the first of `paths` given one. */
 export function paramValue(events: readonly InputEvent[] = [], ...paths: string[]): unknown {
   for (const path of paths) {
-    const event = events.findLast((e) => e.type === 'param' && e.path === path);
+    const event = events.findLast((e) => e.type === 'parameter' && e.path === path);
     if (event !== undefined) return event.value;
   }
   return undefined;

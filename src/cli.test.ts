@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { parseArgs, parseParamValue, rehydrate, USAGE, withHash } from './cli';
+import { parseArgs, parseParamValue, rehydrate, USAGE, weave, withHash } from './cli';
 import { COMPANION_PARAMS } from './dnd5e.fixtures';
-import { type InputEvent, invoke, latest, nest, paramValue } from './inputs';
+import { type InputEvent, invoke, latest, nest, override, parameter, paramValue } from './inputs';
 import { print } from './nodes/serialize';
 
 describe('parseArgs', () => {
@@ -88,7 +88,7 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
-      events: [{ type: 'param', path: 'hero_name', value: 'Aria' }],
+      events: [{ type: 'parameter', path: 'hero_name', value: 'Aria' }],
     });
     expect(parseArgs(['--param', 'level=3', '--param', 'name=Aria'])).toEqual({
       entry: undefined,
@@ -96,8 +96,8 @@ describe('parseArgs', () => {
       stripMetadata: false,
       help: false,
       events: [
-        { type: 'param', path: 'level', value: 3 },
-        { type: 'param', path: 'name', value: 'Aria' },
+        { type: 'parameter', path: 'level', value: 3 },
+        { type: 'parameter', path: 'name', value: 'Aria' },
       ],
     });
   });
@@ -108,12 +108,12 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
-      events: [{ type: 'param', path: 'skills.trained', value: ['athletics', 'perception'] }],
+      events: [{ type: 'parameter', path: 'skills.trained', value: ['athletics', 'perception'] }],
     });
   });
 
   it('splits --param on the first =', () => {
-    expect(parseArgs(['--param', 'a=b=c']).events).toEqual([{ type: 'param', path: 'a', value: 'b=c' }]);
+    expect(parseArgs(['--param', 'a=b=c']).events).toEqual([{ type: 'parameter', path: 'a', value: 'b=c' }]);
   });
 
   it('rejects malformed --param', () => {
@@ -128,15 +128,15 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
-      events: [{ type: 'set', path: 'level', value: 5 }],
+      events: [{ type: 'override', path: 'level', value: 5 }],
     });
     expect(
       parseArgs(['--set', 'level=5', '--param', 'name=Aria', '--set', 'a.b=1', '--set', 'level=6']).events,
     ).toEqual([
-      { type: 'set', path: 'level', value: 5 },
-      { type: 'param', path: 'name', value: 'Aria' },
-      { type: 'set', path: 'a.b', value: 1 },
-      { type: 'set', path: 'level', value: 6 },
+      { type: 'override', path: 'level', value: 5 },
+      { type: 'parameter', path: 'name', value: 'Aria' },
+      { type: 'override', path: 'a.b', value: 1 },
+      { type: 'override', path: 'level', value: 6 },
     ]);
   });
 
@@ -225,16 +225,16 @@ const sha = (body: unknown) => `sha256:${createHash('sha256').update(JSON.string
 
 describe('inputs', () => {
   const events: InputEvent[] = [
-    { version: 1, type: 'param', path: 'level', value: 2 },
-    { version: 1, type: 'set', path: 'hp', value: 10 },
-    { version: 2, type: 'param', path: 'level', value: 5 },
-    { version: 3, type: 'set', path: 'party.aria.hp', value: 7 },
-    { version: 3, type: 'set', path: 'hp', value: 12 },
+    { version: 1, type: 'parameter', path: 'level', value: 2 },
+    { version: 1, type: 'override', path: 'hp', value: 10 },
+    { version: 2, type: 'parameter', path: 'level', value: 5 },
+    { version: 3, type: 'override', path: 'party.aria.hp', value: 7 },
+    { version: 3, type: 'override', path: 'hp', value: 12 },
   ];
 
   it('keeps the latest event of a type per path, ordered by arrival', () => {
-    expect(latest(events, 'set')).toEqual([events[3], events[4]]);
-    expect(latest(events, 'param')).toEqual([events[2]]);
+    expect(latest(events, 'override')).toEqual([events[3], events[4]]);
+    expect(latest(events, 'parameter')).toEqual([events[2]]);
   });
 
   it('reads the latest param value for the first path given one', () => {
@@ -244,16 +244,31 @@ describe('inputs', () => {
   });
 
   it('re-paths events nested under a path', () => {
-    expect(nest(events, ['party', 'aria'])).toEqual([{ version: 3, type: 'set', path: 'hp', value: 7 }]);
+    expect(nest(events, ['party', 'aria'])).toEqual([{ version: 3, type: 'override', path: 'hp', value: 7 }]);
     expect(nest(events, [])).toEqual(events);
     expect(nest(undefined, ['x'])).toEqual([]);
   });
 });
 
+describe('weave', () => {
+  it("follows each invoke with its writes, closing with the run's other writes", () => {
+    const heal = invoke('heal', [2], 2);
+    const inputs = [parameter('name', 'Aria', 1), heal, override('hp', 1, 3)];
+    const write = (path: string, value: unknown) => ({ type: 'add' as const, path, value, source: 'a.yaml' });
+    expect(weave(inputs, [{ event: write('gold', 5) }, { cause: heal, event: write('hp', 2) }], 3)).toEqual([
+      inputs[0],
+      heal,
+      { version: 2, ...write('hp', 2) },
+      inputs[2],
+      { version: 3, ...write('gold', 5) },
+    ]);
+  });
+});
+
 describe('withHash', () => {
   const events: InputEvent[] = [
-    { version: 1, type: 'param', path: 'name', value: 'Aria' },
-    { version: 1, type: 'set', path: 'level', value: 5 },
+    { version: 1, type: 'parameter', path: 'name', value: 'Aria' },
+    { version: 1, type: 'override', path: 'level', value: 5 },
   ];
 
   it('stamps data envelopes with their events and a sha256 over the rest', () => {
@@ -279,8 +294,8 @@ describe('withHash', () => {
 
 describe('rehydrate', () => {
   const events: InputEvent[] = [
-    { version: 1, type: 'param', path: 'name', value: 'Aria' },
-    { version: 2, type: 'set', path: 'hp.max', value: 14 },
+    { version: 1, type: 'parameter', path: 'name', value: 'Aria' },
+    { version: 2, type: 'override', path: 'hp.max', value: 14 },
   ];
 
   it('verifies a result and accepts invoke events', () => {
@@ -291,6 +306,12 @@ describe('rehydrate', () => {
     expect(() => rehydrate({ data: {}, events: [{ version: 1, type: 'invoke', path: 'x', value: 2 }] })).toThrow(
       'events must be',
     );
+  });
+
+  it('replays only the input events, leaving writes to be regenerated', () => {
+    const writes = [{ version: 1, type: 'add', path: 'gold', value: 5, source: 'boon.yaml', line: 3, column: 1 }];
+    const state = withHash({ data: { x: 1 } }, [...events, ...(writes as never[])]);
+    expect(rehydrate(state)).toEqual({ version: 1, events });
   });
 
   it('returns the version and events a state was resolved with', () => {
@@ -305,10 +326,12 @@ describe('rehydrate', () => {
     expect(() => rehydrate({ ...state, version: 7 })).toThrow('hash does not match');
     expect(() => rehydrate({ data: {}, version: -1 })).toThrow('non-negative integer');
     expect(() => rehydrate({ data: {}, events: {} })).toThrow('events must be');
-    expect(() => rehydrate({ data: {}, events: [{ version: 1, type: 'add', path: 'x', value: 1 }] })).toThrow(
+    expect(() => rehydrate({ data: {}, events: [{ version: 1, type: 'remove', path: 'x', value: 1 }] })).toThrow(
       'events must be',
     );
-    expect(() => rehydrate({ data: {}, events: [{ version: 1, type: 'set', path: 'x' }] })).toThrow('events must be');
+    expect(() => rehydrate({ data: {}, events: [{ version: 1, type: 'override', path: 'x' }] })).toThrow(
+      'events must be',
+    );
     expect(() => rehydrate({ query: [] })).toThrow('resolved { "data": … } envelope');
   });
 });
@@ -444,6 +467,23 @@ describe('cli', () => {
     }
   });
 
+  it("weaves the engine's writes into events, regenerating them on --in", () => {
+    const dir = mkdtempSync(join(tmpdir(), 'goblin-writes-'));
+    const state = join(dir, 'state.json');
+    try {
+      const first = JSON.parse(runCli('examples/14-mixin-actor.yaml', '--compact', '--out', state).stdout);
+      const writes = [
+        { version: 1, type: 'set', path: 'speed', value: 40, source: '14-mixin-boon.yaml', line: 8, column: 1 },
+        { version: 1, type: 'add', path: 'gold', value: 5, source: '14-mixin-boon.yaml', line: 9, column: 1 },
+      ];
+      expect(first.events).toEqual(writes);
+      const replayed = JSON.parse(runCli('examples/14-mixin-actor.yaml', '--compact', '--in', state).stdout);
+      expect(replayed.events).toEqual(writes.map((write) => ({ ...write, version: 2 })));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('--in replays the events saved in a prior output, file or stdin, appending new ones', () => {
     const dir = mkdtempSync(join(tmpdir(), 'goblin-in-'));
     const state = join(dir, 'state.json');
@@ -466,10 +506,10 @@ describe('cli', () => {
       expect(JSON.parse(first.stdout)).toMatchObject({
         version: 1,
         events: [
-          { version: 1, type: 'param', path: 'hero_name', value: 'Aria' },
-          { version: 1, type: 'param', path: 'starting_level', value: 2 },
-          { version: 1, type: 'param', path: 'details.title', value: 'Sir' },
-          { version: 1, type: 'set', path: 'hit_points.max', value: 12 },
+          { version: 1, type: 'parameter', path: 'hero_name', value: 'Aria' },
+          { version: 1, type: 'parameter', path: 'starting_level', value: 2 },
+          { version: 1, type: 'parameter', path: 'details.title', value: 'Sir' },
+          { version: 1, type: 'override', path: 'hit_points.max', value: 12 },
         ],
       });
       const replayed = JSON.parse(runCli('examples/08-parameters.yaml', '--compact', '--in', state).stdout);
@@ -488,7 +528,7 @@ describe('cli', () => {
       const bumped = runCli('examples/08-parameters.yaml', '--in', state, '--param', 'starting_level=5');
       const after = JSON.parse(bumped.stdout) as typeof next & { events: InputEvent[] };
       expect(after.data.level?.[':value']).toBe(5);
-      expect(after.events.slice(4)).toEqual([{ version: 2, type: 'param', path: 'starting_level', value: 5 }]);
+      expect(after.events.slice(4)).toEqual([{ version: 2, type: 'parameter', path: 'starting_level', value: 5 }]);
 
       writeFileSync(state, first.stdout.replace('"Aria"', '"Bob"'));
       const tampered = runCli('examples/08-parameters.yaml', '--in', state);

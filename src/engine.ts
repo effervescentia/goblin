@@ -24,6 +24,7 @@ import {
   CURRENT,
   DIE_LITERAL,
   DOCUMENT,
+  EVENTS_KEY,
   IF_KEY,
   LINE_KEY,
   MIXIN_CALL,
@@ -42,7 +43,7 @@ import {
   VALUE_KEY,
   VERSION_KEY,
 } from './constants';
-import { type InputEvent, latest, nest } from './inputs';
+import { type InputEvent, latest, nest, type WriteEvent } from './inputs';
 import { withNatives } from './lib';
 import { collectLocations, copyLocations, type Location, type Locations } from './locations';
 import { Die, DieNode } from './nodes/die';
@@ -104,6 +105,10 @@ export class GoblinEngine {
   readonly library: Record<string, unknown> = withNatives();
   /** Patch writes per field, keyed by the record holding the field. */
   private readonly fieldEvents = new WeakMap<object, Map<string, unknown[]>>();
+  /** Every patch and assignment write in the order made, with the invoke whose call assigned it. */
+  private readonly writeLog: { record: object; key: string; event: unknown; cause?: InputEvent }[] = [];
+  /** The invoke event whose call is running, if any. */
+  private invoking: InputEvent | undefined;
   /** Source document of a raw tree: loaded documents and `$tmpl('…')` clones. */
   private readonly origins = new WeakMap<object, string>();
   /** The document a record call's copy was written in: its `#` wherever it lands. */
@@ -445,6 +450,8 @@ export class GoblinEngine {
         scope.source,
         this.fieldSource(slot.owner, slot.key),
         scope.at,
+        // Only the call's own assignments: lazy patch writes it triggers are not its doing.
+        this.invoking,
       );
     }
     setPath(base, path, next);
@@ -600,14 +607,14 @@ export class GoblinEngine {
   }
 
   /** Evaluate a whole loaded document as an actor (`#` and `@` coincide).
-   * Only param events apply; `resolve` replays sets too. */
+   * Only parameter events apply; `resolve` replays overrides too. */
   evaluateDoc(file: string, inputs: InputEvent[] = []): unknown {
     const raw = this.docs.get(file);
     if (raw === undefined) throw new Error(`document not loaded: ${file}`);
     this.claim(raw, file);
     const keyed = this.splitNamespaced(
       raw,
-      inputs.filter((event) => event.type === 'param'),
+      inputs.filter((event) => event.type === 'parameter'),
     );
     const scope: EvalRoots = { doc: raw, actor: raw, app: this.appRoot, current: raw, ...keyed };
     // Calls (and mixins) expand before params fill, so their params fill too.
@@ -645,7 +652,7 @@ export class GoblinEngine {
    */
   applyOverrides(actorRaw: unknown, inputs: readonly InputEvent[]): void {
     this.asSource(OVERRIDE_SOURCE, actorRaw, () => {
-      for (const { path: key, value, version } of latest(inputs, 'set')) {
+      for (const { path: key, value, version } of latest(inputs, 'override')) {
         const normalized = /^[.@#$]/.test(key) ? key : `@.${key}`;
         const { root, path } = parseRef(normalized);
         if (path.length === 0) continue;
@@ -672,7 +679,7 @@ export class GoblinEngine {
   }
 
   /**
-   * Resolve a document against an input event stream: `param` events fill
+   * Resolve a document against an input event stream: `parameter` events fill
    * `:param` nodes (keyed by dotted path or alias), `set` events override
    * values. Satisfied documents return `{ data }` with the serialized result;
    * otherwise `{ query }` holds only the outstanding params. Param values of
@@ -686,7 +693,7 @@ export class GoblinEngine {
 
   /**
    * Resolve an in-memory actor tree (e.g. composed from `actor`/`adopt`
-   * entry keys): `{ data }` when the param events satisfy all params, else
+   * entry keys): `{ data }` when the parameter events satisfy all params, else
    * `{ query }` with only the outstanding ones. Set events apply first;
    * invoke events then call their functions on the resolved tree, in order,
    * and the last one's return value comes back as `result`.
@@ -727,7 +734,14 @@ export class GoblinEngine {
     const ref = /^[.@#$]/.test(event.path) ? event.path : `@.${event.path}`;
     const fn = this.resolveRef(ref, scope);
     if (typeof fn !== 'function') throw new Error(`invoke: ${event.path} is not a function`);
-    const result = fn(...(Array.isArray(event.value) ? event.value : []));
+    const outer = this.invoking;
+    this.invoking = event;
+    let result: unknown;
+    try {
+      result = fn(...(Array.isArray(event.value) ? event.value : []));
+    } finally {
+      this.invoking = outer;
+    }
     // A record-bodied function hands back a raw copy; evaluate it like any node.
     return result !== null && typeof result === 'object'
       ? this.evaluate(result, { ...scope, current: result })
@@ -752,11 +766,11 @@ export class GoblinEngine {
       }
     }
     const isNamed = (event: InputEvent) => declared.has(event.path.split('.')[0] ?? '');
-    // Param events stay whole: the root's param pre-fill reads both keys.
-    // Set events split, since an unmatched path key would create `aria` at the root.
+    // Parameter events stay whole: the root's param pre-fill reads both keys.
+    // Override events split, since an unmatched path key would create `aria` at the root.
     // Invokes run from the root, so they stay whole too.
     return {
-      inputs: events.filter((event) => event.type !== 'set' || !isNamed(event)),
+      inputs: events.filter((event) => event.type !== 'override' || !isNamed(event)),
       namespaced: events.filter((event) => event.type !== 'invoke' && isNamed(event)),
     };
   }
@@ -809,7 +823,7 @@ export class GoblinEngine {
   /**
    * Apply an applied-document (e.g. a class file) onto an actor's raw tree.
    * Leveling lives in the files: gate per-level content with `$if` on actor
-   * state (e.g. `@.level >= 5`). Evaluate with param events first so
+   * state (e.g. `@.level >= 5`). Evaluate with parameter events first so
    * conditions read materialized params.
    */
   apply(actorRaw: unknown, patchFile: string, inputs?: InputEvent[]): unknown {
@@ -826,7 +840,7 @@ export class GoblinEngine {
       actor: actorRaw,
       app: this.appRoot,
       current: actorRaw,
-      inputs: inputs?.filter((event) => event.type === 'param'),
+      inputs: inputs?.filter((event) => event.type === 'parameter'),
     };
     if (patch !== null && typeof patch === 'object') this.actorOf.set(patch, actorRaw);
     const patchSource = source ?? this.sourceOf(patch);
@@ -923,8 +937,53 @@ export class GoblinEngine {
     source = this.applySource,
     origin = this.actorSource,
     at = this.writingAt,
+    cause?: InputEvent,
   ): void {
-    this.seedEvents(target, key, origin).push(this.event(source, kind, value, at));
+    const event = this.event(source, kind, value, at);
+    this.seedEvents(target, key, origin).push(event);
+    this.writeLog.push({ record: target, key, event, cause });
+  }
+
+  /**
+   * The logged writes that landed in `root`, in the order made, as stream
+   * events read back from `data` (`root`'s `debug` output), so their values
+   * match the printed `:events`. Each keeps the invoke that caused it.
+   */
+  writes(root: unknown, data: unknown): { cause?: InputEvent; event: Omit<WriteEvent, 'version'> }[] {
+    const paths = new Map<object, string[]>();
+    const visit = (node: unknown, path: string[]) => {
+      if (node === null || typeof node !== 'object' || node instanceof Die || paths.has(node)) return;
+      paths.set(node, path);
+      for (const [key, child] of Object.entries(node)) visit(child, [...path, key]);
+    };
+    visit(root, []);
+    const printedAt = (path: string[]) => {
+      let node = data as Record<string, unknown> | undefined;
+      for (const seg of path) {
+        if (node === null || typeof node !== 'object') return undefined;
+        // A `{ :value, :events }` pair holds the field's children under `:value`.
+        if (!(seg in node) && PARAM_VALUE_KEY in node) node = node[PARAM_VALUE_KEY] as Record<string, unknown>;
+        node = getChild(node, seg) as Record<string, unknown> | undefined;
+      }
+      return node;
+    };
+    return this.writeLog.flatMap(({ record, key, event, cause }) => {
+      const at = paths.get(record);
+      const index = this.fieldEvents.get(record)?.get(key)?.indexOf(event) ?? -1;
+      if (at === undefined || index < 0) return [];
+      const printed = (printedAt([...at, key])?.[EVENTS_KEY] as Record<string, unknown>[] | undefined)?.[index];
+      if (printed === undefined) return [];
+      const kind = ADD_KEY in printed ? ADD_KEY : SUBTRACT_KEY in printed ? SUBTRACT_KEY : SET_KEY;
+      const write: Omit<WriteEvent, 'version'> = {
+        type: kind === ADD_KEY ? 'add' : kind === SUBTRACT_KEY ? 'subtract' : 'set',
+        path: [...at, key].join('.'),
+        value: printed[kind],
+      };
+      if (typeof printed[SOURCE_KEY] === 'string') write.source = printed[SOURCE_KEY];
+      if (typeof printed[LINE_KEY] === 'number') write.line = printed[LINE_KEY];
+      if (typeof printed[COLUMN_KEY] === 'number') write.column = printed[COLUMN_KEY];
+      return [{ cause, event: write }];
+    });
   }
 
   /** Open a field's log, recording what it already holds as the first event.

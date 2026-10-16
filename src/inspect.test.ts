@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GoblinEngine } from './engine';
-import { param } from './inputs';
+import { parameter } from './inputs';
 import { inspect } from './inspect';
 
 function resolved() {
@@ -15,7 +15,7 @@ function resolved() {
   engine.register('patch.yaml', { '@.stats.base': 12 });
   const actor = engine.evalExpr("$tmpl('actor.yaml')", { doc: {}, actor: {}, app: engine.appRoot, current: {} });
   engine.apply(actor, 'patch.yaml');
-  const state = engine.resolveRaw(actor, [param('name', 'Aria')]);
+  const state = engine.resolveRaw(actor, [parameter('name', 'Aria')]);
   if (!('data' in state)) throw new Error('expected data');
   return Object.fromEntries(inspect(actor, state.data).map((node) => [node.path, node]));
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parse as parseYaml } from 'yaml';
 import { GoblinEngine } from './engine';
-import { type InputEvent, invoke, param, set } from './inputs';
+import { type InputEvent, invoke, override, parameter } from './inputs';
 import { Die, DieNode } from './nodes/die';
 import { ExpressionNode } from './nodes/expression';
 import { FunctionNode } from './nodes/function';
@@ -536,7 +536,11 @@ describe('nested actors', () => {
   });
 
   it('gives each nested actor its own `@`, mixins, params and overrides', () => {
-    const inputs = [param('party.scout.name', 'Ash'), param('party.guide.name', 'Bree'), set('party.guide.speed', 20)];
+    const inputs = [
+      parameter('party.scout.name', 'Ash'),
+      parameter('party.guide.name', 'Bree'),
+      override('party.guide.speed', 20),
+    ];
     const state = party().resolve('party.yaml', inputs) as {
       data: { party: Record<string, Record<string, unknown>> };
     };
@@ -555,7 +559,11 @@ describe('nested actors', () => {
   it('invokes a function inside a nested actor as that actor', () => {
     const engine = party();
     (engine.docs.get('hero.yaml') as Record<string, unknown>)['rest()'] = '@.gold = @.gold + @.speed';
-    const inputs = [param('party.scout.name', 'Ash'), param('party.guide.name', 'Bree'), invoke('party.guide.rest')];
+    const inputs = [
+      parameter('party.scout.name', 'Ash'),
+      parameter('party.guide.name', 'Bree'),
+      invoke('party.guide.rest'),
+    ];
     const state = engine.resolve('party.yaml', inputs) as { data: { party: Record<string, Record<string, unknown>> } };
     expect(fieldValue(state.data.party.guide?.gold)).toBe(46);
     expect(fieldValue(state.data.party.scout?.gold)).toBe(6);
@@ -572,8 +580,8 @@ describe('nested actors', () => {
       scout_name: '$.party.scout.name',
     });
     const state = engine.resolve('party.yaml', [
-      param('party.scout.name', 'Ash'),
-      param('party.guide.name', 'Bree'),
+      parameter('party.scout.name', 'Ash'),
+      parameter('party.guide.name', 'Bree'),
     ]) as {
       data: Record<string, unknown>;
     };
@@ -597,8 +605,8 @@ describe('nested actors', () => {
 
     it('takes --param and --set by namespace or by path', () => {
       for (const inputs of [
-        [param('bree.name', 'Bree'), set('bree.speed', 20)],
-        [param('party.guide.name', 'Bree'), set('party.guide.speed', 20)],
+        [parameter('bree.name', 'Bree'), override('bree.speed', 20)],
+        [parameter('party.guide.name', 'Bree'), override('party.guide.speed', 20)],
       ]) {
         const engine = named({ guide: "$tmpl('hero.yaml', 'bree')" });
         const state = engine.resolve('party.yaml', inputs) as {
@@ -616,7 +624,7 @@ describe('nested actors', () => {
     it('fills a namespaced param for the expressions that read it', () => {
       const engine = named({ guide: "$tmpl('hero.yaml', 'bree')" });
       (engine.docs.get('party.yaml') as Record<string, unknown>).lead = '$.party.guide.name';
-      const state = engine.resolve('party.yaml', [param('bree.name', 'Bree')]) as { data: Record<string, unknown> };
+      const state = engine.resolve('party.yaml', [parameter('bree.name', 'Bree')]) as { data: Record<string, unknown> };
       expect(state.data.lead).toBe('Bree');
     });
 
@@ -858,7 +866,10 @@ describe('apply', () => {
     ]);
 
     engine.docs.set('actor.yaml', actor);
-    const resolved = engine.resolve('actor.yaml', [param('choices.first', 'a'), param('choices.second', 'b')]) as {
+    const resolved = engine.resolve('actor.yaml', [
+      parameter('choices.first', 'a'),
+      parameter('choices.second', 'b'),
+    ]) as {
       data: { choices: Record<string, Record<string, unknown>> };
     };
     // Each call got its own copy — one filled value does not leak into the other.
@@ -875,7 +886,7 @@ describe('apply', () => {
     // The record lands in the tree, so the param is asked for by its path.
     expect(RecordNode.collectParams(actor)).toEqual([{ path: 'choices.first', label: 'Pick', type: 'string' }]);
     engine.docs.set('actor.yaml', actor);
-    expect(engine.resolve('actor.yaml', [param('choices.first', 'athletics')])).toEqual({
+    expect(engine.resolve('actor.yaml', [parameter('choices.first', 'athletics')])).toEqual({
       data: { choices: { first: { ':label': 'Pick', ':param': true, ':type': 'string', ':value': 'athletics' } } },
     });
   });
@@ -1058,7 +1069,7 @@ describe('parameters', () => {
       taken: "$lib.list.count(@.choices, 'athletics')",
     };
     engine.docs.set('picks.yaml', picks);
-    const out = engine.evaluateDoc('picks.yaml', [param('choices.first', 'athletics')]) as Record<string, unknown>;
+    const out = engine.evaluateDoc('picks.yaml', [parameter('choices.first', 'athletics')]) as Record<string, unknown>;
     expect(out.taken).toBe(1);
   });
 
@@ -1080,10 +1091,10 @@ describe('parameters', () => {
 
     // The call is a node by the time params are collected.
     expect(engine.missingParams('sheet.yaml').map((p) => p.path)).toEqual(['strength.bought', 'wisdom.bought']);
-    const out = engine.evaluateDoc('sheet.yaml', [param('strength.bought', 8), param('wisdom.bought', 10)]) as Record<
-      string,
-      Record<string, unknown>
-    >;
+    const out = engine.evaluateDoc('sheet.yaml', [
+      parameter('strength.bought', 8),
+      parameter('wisdom.bought', 10),
+    ]) as Record<string, Record<string, unknown>>;
     expect(out.strength?.doubled).toBe(16);
     expect(out.strength?.named).toBe(0);
     expect(out.wisdom?.named).toBe(2);
@@ -1108,7 +1119,7 @@ describe('parameters', () => {
     });
     const out = engine.evaluate(
       doc,
-      scope([param('hero_name', 'Aria'), param('start_level', 3), param('attack_die', '1d8')]),
+      scope([parameter('hero_name', 'Aria'), parameter('start_level', 3), parameter('attack_die', '1d8')]),
     ) as Record<string, Record<string, unknown>>;
     expect(out.hero_name).toEqual({
       ':label': 'Hero Name',
@@ -1130,10 +1141,10 @@ describe('parameters', () => {
   it('throws on provided values of the wrong type', () => {
     const engine = new GoblinEngine('.');
     engine.docs.set('params.yaml', doc);
-    expect(() => engine.evaluateDoc('params.yaml', [param('start_level', 'high')])).toThrow(
+    expect(() => engine.evaluateDoc('params.yaml', [parameter('start_level', 'high')])).toThrow(
       'param type mismatch: start_level expected integer, got string',
     );
-    expect(() => engine.evaluateDoc('params.yaml', [param('hero_name', 42)])).toThrow(
+    expect(() => engine.evaluateDoc('params.yaml', [parameter('hero_name', 42)])).toThrow(
       'param type mismatch: hero_name expected string, got number',
     );
   });
@@ -1164,7 +1175,7 @@ describe('parameters', () => {
     });
     expect(out.retries).toEqual({ ':param': true, ':type': 'integer', ':default': 3, ':value': 3 });
     expect(out.nick).toEqual({ ':param': true, ':value': null });
-    const over = engine.evaluate(doc, scope([param('greeting', 'yo'), param('retries', 5)])) as Record<
+    const over = engine.evaluate(doc, scope([parameter('greeting', 'yo'), parameter('retries', 5)])) as Record<
       string,
       Record<string, unknown>
     >;
@@ -1182,7 +1193,7 @@ describe('parameters', () => {
       double: '@.xp + @.xp',
     };
     engine.docs.set('p.yaml', doc);
-    const out = engine.evaluateDoc('p.yaml', [param('xp', 6500)]) as { double?: unknown };
+    const out = engine.evaluateDoc('p.yaml', [parameter('xp', 6500)]) as { double?: unknown };
     expect(out.double).toBe(13000);
     const missing = engine.evaluateDoc('p.yaml') as { double?: unknown };
     expect(missing.double).toBe(0);
@@ -1205,7 +1216,7 @@ describe('parameters', () => {
       xp: { ':param': true, ':type': 'integer' },
       alias: '@.xp.value',
     });
-    expect(() => engine.evaluateDoc('param.yaml', [param('xp', 1)])).toThrow('unresolvable reference: @.xp.value');
+    expect(() => engine.evaluateDoc('param.yaml', [parameter('xp', 1)])).toThrow('unresolvable reference: @.xp.value');
     engine.docs.set('data.yaml', { hp: { value: 3, max: 5 }, alias: '@.hp.value' });
     const out = engine.evaluateDoc('data.yaml') as { alias?: unknown };
     expect(out.alias).toBe(3);
@@ -1220,7 +1231,7 @@ describe('parameters', () => {
       { path: 'attack_die', type: 'die' },
       { path: 'details.title' },
     ]);
-    const out = engine.evaluateDoc('params.yaml', [param('hero_name', 'Aria')]) as Record<
+    const out = engine.evaluateDoc('params.yaml', [parameter('hero_name', 'Aria')]) as Record<
       string,
       Record<string, unknown>
     >;
@@ -1247,7 +1258,7 @@ describe('parameters', () => {
       ],
     });
 
-    const partial = engine.resolve('params.yaml', [param('hero_name', 'Aria')]);
+    const partial = engine.resolve('params.yaml', [parameter('hero_name', 'Aria')]);
     expect(partial).toEqual({
       query: [
         { path: 'start_level', doc: 'Starting level.', type: 'integer' },
@@ -1257,10 +1268,10 @@ describe('parameters', () => {
     });
 
     const full = engine.resolve('params.yaml', [
-      param('hero_name', 'Aria'),
-      param('start_level', 3),
-      param('attack_die', '1d8'),
-      param('details.title', 'Kid'),
+      parameter('hero_name', 'Aria'),
+      parameter('start_level', 3),
+      parameter('attack_die', '1d8'),
+      parameter('details.title', 'Kid'),
     ]) as { data: Record<string, unknown> };
     expect(full.data.hero_name).toEqual({
       ':label': 'Hero Name',
@@ -1294,11 +1305,14 @@ describe('parameters', () => {
       path: [],
       inputs,
     });
-    const filled = engine.evaluate(doc, scope([param('tags', ['a', 'b'])])) as Record<string, Record<string, unknown>>;
+    const filled = engine.evaluate(doc, scope([parameter('tags', ['a', 'b'])])) as Record<
+      string,
+      Record<string, unknown>
+    >;
     expect(filled.tags).toEqual({ ':doc': 'Tags.', ':param': true, ':type': 'array', ':value': ['a', 'b'] });
-    const empty = engine.evaluate(doc, scope([param('tags', [])])) as Record<string, Record<string, unknown>>;
+    const empty = engine.evaluate(doc, scope([parameter('tags', [])])) as Record<string, Record<string, unknown>>;
     expect(empty.tags?.[':value']).toEqual([]);
-    expect(() => engine.evaluate(doc, scope([param('tags', 'nope')]))).toThrow(
+    expect(() => engine.evaluate(doc, scope([parameter('tags', 'nope')]))).toThrow(
       'param type mismatch: tags expected array, got string',
     );
   });
@@ -1312,7 +1326,12 @@ describe('parameters', () => {
   it('replays the input stream: the latest event per path wins, overrides cite its version', () => {
     const engine = new GoblinEngine('.');
     engine.docs.set('ov.yaml', { computed: '1 + 1', name: { ':param': true } });
-    const inputs = [param('name', 'Aria', 1), set('computed', 5, 1), param('name', 'Bree', 2), set('computed', 7, 3)];
+    const inputs = [
+      parameter('name', 'Aria', 1),
+      override('computed', 5, 1),
+      parameter('name', 'Bree', 2),
+      override('computed', 7, 3),
+    ];
     const resolved = engine.resolve('ov.yaml', inputs) as { data: Record<string, Record<string, unknown>> };
     expect(resolved.data.computed).toEqual({
       ':value': 7,
@@ -1344,6 +1363,27 @@ describe('parameters', () => {
     expect(fieldValue(healed.data.hp)).toBe(10);
   });
 
+  it('logs every write in order, crediting assignments to the invoke that made them', () => {
+    const engine = new GoblinEngine('.');
+    engine.register('boon.yaml', { '@': 'Hero', '@.speed': 40, '+@.gold': 5 });
+    engine.register('hero.yaml', {
+      $actor: 'Hero',
+      speed: 30,
+      gold: 1,
+      hp: { current: 2, max: 9 },
+      boon: "$mixin('boon.yaml')",
+      'rest()': '@.hp.current = @.hp.max',
+    });
+    const rest = invoke('rest', [], 2);
+    const state = engine.resolve('hero.yaml', [rest]) as { data: unknown };
+    const actor = engine.docs.get('hero.yaml');
+    expect(engine.writes(actor, state.data)).toEqual([
+      { event: { type: 'set', path: 'speed', value: 40, source: 'boon.yaml' } },
+      { event: { type: 'add', path: 'gold', value: 5, source: 'boon.yaml' } },
+      { cause: rest, event: { type: 'set', path: 'hp.current', value: 9, source: 'hero.yaml' } },
+    ]);
+  });
+
   it('replays sets and invokes in stream order', () => {
     const run = (inputs: InputEvent[]) => {
       const engine = new GoblinEngine('.');
@@ -1351,8 +1391,8 @@ describe('parameters', () => {
       return fieldValue((engine.resolve('fn.yaml', inputs) as { data: Record<string, unknown> }).data.hp);
     };
     // An earlier set is the base the call heals from; a later one wins over it.
-    expect(run([set('hp', 1, 1), invoke('heal', [4], 2)])).toBe(5);
-    expect(run([invoke('heal', [4], 1), set('hp', 1, 2)])).toBe(1);
+    expect(run([override('hp', 1, 1), invoke('heal', [4], 2)])).toBe(5);
+    expect(run([invoke('heal', [4], 1), override('hp', 1, 2)])).toBe(1);
   });
 
   it('resolve honors overrides over derived and missing values', () => {
@@ -1361,7 +1401,11 @@ describe('parameters', () => {
       computed: '1 + 1',
       name: { ':doc': 'Your name.', ':param': true },
     });
-    const resolved = engine.resolve('ov.yaml', [set('computed', 99), set('brand.new', 1), set('name', 'Aria')]) as {
+    const resolved = engine.resolve('ov.yaml', [
+      override('computed', 99),
+      override('brand.new', 1),
+      override('name', 'Aria'),
+    ]) as {
       data: Record<string, unknown>;
     };
     // An override is a change like any other: it prints with its event.
@@ -1387,7 +1431,7 @@ describe('parameters', () => {
     engine.docs.set('ov.yaml', {
       level: { ':doc': 'Level.', ':param': true, ':type': 'integer' },
     });
-    expect(() => engine.resolve('ov.yaml', [set('level', 'high')])).toThrow(
+    expect(() => engine.resolve('ov.yaml', [override('level', 'high')])).toThrow(
       'param type mismatch: level expected integer, got string',
     );
   });
@@ -1398,17 +1442,17 @@ describe('parameters', () => {
       style: { ':param': true, ':type': 'string', ':options': ['archery', 'dueling'] },
       skills: { ':param': true, ':type': 'array', ':options': ['arcana', 'history'] },
     });
-    const good = engine.evaluateDoc('choice.yaml', [param('style', 'dueling'), param('skills', ['arcana'])]) as Record<
-      string,
-      Record<string, unknown>
-    >;
+    const good = engine.evaluateDoc('choice.yaml', [
+      parameter('style', 'dueling'),
+      parameter('skills', ['arcana']),
+    ]) as Record<string, Record<string, unknown>>;
     expect(good.style?.[':value']).toBe('dueling');
     expect(good.skills?.[':value']).toEqual(['arcana']);
-    expect(() => engine.evaluateDoc('choice.yaml', [param('style', 'sneaky'), param('skills', ['arcana'])])).toThrow(
-      'param options mismatch: style expected one of ["archery", "dueling"], got "sneaky"',
-    );
     expect(() =>
-      engine.evaluateDoc('choice.yaml', [param('style', 'dueling'), param('skills', ['arcana', 'sneak'])]),
+      engine.evaluateDoc('choice.yaml', [parameter('style', 'sneaky'), parameter('skills', ['arcana'])]),
+    ).toThrow('param options mismatch: style expected one of ["archery", "dueling"], got "sneaky"');
+    expect(() =>
+      engine.evaluateDoc('choice.yaml', [parameter('style', 'dueling'), parameter('skills', ['arcana', 'sneak'])]),
     ).toThrow('param options mismatch: skills[1] expected one of ["arcana", "history"], got "sneak"');
   });
 
@@ -1417,18 +1461,18 @@ describe('parameters', () => {
     engine.docs.set('skills.yaml', {
       trained: { ':param': true, ':type': 'array', ':options': ['a', 'b', 'c'], ':count': 2, ':unique': true },
     });
-    const good = engine.evaluateDoc('skills.yaml', [param('trained', ['a', 'b'])]) as Record<
+    const good = engine.evaluateDoc('skills.yaml', [parameter('trained', ['a', 'b'])]) as Record<
       string,
       Record<string, unknown>
     >;
     expect(good.trained?.[':value']).toEqual(['a', 'b']);
-    expect(() => engine.evaluateDoc('skills.yaml', [param('trained', ['a', 'a'])])).toThrow(
+    expect(() => engine.evaluateDoc('skills.yaml', [parameter('trained', ['a', 'a'])])).toThrow(
       'param uniqueness mismatch: trained has duplicate item "a"',
     );
-    expect(() => engine.evaluateDoc('skills.yaml', [param('trained', ['a'])])).toThrow(
+    expect(() => engine.evaluateDoc('skills.yaml', [parameter('trained', ['a'])])).toThrow(
       'param count mismatch: trained expected 2 items, got 1',
     );
-    expect(() => engine.evaluateDoc('skills.yaml', [param('trained', ['a', 'b', 'c'])])).toThrow(
+    expect(() => engine.evaluateDoc('skills.yaml', [parameter('trained', ['a', 'b', 'c'])])).toThrow(
       'param count mismatch: trained expected 2 items, got 3',
     );
   });
@@ -1439,18 +1483,18 @@ describe('parameters', () => {
       score: { ':param': true, ':type': 'integer', ':min': 8, ':max': 15 },
       rolls: { ':param': true, ':type': 'array', ':min': 1 },
     });
-    const good = engine.evaluateDoc('bounds.yaml', [param('score', 8), param('rolls', [1, 6])]) as Record<
+    const good = engine.evaluateDoc('bounds.yaml', [parameter('score', 8), parameter('rolls', [1, 6])]) as Record<
       string,
       Record<string, unknown>
     >;
     expect(good.score?.[':value']).toBe(8);
-    expect(() => engine.evaluateDoc('bounds.yaml', [param('score', 16), param('rolls', [1])])).toThrow(
+    expect(() => engine.evaluateDoc('bounds.yaml', [parameter('score', 16), parameter('rolls', [1])])).toThrow(
       'param range mismatch: score expected 8 to 15, got 16',
     );
-    expect(() => engine.evaluateDoc('bounds.yaml', [param('score', 7), param('rolls', [1])])).toThrow(
+    expect(() => engine.evaluateDoc('bounds.yaml', [parameter('score', 7), parameter('rolls', [1])])).toThrow(
       'param range mismatch: score expected 8 to 15, got 7',
     );
-    expect(() => engine.evaluateDoc('bounds.yaml', [param('score', 10), param('rolls', [3, 0])])).toThrow(
+    expect(() => engine.evaluateDoc('bounds.yaml', [parameter('score', 10), parameter('rolls', [3, 0])])).toThrow(
       'param range mismatch: rolls[1] expected at least 1, got 0',
     );
     expect(() => RecordNode.checkParamConstraints({ ':max': 2 }, 3, 'x')).toThrow(
@@ -1496,13 +1540,13 @@ describe('parameters', () => {
     engine.docs.set('ov.yaml', {
       trained: { ':param': true, ':type': 'array', ':options': ['a', 'b'], ':count': 1 },
     });
-    expect(() => engine.resolve('ov.yaml', [set('trained', ['z'])])).toThrow(
+    expect(() => engine.resolve('ov.yaml', [override('trained', ['z'])])).toThrow(
       'param options mismatch: trained[0] expected one of ["a", "b"], got "z"',
     );
-    expect(() => engine.resolve('ov.yaml', [set('trained', ['a', 'b'])])).toThrow(
+    expect(() => engine.resolve('ov.yaml', [override('trained', ['a', 'b'])])).toThrow(
       'param count mismatch: trained expected 1 items, got 2',
     );
-    const ok = engine.resolve('ov.yaml', [set('trained', ['a'])]) as { data: Record<string, unknown> };
+    const ok = engine.resolve('ov.yaml', [override('trained', ['a'])]) as { data: Record<string, unknown> };
     expect(fieldValue(ok.data.trained)).toEqual(['a']);
   });
 });

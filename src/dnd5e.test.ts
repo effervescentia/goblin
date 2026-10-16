@@ -48,10 +48,10 @@ function cliFails(entry: string, ...extra: string[]): string {
 
 const script = `
   import { GoblinEngine } from './src/engine.ts';
-  import { param } from './src/inputs.ts';
+  import { parameter } from './src/inputs.ts';
   import { RecordNode } from './src/nodes/record.ts';
   const e = new GoblinEngine('5e');
-  const params = (values) => Object.entries(values).map(([path, value]) => param(path, value));
+  const params = (values) => Object.entries(values).map(([path, value]) => parameter(path, value));
   // Fields a patch wrote print as { :value, :events } — read the value.
   const val = (v) => (v && typeof v === 'object' && ':value' in v ? v[':value'] : v);
   // Single load: engine discovery follows $tmpl refs (main → character,

@@ -13,7 +13,7 @@
  */
 import { createHash } from 'node:crypto';
 import { GoblinEngine } from './engine';
-import type { InputEvent } from './inputs';
+import type { InputEvent, StateEvent, WriteEvent } from './inputs';
 import { print } from './nodes/serialize';
 
 export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--help]
@@ -22,8 +22,11 @@ Resolves a goblin document and prints the result as JSON: either
 { "hash", "version", "events", "data" } when all :param values are
 satisfied (version counts runs since the first, bumped by each --in; events
 is the stream of every --param/--set/--invoke given so far, in order, each
-as { version, type: "param" | "set" | "invoke", path, value }; hash is a
-sha256 over the compact JSON of the rest, plus "result" under --invoke), or
+as { version, type: "parameter" | "override" | "invoke", path, value }, with the
+engine's writes woven in as { version, type: "set" | "add" | "subtract",
+path, value, source, line, column } — an invoke's right after it, the rest
+regenerated at the end each run; hash is a sha256 over the compact JSON of
+the rest, plus "result" under --invoke), or
 { "query": […] } listing the outstanding parameters. A resolved sheet must
 also pass its !validate rules; failing rules print as { "errors": […] }.
 
@@ -45,9 +48,9 @@ Arguments:
                 printed data, leaving plain values only. Functions print as
                 their source expression; records left empty collapse to null.
   --in          Rehydrate from a prior { "data": … } output (a file, or
-                - for stdin): its events are replayed in order (later wins),
-                this run's --param/--set/--invoke are appended as events of
-                the incremented version. A hash must match the rest of the state.
+                - for stdin): its input events are replayed in order (later
+                wins; writes regenerate), this run's --param/--set/--invoke
+                are appended as events of the incremented version. A hash must match the rest of the state.
   --out         Also write the JSON to this file (replacing it) when the
                 document fully resolves to { "data": … }; a { "query" } or
                 { "errors" } result leaves the file untouched.
@@ -115,7 +118,7 @@ export function parseArgs(argv: string[]): CliArgs {
       args.in = path;
     } else if (arg === '--param' || arg === '--set') {
       const [path, value] = parseKeyValue(arg, argv[++i]);
-      args.events.push({ type: arg === '--param' ? 'param' : 'set', path, value });
+      args.events.push({ type: arg === '--param' ? 'parameter' : 'override', path, value });
     } else if (arg === '--invoke') {
       if (args.events.some((event) => event.type === 'invoke')) throw new Error('--invoke may be given once per run');
       const [path, value] = parseInvoke(argv[++i]);
@@ -134,9 +137,9 @@ export function parseArgs(argv: string[]): CliArgs {
  * can be replayed and checked for edits. */
 export function withHash<T>(
   state: T,
-  events: InputEvent[] = [],
+  events: StateEvent[] = [],
   version = 1,
-): T | { hash: string; version: number; events: InputEvent[]; result?: unknown } {
+): T | { hash: string; version: number; events: StateEvent[]; result?: unknown } {
   if (state === null || typeof state !== 'object' || !('data' in state)) return state;
   const body = { version, events, ...('result' in state ? { result: state.result } : {}), data: state.data };
   return { hash: hashOf(body), ...body };
@@ -150,29 +153,59 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 const isVersion = (value: unknown): value is number => Number.isInteger(value) && (value as number) >= 0;
 
-function isEvent(event: unknown): event is InputEvent {
+function isInput(event: unknown): event is InputEvent {
   return (
     isRecord(event) &&
     isVersion(event.version) &&
-    (event.type === 'param' || event.type === 'set' || (event.type === 'invoke' && Array.isArray(event.value))) &&
+    (event.type === 'parameter' ||
+      event.type === 'override' ||
+      (event.type === 'invoke' && Array.isArray(event.value))) &&
     typeof event.path === 'string' &&
     event.path !== '' &&
     'value' in event
   );
 }
 
-/** The `version` and `events` of a prior `{ hash, version, events, data }` output;
- * re-resolving the entry recomputes the rest. A missing version reads as 0. */
+function isWrite(event: unknown): event is WriteEvent {
+  return (
+    isRecord(event) &&
+    isVersion(event.version) &&
+    (event.type === 'set' || event.type === 'add' || event.type === 'subtract') &&
+    typeof event.path === 'string' &&
+    'value' in event
+  );
+}
+
+/** Thread the engine's writes into the input stream: an invoke's writes
+ * follow it under its version; the rest, regenerated by every resolution,
+ * close the stream under this run's `version`. */
+export function weave(
+  inputs: InputEvent[],
+  writes: { cause?: InputEvent; event: Omit<WriteEvent, 'version'> }[],
+  version: number,
+): StateEvent[] {
+  const caused = (cause: InputEvent | undefined) =>
+    writes
+      .filter((write) => write.cause === cause)
+      .map(({ event }) => ({ version: cause?.version ?? version, ...event }));
+  return [...inputs.flatMap((input) => [input, ...caused(input)]), ...caused(undefined)];
+}
+
+/** The `version` and input `events` of a prior `{ hash, version, events, data }`
+ * output; re-resolving the entry recomputes the rest, writes included. A
+ * missing version reads as 0. */
 export function rehydrate(state: unknown): { version: number; events: InputEvent[] } {
   if (!isRecord(state) || !('data' in state)) throw new Error('--in expects a resolved { "data": … } envelope');
   const { hash, version, events = [], result, data } = state;
   if (version !== undefined && !isVersion(version)) throw new Error('--in version must be a non-negative integer');
-  if (!Array.isArray(events) || !events.every(isEvent))
-    throw new Error('--in events must be { version, type: "param" | "set" | "invoke", path, value } objects');
+  if (!Array.isArray(events) || !events.every((event) => isInput(event) || isWrite(event)))
+    throw new Error(
+      '--in events must be { version, type, path, value } objects of type param, override, invoke, set, add or subtract',
+    );
   // Stringify drops an undefined version or result, so states without them still verify.
   if (hash !== undefined && hash !== hashOf({ version, events, result, data }))
     throw new Error('--in state hash does not match its contents');
-  return { version: version ?? 0, events };
+  return { version: version ?? 0, events: events.filter(isInput) };
 }
 
 /** Resolution envelope plus `{ errors }` for sheets failing `!validate`. */
@@ -238,7 +271,7 @@ if (import.meta.main) {
         : rehydrate(JSON.parse(args.in === '-' ? await Bun.stdin.text() : await Bun.file(args.in).text()));
     const version = prior.version + 1;
     const events = [...prior.events, ...args.events.map((event) => ({ version, ...event }))];
-    const state = await resolveAppState(process.cwd(), args.entry, events);
+    const { state, actor, engine } = await resolveApp(process.cwd(), args.entry, events);
     // Only this run's invoke answers with a result; earlier ones just replay their writes.
     const invoked = args.events.some((event) => event.type === 'invoke');
     const show = args.stripMetadata ? print : (value: unknown) => value;
@@ -246,7 +279,13 @@ if (import.meta.main) {
       'data' in state
         ? { ...(invoked && 'result' in state ? { result: show(state.result) } : {}), data: show(state.data) }
         : state;
-    const out = withHash(shown, events, version);
+    const writes = 'data' in state ? engine.writes(actor, state.data) : [];
+    const stream = weave(
+      events,
+      writes.map(({ cause, event }) => ({ cause, event: { ...event, value: show(event.value) } })),
+      version,
+    );
+    const out = withHash(shown, stream, version);
     const json = `${JSON.stringify(out, null, args.compact ? 0 : 2)}\n`;
     // Only a full resolution is worth saving; Bun.write replaces the file.
     if (args.out !== undefined && 'data' in state) await Bun.write(args.out, json);
