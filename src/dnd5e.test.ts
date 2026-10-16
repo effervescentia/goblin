@@ -48,8 +48,10 @@ function cliFails(entry: string, ...extra: string[]): string {
 
 const script = `
   import { GoblinEngine } from './src/engine.ts';
+  import { param } from './src/inputs.ts';
   import { RecordNode } from './src/nodes/record.ts';
   const e = new GoblinEngine('5e');
+  const params = (values) => Object.entries(values).map(([path, value]) => param(path, value));
   // Fields a patch wrote print as { :value, :events } — read the value.
   const val = (v) => (v && typeof v === 'object' && ':value' in v ? v[':value'] : v);
   // Single load: engine discovery follows $tmpl refs (main → character,
@@ -70,7 +72,7 @@ const script = `
     'abilities.charisma.bought': 0,
   };
   const fresh = () => structuredClone(e.docs.get('character.yaml'));
-  const scopeOf = (actor, provided) => ({ doc: actor, actor, app: e.appRoot, current: actor, provided });
+  const scopeOf = (actor, provided) => ({ doc: actor, actor, app: e.appRoot, current: actor, inputs: params(provided) });
   const baseProvided = (xp) => ({
     name: 'X',
     xp,
@@ -149,7 +151,7 @@ const script = `
   const provided5 = { ...baseProvided(6500), name: 'Bram' };
   e.evaluate(a5, scopeOf(a5, provided5));
   e.docs.set('fighter5.yaml', a5);
-  const resolved = e.resolve('fighter5.yaml', provided5);
+  const resolved = e.resolve('fighter5.yaml', params(provided5));
 
   console.log(JSON.stringify({
     baseMissing,
@@ -783,7 +785,7 @@ describe('5e', () => {
       ':events': [
         { ':source': 'character.yaml', ':line': 14, ':column': 1, ':set': 1 },
         // An override has no document line to cite.
-        { ':source': 'override', ':set': 5 },
+        { ':source': 'override', ':version': 1, ':set': 5 },
       ],
     });
   });

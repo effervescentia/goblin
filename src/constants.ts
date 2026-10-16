@@ -123,6 +123,8 @@ export const SET_KEY = ':set';
 
 /** Event `:source` for a value written by `applyOverrides` (CLI `--set`). */
 export const OVERRIDE_SOURCE = 'override';
+/** Event: the input `version` (run) whose `--set` wrote an `override`. */
+export const VERSION_KEY = ':version';
 
 /** Event: the items a patch appended to an array field. */
 export const ADD_KEY = ':add';

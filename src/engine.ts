@@ -40,7 +40,9 @@ import {
   TYPE_KEY,
   VALIDATE_KEY,
   VALUE_KEY,
+  VERSION_KEY,
 } from './constants';
+import { type InputEvent, latest, nest } from './inputs';
 import { withNatives } from './lib';
 import { collectLocations, copyLocations, type Location, type Locations } from './locations';
 import { Die, DieNode } from './nodes/die';
@@ -484,7 +486,7 @@ export class GoblinEngine {
   evaluate(raw: unknown, scope: EvalRoots): unknown {
     if (scope.path === undefined) {
       if (this.expandCalls(raw, scope)) this.cache.clear();
-      if (RecordNode.materializeParams(raw, scope.provided, this.namespaceOf)) this.cache.clear();
+      if (RecordNode.materializeParams(raw, scope.inputs, this.namespaceOf)) this.cache.clear();
       return this.evaluate(raw, { ...scope, path: [] });
     }
     return parse(raw).evaluate(this, scope);
@@ -593,23 +595,20 @@ export class GoblinEngine {
     return tree;
   }
 
-  /** Evaluate a whole loaded document as an actor (`#` and `@` coincide). */
-  evaluateDoc(file: string, provided?: Record<string, unknown>): unknown {
+  /** Evaluate a whole loaded document as an actor (`#` and `@` coincide).
+   * Only param events apply; `resolve` replays sets too. */
+  evaluateDoc(file: string, inputs: InputEvent[] = []): unknown {
     const raw = this.docs.get(file);
     if (raw === undefined) throw new Error(`document not loaded: ${file}`);
     this.claim(raw, file);
-    const keyed = this.splitNamespaced(raw, provided ?? {}, {});
-    const scope: EvalRoots = {
-      doc: raw,
-      actor: raw,
-      app: this.appRoot,
-      current: raw,
-      provided: keyed.provided,
-      namespaced: keyed.namespaced,
-    };
+    const keyed = this.splitNamespaced(
+      raw,
+      inputs.filter((event) => event.type === 'param'),
+    );
+    const scope: EvalRoots = { doc: raw, actor: raw, app: this.appRoot, current: raw, ...keyed };
     // Calls (and mixins) expand before params fill, so their params fill too.
     if (this.expandCalls(raw, scope)) this.cache.clear();
-    if (RecordNode.materializeParams(raw, keyed.provided, this.namespaceOf)) this.cache.clear();
+    if (RecordNode.materializeParams(raw, keyed.inputs, this.namespaceOf)) this.cache.clear();
     return this.evaluate(raw, { ...scope, path: [] });
   }
 
@@ -630,18 +629,19 @@ export class GoblinEngine {
   }
 
   /**
-   * Write override values into the raw tree (`.`/`#`/`@` target the actor,
+   * Write the latest `set` event per path into the raw tree (`.`/`#`/`@` target the actor,
    * `$` targets the app; bare paths default to the actor). Overridden paths
    * are replaced wholesale — derivations never run and missing paths are
    * created — but a `:param` record keeps its `:type` contract. Mutates like
    * `apply`; re-load or re-resolve for a pristine tree.
    *
-   * Changed values file an `override` event. Overrides apply both before and
-   * after the patches, so re-writing the value already there is not an event.
+   * Changed values file an `override` event citing the input's `version`.
+   * Overrides apply both before and after the patches, so re-writing the
+   * value already there is not an event.
    */
-  applyOverrides(actorRaw: unknown, overrides: Record<string, unknown>): void {
+  applyOverrides(actorRaw: unknown, inputs: readonly InputEvent[]): void {
     this.asSource(OVERRIDE_SOURCE, actorRaw, () => {
-      for (const [key, value] of Object.entries(overrides)) {
+      for (const { path: key, value, version } of latest(inputs, 'set')) {
         const normalized = /^[.@#$]/.test(key) ? key : `@.${key}`;
         const { root, path } = parseRef(normalized);
         if (path.length === 0) continue;
@@ -658,69 +658,49 @@ export class GoblinEngine {
           RecordNode.checkParamConstraints(record, value, path.join('.'));
         }
         const slot = this.ownerOf(base, path);
-        if (slot && !sameValue(existing, value)) this.recordEvent(slot.owner, slot.key, SET_KEY, deepClone(value));
+        if (slot && !sameValue(existing, value))
+          this.seedEvents(slot.owner, slot.key).push(
+            this.event(this.applySource, SET_KEY, deepClone(value), this.writingAt, version),
+          );
         setPath(base as Record<string, unknown>, path, deepClone(value));
       }
     });
   }
 
   /**
-   * Resolve a document against user-provided values (keyed by dotted path
-   * or `:param` alias). Satisfied documents return `{ data }` with the
-   * serialized result; otherwise `{ query }` holds only the outstanding
-   * params. Provided values of the wrong `:type` still throw.
+   * Resolve a document against an input event stream: `param` events fill
+   * `:param` nodes (keyed by dotted path or alias), `set` events override
+   * values. Satisfied documents return `{ data }` with the serialized result;
+   * otherwise `{ query }` holds only the outstanding params. Param values of
+   * the wrong `:type` still throw.
    */
-  resolve(
-    file: string,
-    provided: Record<string, unknown> = {},
-    overrides: Record<string, unknown> = {},
-  ): { data: unknown } | { query: MissingParam[] } {
+  resolve(file: string, inputs: InputEvent[] = []): { data: unknown } | { query: MissingParam[] } {
     const raw = this.docs.get(file);
     if (raw === undefined) throw new Error(`document not loaded: ${file}`);
-    return this.resolveRaw(raw, provided, overrides);
+    return this.resolveRaw(raw, inputs);
   }
 
   /**
    * Resolve an in-memory actor tree (e.g. composed from `actor`/`adopt`
-   * entry keys): `{ data }` when `provided` satisfies all params, else
-   * `{ query }` with only the outstanding ones. Overrides apply first.
+   * entry keys): `{ data }` when the param events satisfy all params, else
+   * `{ query }` with only the outstanding ones. Set events apply first.
    */
-  resolveRaw(
-    actorRaw: unknown,
-    provided: Record<string, unknown> = {},
-    overrides: Record<string, unknown> = {},
-  ): { data: unknown } | { query: MissingParam[] } {
-    const keyed = this.splitNamespaced(actorRaw, provided, overrides);
-    this.applyOverrides(actorRaw, keyed.overrides);
-    const scope: EvalRoots = {
-      doc: actorRaw,
-      actor: actorRaw,
-      app: this.appRoot,
-      current: actorRaw,
-      provided: keyed.provided,
-      overrides: keyed.overrides,
-      namespaced: keyed.namespaced,
-    };
+  resolveRaw(actorRaw: unknown, inputs: InputEvent[] = []): { data: unknown } | { query: MissingParam[] } {
+    const keyed = this.splitNamespaced(actorRaw, inputs);
+    this.applyOverrides(actorRaw, keyed.inputs);
+    const scope: EvalRoots = { doc: actorRaw, actor: actorRaw, app: this.appRoot, current: actorRaw, ...keyed };
     this.expandCalls(actorRaw, scope);
-    this.applyOverrides(actorRaw, keyed.overrides);
+    this.applyOverrides(actorRaw, keyed.inputs);
     this.shareWithApp(actorRaw);
-    const outstanding = RecordNode.collectParams(actorRaw, this.namespaceOf, provided);
+    const outstanding = RecordNode.collectParams(actorRaw, this.namespaceOf, inputs);
     if (outstanding.length > 0) return { query: outstanding };
     return { data: debug(this.evaluate(actorRaw, scope)) };
   }
 
-  /** Split `--param` / `--set` keys led by an actor namespace (`aria.name`)
-   * from path keys. Namespaces are found by scanning loaded documents, so the
-   * split happens before expansion creates the actors that hold them. */
-  private splitNamespaced(
-    root: unknown,
-    provided: Record<string, unknown>,
-    overrides: Record<string, unknown>,
-  ): {
-    provided: Record<string, unknown>;
-    overrides: Record<string, unknown>;
-    namespaced: NonNullable<EvalRoots['namespaced']>;
-  } {
+  /** Split events whose path is led by an actor namespace (`aria.name`) from
+   * path-addressed ones. Namespaces are found by scanning loaded documents, so
+   * the split happens before expansion creates the actors that hold them. */
+  private splitNamespaced(root: unknown, events: InputEvent[]): { inputs: InputEvent[]; namespaced: InputEvent[] } {
     const declared = new Set<string>();
     const scan = (node: unknown): void => {
       if (typeof node === 'string') {
@@ -734,23 +714,12 @@ export class GoblinEngine {
         if (namespace in root) throw new Error(`actor namespace ${namespace} shadows a top-level key of the entry`);
       }
     }
-    const split = (values: Record<string, unknown>) => {
-      const byPath: Record<string, unknown> = {};
-      const byName: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(values)) {
-        if (declared.has(key.split('.')[0] ?? '')) byName[key] = value;
-        else byPath[key] = value;
-      }
-      return [byPath, byName] as const;
-    };
-    // Provided values stay whole: the root's param pre-fill reads both keys.
-    // Overrides split, since an unmatched path key would create `aria` at the root.
-    const [, providedByName] = split(provided);
-    const [overridesByPath, overridesByName] = split(overrides);
+    const isNamed = (event: InputEvent) => declared.has(event.path.split('.')[0] ?? '');
+    // Param events stay whole: the root's param pre-fill reads both keys.
+    // Set events split, since an unmatched path key would create `aria` at the root.
     return {
-      provided,
-      overrides: overridesByPath,
-      namespaced: { provided: providedByName, overrides: overridesByName },
+      inputs: events.filter((event) => event.type === 'param' || !isNamed(event)),
+      namespaced: events.filter(isNamed),
     };
   }
 
@@ -802,24 +771,24 @@ export class GoblinEngine {
   /**
    * Apply an applied-document (e.g. a class file) onto an actor's raw tree.
    * Leveling lives in the files: gate per-level content with `$if` on actor
-   * state (e.g. `@.level >= 5`). Evaluate with provided values first so
+   * state (e.g. `@.level >= 5`). Evaluate with param events first so
    * conditions read materialized params.
    */
-  apply(actorRaw: unknown, patchFile: string, provided?: Record<string, unknown>): unknown {
+  apply(actorRaw: unknown, patchFile: string, inputs?: InputEvent[]): unknown {
     const patch = this.docs.get(patchFile);
     if (patch === undefined) throw new Error(`patch document not loaded: ${patchFile}`);
-    return this.applyRaw(actorRaw, patch, patchFile, provided);
+    return this.applyRaw(actorRaw, patch, patchFile, inputs);
   }
 
   /** Apply an in-memory patch (e.g. a `$tmpl('…')` clone) onto an actor.
    * `source` names it in the event logs; defaults to the document it came from. */
-  applyRaw(actorRaw: unknown, patch: unknown, source?: string, provided?: Record<string, unknown>): unknown {
+  applyRaw(actorRaw: unknown, patch: unknown, source?: string, inputs?: InputEvent[]): unknown {
     const scope: EvalRoots = {
       doc: patch,
       actor: actorRaw,
       app: this.appRoot,
       current: actorRaw,
-      provided,
+      inputs: inputs?.filter((event) => event.type === 'param'),
     };
     if (patch !== null && typeof patch === 'object') this.actorOf.set(patch, actorRaw);
     const patchSource = source ?? this.sourceOf(patch);
@@ -857,9 +826,11 @@ export class GoblinEngine {
     kind: string,
     value: unknown,
     at: Location | undefined,
+    version?: number,
   ): Record<string, unknown> {
     return {
       ...(source === undefined ? {} : { [SOURCE_KEY]: source }),
+      ...(version === undefined ? {} : { [VERSION_KEY]: version }),
       ...(at === undefined ? {} : { [LINE_KEY]: at.line, [COLUMN_KEY]: at.column }),
       [kind]: value,
     };
@@ -1014,8 +985,8 @@ export class GoblinEngine {
     const patch = this.claim(this.clone(doc as object), source);
     this.origins.set(patch, source);
     if (scope.doc !== null && typeof scope.doc === 'object') this.parents.set(patch, scope.doc);
-    RecordNode.materializeParams(actor, scope.provided, this.namespaceOf);
-    this.applyRaw(actor, patch, source, scope.provided);
+    RecordNode.materializeParams(actor, scope.inputs, this.namespaceOf);
+    this.applyRaw(actor, patch, source, scope.inputs);
   }
 
   /** The actor built (`$actor: type`) or patched (`@: type`) by the nearest such document. */
@@ -1053,7 +1024,7 @@ export class GoblinEngine {
       // A nested actor document is its own `#` and `@`: its mixins land on it.
       const nested = this.isNestedActor(record, outer);
       const inner = nested ? this.enterActor(record, outer, path) : outer;
-      if (nested && inner.overrides) this.applyOverrides(record, inner.overrides);
+      if (nested && inner.inputs) this.applyOverrides(record, inner.inputs);
       const base = nested ? [] : path;
       for (const [key, value] of Object.entries(record)) {
         if (isMetaKey(key) || isValidateKey(key)) continue;
@@ -1104,21 +1075,19 @@ export class GoblinEngine {
   }
 
   /** The scope inside a nested actor at `path` (relative to the outer actor):
-   * `#` and `@` become it, and provided values are read relative to it. */
+   * `#` and `@` become it, and input events are read relative to it. */
   enterActor(record: Record<string, unknown>, scope: EvalRoots, path: string[]): EvalRoots {
-    // A namespaced actor also reads values keyed by its namespace; those win.
+    // A namespaced actor also reads events keyed by its namespace; those come
+    // last, so they win.
     const namespace = this.namespaces.get(record);
-    const named = (values: Record<string, unknown> | undefined) =>
-      namespace === undefined ? {} : RecordNode.nestProvided(values, [namespace]);
-    const overrides = { ...RecordNode.nestProvided(scope.overrides, path), ...named(scope.namespaced?.overrides) };
+    const named = namespace === undefined ? [] : nest(scope.namespaced, [namespace]);
     return {
       ...scope,
       doc: record,
       actor: record,
       current: record,
       home: undefined,
-      provided: { ...RecordNode.nestProvided(scope.provided, path), ...named(scope.namespaced?.provided) },
-      overrides: scope.overrides || scope.namespaced ? overrides : undefined,
+      inputs: [...nest(scope.inputs, path), ...named],
       path: scope.path === undefined ? undefined : [],
     };
   }

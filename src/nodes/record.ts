@@ -20,6 +20,7 @@ import {
   VALUE_KEY,
 } from '../constants';
 import type { GoblinEngine } from '../engine';
+import { type InputEvent, paramValue } from '../inputs';
 import type { EvalRoots } from '../utils';
 import { isBareSigil, isMetaKey, isPathKey, isPrivateKey, isValidateKey, stripPlus } from '../utils';
 import { Die } from './die';
@@ -153,11 +154,11 @@ export class RecordNode extends Node<Record<string, unknown>> {
 
   /** Every `:param` record in a raw tree, as `[{ path, doc?, type?, … }]`.
    * A namespaced actor's params report under its namespace (`aria.name`);
-   * with `provided`, params it fills by either key are left out. */
+   * params an `inputs` param event fills by either key are left out. */
   static collectParams(
     raw: unknown,
     namespaceOf?: (record: object) => string | undefined,
-    provided: Record<string, unknown> = {},
+    inputs: readonly InputEvent[] = [],
   ): MissingParam[] {
     const missing: MissingParam[] = [];
     eachParamRecord(
@@ -165,7 +166,7 @@ export class RecordNode extends Node<Record<string, unknown>> {
       (record, key, full) => {
         const def = record[DEFAULT_KEY];
         if (def !== undefined && def !== null) return; // satisfied by default
-        if (provided[key] !== undefined || provided[full] !== undefined) return;
+        if (paramValue(inputs, key, full) !== undefined) return;
         const entry: MissingParam = { path: key };
         const label = record[LABEL_KEY];
         if (typeof label === 'string' && label) entry.label = label;
@@ -193,13 +194,13 @@ export class RecordNode extends Node<Record<string, unknown>> {
   }
 
   /**
-   * Fill raw `:param` records with `value` slots (provided, else `:default`,
+   * Fill raw `:param` records with `value` slots (a param event, else `:default`,
    * else `null`) so `<path>.value` references resolve like any other node.
    * Returns true when anything was written. Idempotent.
    */
   static materializeParams(
     raw: unknown,
-    provided: Record<string, unknown> = {},
+    inputs: readonly InputEvent[] = [],
     namespaceOf?: (record: object) => string | undefined,
   ): boolean {
     let wrote = false;
@@ -208,24 +209,13 @@ export class RecordNode extends Node<Record<string, unknown>> {
       (record, key, full) => {
         const def = record[DEFAULT_KEY];
         const hasDefault = def !== undefined && def !== null;
-        const given = provided[key] !== undefined ? provided[key] : provided[full];
+        const given = paramValue(inputs, key, full);
         record[VALUE_KEY] = given !== undefined ? given : hasDefault ? def : null;
         wrote = true;
       },
       namespaceOf,
     );
     return wrote;
-  }
-
-  /** Provided values addressed under `path`, re-keyed relative to it. */
-  static nestProvided(provided: Record<string, unknown> | undefined, path: string[]): Record<string, unknown> {
-    if (provided === undefined || path.length === 0) return provided ?? {};
-    const prefix = `${path.join('.')}.`;
-    return Object.fromEntries(
-      Object.entries(provided)
-        .filter(([key]) => key.startsWith(prefix))
-        .map(([key, value]) => [key.slice(prefix.length), value]),
-    );
   }
 
   override debug(each: (value: unknown) => unknown): Record<string, unknown> {
@@ -367,7 +357,7 @@ function eachParamRecord(
 
 /**
  * A `:param` record evaluates to its declaration metadata plus a `:value`
- * slot holding the filled value — provided, else `:default`, else `null`.
+ * slot holding the filled value — a param event, else `:default`, else `null`.
  * Bare refs still read the filled value directly (see `derefParam`); the
  * wrapper is display only, and `--strip-metadata` collapses it to `:value`.
  */
@@ -378,7 +368,7 @@ function fillParam(engine: GoblinEngine, record: Record<string, unknown>, scope:
   for (const [key, value] of Object.entries(record)) {
     if (isMetaKey(key) || isValidateKey(key)) out[key] = value;
   }
-  const provided = scope.provided?.[paramKey];
+  const provided = paramValue(scope.inputs, paramKey);
   const def = record[DEFAULT_KEY];
   if (provided === undefined && (def === undefined || def === null)) {
     out[PARAM_VALUE_KEY] = null;

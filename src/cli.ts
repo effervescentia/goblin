@@ -13,6 +13,7 @@
  */
 import { createHash } from 'node:crypto';
 import { GoblinEngine } from './engine';
+import type { InputEvent } from './inputs';
 import { print } from './nodes/serialize';
 
 export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--strip-metadata] [--in state.json|-] [--out file.json] [--help]
@@ -20,7 +21,7 @@ export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set
 Resolves a goblin document and prints the result as JSON: either
 { "hash", "version", "events", "data" } when all :param values are
 satisfied (version counts runs since the first, bumped by each --in; events
-is the stream of every --param/--set given so far, each as
+is the stream of every --param/--set given so far, in order, each as
 { version, type: "param" | "set", path, value }; hash is a sha256 over the
 compact JSON of the rest), or
 { "query": […] } listing the outstanding parameters. A resolved sheet must
@@ -54,8 +55,8 @@ export interface CliArgs {
   help: boolean;
   in?: string;
   out?: string;
-  params: Record<string, unknown>;
-  overrides: Record<string, unknown>;
+  /** Every --param / --set in the order given; the run stamps their version. */
+  events: Omit<InputEvent, 'version'>[];
 }
 
 /** Parse a --param/--set value as JSON, falling back to a plain string. */
@@ -76,7 +77,7 @@ function parseKeyValue(flag: string, pair: string | undefined): [string, unknown
 
 /** Pure argv parsing (excludes node/bun binary and script name). */
 export function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { compact: false, stripMetadata: false, help: false, params: {}, overrides: {} };
+  const args: CliArgs = { compact: false, stripMetadata: false, help: false, events: [] };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     if (arg === '--compact') {
@@ -96,9 +97,8 @@ export function parseArgs(argv: string[]): CliArgs {
         throw new Error(`--in expects a file path or -, got: ${path ?? '(nothing)'}`);
       args.in = path;
     } else if (arg === '--param' || arg === '--set') {
-      const [key, value] = parseKeyValue(arg, argv[++i]);
-      if (arg === '--param') args.params[key] = value;
-      else args.overrides[key] = value;
+      const [path, value] = parseKeyValue(arg, argv[++i]);
+      args.events.push({ type: arg === '--param' ? 'param' : 'set', path, value });
     } else if (!arg.startsWith('-') && args.entry === undefined) {
       args.entry = arg;
     } else {
@@ -106,37 +106,6 @@ export function parseArgs(argv: string[]): CliArgs {
     }
   }
   return args;
-}
-
-export interface Inputs {
-  parameters: Record<string, unknown>;
-  overrides: Record<string, unknown>;
-}
-
-/** One `--param` or `--set` given on the run that produced `version`. */
-export interface InputEvent {
-  version: number;
-  type: 'param' | 'set';
-  path: string;
-  value: unknown;
-}
-
-/** This run's flags as events: params, then sets, each in the order given. */
-export function toEvents(inputs: Inputs, version: number): InputEvent[] {
-  return [
-    ...Object.entries(inputs.parameters).map(([path, value]) => ({ version, type: 'param' as const, path, value })),
-    ...Object.entries(inputs.overrides).map(([path, value]) => ({ version, type: 'set' as const, path, value })),
-  ];
-}
-
-/** Replay an event stream into the inputs it amounts to; later events win. */
-export function fold(events: InputEvent[]): Inputs {
-  const inputs: Inputs = { parameters: {}, overrides: {} };
-  for (const { type, path, value } of events) {
-    if (type === 'param') inputs.parameters[path] = value;
-    else inputs.overrides[path] = value;
-  }
-  return inputs;
 }
 
 /** Stamp a `{ data }` envelope with its version, the input events that produced it
@@ -187,13 +156,8 @@ export function rehydrate(state: unknown): { version: number; events: InputEvent
 /** Resolution envelope plus `{ errors }` for sheets failing `!validate`. */
 export type AppState = ReturnType<GoblinEngine['resolve']> | { errors: string[] };
 
-export async function resolveAppState(
-  cwd: string,
-  entry?: string,
-  provided: Record<string, unknown> = {},
-  overrides: Record<string, unknown> = {},
-): Promise<AppState> {
-  return (await resolveApp(cwd, entry, provided, overrides)).state;
+export async function resolveAppState(cwd: string, entry?: string, inputs: InputEvent[] = []): Promise<AppState> {
+  return (await resolveApp(cwd, entry, inputs)).state;
 }
 
 /** `resolveAppState`, plus the merged raw actor it resolved — what the
@@ -201,8 +165,7 @@ export async function resolveAppState(
 export async function resolveApp(
   cwd: string,
   entry?: string,
-  provided: Record<string, unknown> = {},
-  overrides: Record<string, unknown> = {},
+  inputs: InputEvent[] = [],
 ): Promise<{ state: AppState; actor: unknown; engine: GoblinEngine }> {
   // Bun-only: the CLI entry point always runs under Bun (or compiled).
   const { YAML } = await import('bun');
@@ -229,7 +192,7 @@ export async function resolveApp(
   await engine.loadFile(main);
   // The entry's whole root is the answer; actors nest in it as `$actor` documents.
   const actor = engine.docs.get(main);
-  const state = engine.resolveRaw(actor, provided, overrides);
+  const state = engine.resolveRaw(actor, inputs);
   // A resolved sheet must also hold: `!validate` rules are part of the answer,
   // not a separate pass the caller might skip.
   if ('data' in state) {
@@ -252,9 +215,8 @@ if (import.meta.main) {
         ? { version: 0, events: [] }
         : rehydrate(JSON.parse(args.in === '-' ? await Bun.stdin.text() : await Bun.file(args.in).text()));
     const version = prior.version + 1;
-    const events = [...prior.events, ...toEvents({ parameters: args.params, overrides: args.overrides }, version)];
-    const inputs = fold(events);
-    const state = await resolveAppState(process.cwd(), args.entry, inputs.parameters, inputs.overrides);
+    const events = [...prior.events, ...args.events.map((event) => ({ version, ...event }))];
+    const state = await resolveAppState(process.cwd(), args.entry, events);
     const out = withHash(args.stripMetadata && 'data' in state ? { data: print(state.data) } : state, events, version);
     const json = `${JSON.stringify(out, null, args.compact ? 0 : 2)}\n`;
     // Only a full resolution is worth saving; Bun.write replaces the file.

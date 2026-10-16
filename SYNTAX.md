@@ -377,7 +377,7 @@ A document can be *applied* onto an actor (`engine.apply(actor, file)`),
 as class files are. The engine knows nothing of levels: gate per-level
 content with `$if` on actor state (e.g. `@.level >= 5`), and derive anything
 that is a pure function of level as an unconditional expression. Evaluate
-with provided values first so conditions read materialized params. Patch
+with param events first so conditions read materialized params. Patch
 syntax:
 
 - **Path keys** (`'@.features'`, `'$.hit_points.value'`) target a node by
@@ -445,7 +445,8 @@ patch touched print bare, as before.
   `apply(actor, file)` / `applyRaw(actor, patch, source)` otherwise. It is
   omitted when the engine has no name for the tree (e.g. a hand-built actor).
   Values written by `applyOverrides` (the CLI's `--set`) report
-  `:source: override`, so an explicit value shows what it beat. Overrides
+  `:source: override` plus the `:version` (run) of the `set` event that
+  wrote them, so an explicit value shows what it beat and when. Overrides
   apply both before and after the patches, so one that re-writes the value
   already in place is not recorded twice.
 - `:line` / `:column` (1-based) point at the key in the `:source` document
@@ -715,6 +716,9 @@ level:
   :type: integer
 ```
 
+`evaluateDoc(file, events)` reads only the `param` events (see Resolution
+for the stream); `set` events take `resolve`.
+
 ```ts
 engine.missingParams('08-parameters.yaml');
 // [
@@ -722,19 +726,23 @@ engine.missingParams('08-parameters.yaml');
 //   { path: 'starting_level', doc: 'Starting level, 1 through 20.', type: 'integer' },
 //   { path: 'details.title' },
 // ]
-engine.evaluateDoc('08-parameters.yaml', { hero_name: 'Aria' });
+engine.evaluateDoc('08-parameters.yaml', [param('hero_name', 'Aria')]);
 // hero_name → { ':doc': '…', ':param': true, ':type': 'string', ':value': 'Aria' }
-engine.evaluateDoc('08-parameters.yaml', { starting_level: 'high' });
+engine.evaluateDoc('08-parameters.yaml', [param('starting_level', 'high')]);
 // throws: param type mismatch: starting_level expected integer, got string
 ```
 
 ## Resolution
 
-`resolve(file, provided)` answers a document in one call, returning an
+Inputs reach the engine as an append-only event stream, the same one the
+CLI saves: `InputEvent = { version, type: 'param' | 'set', path, value }`
+(`src/inputs.ts`; `param(path, value, version = 1)` and `set(…)` build
+them). Replaying the stream, the latest event of a type for a path wins.
+`resolve(file, events)` answers a document in one call, returning an
 envelope that is either satisfied or asking:
 
-- All `:param` keys present in `provided` → `{ data }` with the serialized
-  evaluated document.
+- All `:param` keys filled by a `param` event (by path or alias) → `{ data }`
+  with the serialized evaluated document.
 - Otherwise → `{ query }` with **only** the outstanding params
   (satisfied ones are filtered out).
 - The CLI then validates `{ data }`: any failing `!validate` rule turns it
@@ -742,9 +750,8 @@ envelope that is either satisfied or asking:
   `{ hash, version, events, data }`: `version` is `1` for a fresh run and
   the prior state's version + 1 under `--in` (a state without one counts as
   `0`); `events` is the append-only stream of every `--param` / `--set`
-  given so far, each `{ version, type: 'param' | 'set', path, value }`
-  (tagged with the run that gave it; a run's params precede its sets); and
-  `hash` is `sha256:<hex>` of the compact
+  given so far, in the order given, each tagged with the run that gave it;
+  and `hash` is `sha256:<hex>` of the compact
   `JSON.stringify({ version, events, data })` (data after
   `--strip-metadata`, when given).
 - `--in state.json` (or `--in -` for stdin) rehydrates from a prior output:
@@ -752,29 +759,32 @@ envelope that is either satisfied or asking:
   run's `--param`/`--set` append as events of the incremented `version`, and
   everything else recomputes from the entry. A `hash` that doesn't match
   the rest of the state throws.
-- Provided values of the wrong `:type` — or violating `:options` / `:min` /
+- Param values of the wrong `:type` — or violating `:options` / `:min` /
   `:max` / `:count` / `:unique` — still throw instead of resolving.
-- `resolve(file, provided, overrides)` writes override values into the tree
-  first (`.`/`#`/`@` target the actor, `$` the app; bare paths default to the
+- `set` events write their values into the tree first (`.`/`#`/`@` target the actor, `$` the app; bare paths default to the
   actor). Overridden originals are ignored — derivations never run and
   missing paths are created — but `:param` records keep their `:type`
   contract. CLI flag: `--set path=value` (separate from `--param`).
 
 ```ts
-engine.resolve('08-parameters.yaml', {}, { hero_name: 'Aria' });
+engine.resolve('08-parameters.yaml', [set('hero_name', 'Aria')]);
 // { data: { hero_name: 'Aria', … } }  (overridden params are not queried)
 ```
 
 ```ts
-engine.resolve('08-parameters.yaml', {});
+engine.resolve('08-parameters.yaml');
 // { query: [
 //   { path: 'hero_name', doc: '…', type: 'string' },
 //   { path: 'starting_level', doc: '…', type: 'integer' },
 //   { path: 'details.title' },
 // ] }
-engine.resolve('08-parameters.yaml', { hero_name: 'Aria' });
+engine.resolve('08-parameters.yaml', [param('hero_name', 'Aria')]);
 // { query: [ …starting_level…, …details.title… ] }  (hero_name filtered)
-engine.resolve('08-parameters.yaml', { hero_name: 'Aria', starting_level: 3, 'details.title': 'Kid' });
+engine.resolve('08-parameters.yaml', [
+  param('hero_name', 'Aria'),
+  param('starting_level', 3),
+  param('details.title', 'Kid'),
+]);
 // { data: { hero_name: 'Aria', … } }
 ```
 

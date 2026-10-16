@@ -17,6 +17,7 @@ import {
   VALIDATE_KEY,
   WILDCARD,
 } from './constants';
+import type { InputEvent } from './inputs';
 import type { Location } from './locations';
 import { Die } from './nodes/die';
 
@@ -33,13 +34,12 @@ export interface EvalRoots {
   params?: Record<string, unknown>;
   /** Dotted path of `current` in the evaluated output (drives `:param` lookup). */
   path?: string[];
-  /** User-provided values for `:param` nodes, keyed by dotted path or alias. */
-  provided?: Record<string, unknown>;
-  /** `--set` values, applied to each nested actor as expansion enters it. */
-  overrides?: Record<string, unknown>;
-  /** `--param` / `--set` values keyed by actor namespace (`aria.name`), read
-   * by whichever nested actor holds that namespace. */
-  namespaced?: { provided: Record<string, unknown>; overrides: Record<string, unknown> };
+  /** `--param` / `--set` events addressed relative to `actor` (params by dotted
+   * path or alias); sets apply to each nested actor as expansion enters it. */
+  inputs?: InputEvent[];
+  /** Events led by an actor namespace (`aria.name`), read by whichever nested
+   * actor holds that namespace. */
+  namespaced?: InputEvent[];
   /** Document that wrote the expression being evaluated — the only one that
    * may reach `_` fields it wrote. */
   source?: string;

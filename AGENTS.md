@@ -59,6 +59,9 @@ apart. Treat a missing spec update as an incomplete change.
   resolves an entry via `resolveApp` in `src/cli.ts`, answers `{ query }`
   turns with a form, and renders `inspect()` (`src/inspect.ts`, pure) —
   fields, what each reads and is read by, and their `:events`.
+- Engine inputs are the same `InputEvent` stream the CLI saves (`src/inputs.ts`):
+  `resolve`/`evaluateDoc`/`apply` take `InputEvent[]`, never param/override
+  records. Replay semantics (latest per path wins) live in `src/inputs.ts`.
 - `src/engine.ts` transpiles goblin expressions with `new Function` — every
   `.name` token is treated as a goblin ref, so avoid introducing bare JS
   property access in expression strings.

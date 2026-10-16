@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { fold, type InputEvent, parseArgs, parseParamValue, rehydrate, toEvents, USAGE, withHash } from './cli';
+import { parseArgs, parseParamValue, rehydrate, USAGE, withHash } from './cli';
 import { COMPANION_PARAMS } from './dnd5e.fixtures';
+import { type InputEvent, latest, nest, paramValue } from './inputs';
 import { print } from './nodes/serialize';
 
 describe('parseArgs', () => {
@@ -16,8 +17,7 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
-      params: {},
-      overrides: {},
+      events: [],
     });
   });
 
@@ -27,8 +27,7 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
-      params: {},
-      overrides: {},
+      events: [],
     });
   });
 
@@ -38,16 +37,14 @@ describe('parseArgs', () => {
       compact: true,
       stripMetadata: false,
       help: false,
-      params: {},
-      overrides: {},
+      events: [],
     });
     expect(parseArgs(['main.yaml', '--compact'])).toEqual({
       entry: 'main.yaml',
       compact: true,
       stripMetadata: false,
       help: false,
-      params: {},
-      overrides: {},
+      events: [],
     });
   });
 
@@ -57,16 +54,14 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: true,
       help: false,
-      params: {},
-      overrides: {},
+      events: [],
     });
     expect(parseArgs(['main.yaml', '--compact', '--strip-metadata'])).toEqual({
       entry: 'main.yaml',
       compact: true,
       stripMetadata: true,
       help: false,
-      params: {},
-      overrides: {},
+      events: [],
     });
   });
 
@@ -76,16 +71,14 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: true,
-      params: {},
-      overrides: {},
+      events: [],
     });
     expect(parseArgs(['-h'])).toEqual({
       entry: undefined,
       compact: false,
       stripMetadata: false,
       help: true,
-      params: {},
-      overrides: {},
+      events: [],
     });
   });
 
@@ -95,16 +88,17 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
-      params: { hero_name: 'Aria' },
-      overrides: {},
+      events: [{ type: 'param', path: 'hero_name', value: 'Aria' }],
     });
     expect(parseArgs(['--param', 'level=3', '--param', 'name=Aria'])).toEqual({
       entry: undefined,
       compact: false,
       stripMetadata: false,
       help: false,
-      params: { level: 3, name: 'Aria' },
-      overrides: {},
+      events: [
+        { type: 'param', path: 'level', value: 3 },
+        { type: 'param', path: 'name', value: 'Aria' },
+      ],
     });
   });
 
@@ -114,13 +108,12 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
-      params: { 'skills.trained': ['athletics', 'perception'] },
-      overrides: {},
+      events: [{ type: 'param', path: 'skills.trained', value: ['athletics', 'perception'] }],
     });
   });
 
   it('splits --param on the first =', () => {
-    expect(parseArgs(['--param', 'a=b=c']).params).toEqual({ a: 'b=c' });
+    expect(parseArgs(['--param', 'a=b=c']).events).toEqual([{ type: 'param', path: 'a', value: 'b=c' }]);
   });
 
   it('rejects malformed --param', () => {
@@ -129,23 +122,22 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['--param', '=novalue'])).toThrow('--param expects key=value');
   });
 
-  it('accepts repeatable --set path=value apart from --param', () => {
+  it('accepts repeatable --set path=value, keeping every flag in the order given', () => {
     expect(parseArgs(['--set', 'level=5'])).toEqual({
       entry: undefined,
       compact: false,
       stripMetadata: false,
       help: false,
-      params: {},
-      overrides: { level: 5 },
+      events: [{ type: 'set', path: 'level', value: 5 }],
     });
-    expect(parseArgs(['--param', 'name=Aria', '--set', 'level=5', '--set', 'a.b=1'])).toEqual({
-      entry: undefined,
-      compact: false,
-      stripMetadata: false,
-      help: false,
-      params: { name: 'Aria' },
-      overrides: { level: 5, 'a.b': 1 },
-    });
+    expect(
+      parseArgs(['--set', 'level=5', '--param', 'name=Aria', '--set', 'a.b=1', '--set', 'level=6']).events,
+    ).toEqual([
+      { type: 'set', path: 'level', value: 5 },
+      { type: 'param', path: 'name', value: 'Aria' },
+      { type: 'set', path: 'a.b', value: 1 },
+      { type: 'set', path: 'level', value: 6 },
+    ]);
   });
 
   it('rejects malformed --set', () => {
@@ -220,24 +212,30 @@ describe('parseParamValue', () => {
 
 const sha = (body: unknown) => `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}`;
 
-describe('toEvents / fold', () => {
-  it('records params then sets, tagged with the run version', () => {
-    expect(toEvents({ parameters: { name: 'Aria', level: 2 }, overrides: { 'hp.max': 14 } }, 3)).toEqual([
-      { version: 3, type: 'param', path: 'name', value: 'Aria' },
-      { version: 3, type: 'param', path: 'level', value: 2 },
-      { version: 3, type: 'set', path: 'hp.max', value: 14 },
-    ]);
+describe('inputs', () => {
+  const events: InputEvent[] = [
+    { version: 1, type: 'param', path: 'level', value: 2 },
+    { version: 1, type: 'set', path: 'hp', value: 10 },
+    { version: 2, type: 'param', path: 'level', value: 5 },
+    { version: 3, type: 'set', path: 'party.aria.hp', value: 7 },
+    { version: 3, type: 'set', path: 'hp', value: 12 },
+  ];
+
+  it('keeps the latest event of a type per path, ordered by arrival', () => {
+    expect(latest(events, 'set')).toEqual([events[3], events[4]]);
+    expect(latest(events, 'param')).toEqual([events[2]]);
   });
 
-  it('replays events in order, later values winning', () => {
-    const events: InputEvent[] = [
-      { version: 1, type: 'param', path: 'level', value: 2 },
-      { version: 1, type: 'set', path: 'hp', value: 10 },
-      { version: 2, type: 'param', path: 'level', value: 5 },
-      { version: 3, type: 'set', path: 'level', value: 7 },
-    ];
-    expect(fold(events)).toEqual({ parameters: { level: 5 }, overrides: { hp: 10, level: 7 } });
-    expect(fold([])).toEqual({ parameters: {}, overrides: {} });
+  it('reads the latest param value for the first path given one', () => {
+    expect(paramValue(events, 'level')).toBe(5);
+    expect(paramValue(events, 'missing', 'level')).toBe(5);
+    expect(paramValue(events, 'hp')).toBeUndefined();
+  });
+
+  it('re-paths events nested under a path', () => {
+    expect(nest(events, ['party', 'aria'])).toEqual([{ version: 3, type: 'set', path: 'hp', value: 7 }]);
+    expect(nest(events, [])).toEqual(events);
+    expect(nest(undefined, ['x'])).toEqual([]);
   });
 });
 
