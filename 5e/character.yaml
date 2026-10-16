@@ -100,14 +100,32 @@ class:
   :type: string
   :options:
     - barbarian
+    - bard
+    - cleric
+    - druid
     - fighter
     - monk
+    - paladin
+    - ranger
+    - rogue
+    - sorcerer
+    - warlock
+    - wizard
 
-# The composed 5e character includes the Fighter class as a Character mixin.
+# Every class mixes in; each gates on `class`, so only the chosen one applies.
 _classes:
   barbarian: $mixin('barbarian/barbarian.yaml')
+  bard: $mixin('bard/bard.yaml')
+  cleric: $mixin('cleric/cleric.yaml')
+  druid: $mixin('druid/druid.yaml')
   fighter: $mixin('fighter/fighter.yaml')
   monk: $mixin('monk/monk.yaml')
+  paladin: $mixin('paladin/paladin.yaml')
+  ranger: $mixin('ranger/ranger.yaml')
+  rogue: $mixin('rogue/rogue.yaml')
+  sorcerer: $mixin('sorcerer/sorcerer.yaml')
+  warlock: $mixin('warlock/warlock.yaml')
+  wizard: $mixin('wizard/wizard.yaml')
 
 # A short rest refills the `short` resources; a long rest refills everything.
 rest:

@@ -40,6 +40,7 @@ const script = `
   const baseMissing = e.missingParams('character.yaml').map((m) => m.path).sort();
 
   const BOUGHT = {
+    class: 'fighter',
     ability_method: 'point_buy',
     'abilities.strength.bought': 7,
     'abilities.dexterity.bought': 6,
@@ -71,7 +72,7 @@ const script = `
   };
 
   const a3 = fresh();
-  e.evaluate(a3, scopeOf(a3, { name: 'X', xp: 900, ability_method: 'point_buy' }));
+  e.evaluate(a3, scopeOf(a3, { name: 'X', xp: 900, class: 'fighter', ability_method: 'point_buy' }));
   const mergedMissing = RecordNode.collectParams(a3).map((m) => m.path).sort();
 
   const levels = {};
@@ -154,6 +155,8 @@ const script = `
 // The classic 15/14/13/10/10/8 spread: 25 of the 27 points.
 const BOUGHT = [
   '--param',
+  'class=fighter',
+  '--param',
   'ability_method=point_buy',
   '--param',
   'abilities.strength.bought=7',
@@ -173,8 +176,8 @@ describe('5e', () => {
   it('levels a fighter from 1 to 20 on XP', () => {
     const out = execFileSync('bun', ['-e', script], { cwd: root, encoding: 'utf8' });
     expect(JSON.parse(out)).toEqual({
-      // Each ability's choice waits on the method that adds it.
-      baseMissing: ['ability_method', 'features.fighting_style', 'name', 'skills.trained'],
+      // Each ability's choice waits on its method; class features wait on the class.
+      baseMissing: ['ability_method', 'class', 'name'],
       mergedMissing: [
         'abilities.charisma.bought',
         'abilities.constitution.bought',
@@ -183,6 +186,7 @@ describe('5e', () => {
         'abilities.strength.bought',
         'abilities.wisdom.bought',
         'ability_method',
+        'class',
         'features.fighting_style',
         'features.martial_archetype',
         'name',
@@ -226,14 +230,9 @@ describe('5e', () => {
   });
 
   it('serves the composed fighter through the root entry', () => {
-    // The method comes first: no ability asks for a score until it is chosen.
+    // Method and class come first: neither abilities nor class features ask until chosen.
     const query = cli('5e/main.yaml') as { query: Array<{ path: string }> };
-    expect(query.query.map((param) => param.path).sort()).toEqual([
-      'ability_method',
-      'features.fighting_style',
-      'name',
-      'skills.trained',
-    ]);
+    expect(query.query.map((param) => param.path).sort()).toEqual(['ability_method', 'class', 'name']);
 
     const data = cli(
       '5e/main.yaml',
@@ -268,23 +267,34 @@ describe('5e', () => {
       ':events': [
         // Each write cites the key behind it: `attacks: 1`, then `'+@.attacks'`.
         { ':source': 'character.yaml', ':line': 64, ':column': 1, ':set': 1 },
-        { ':source': 'fighter/fighter.yaml', ':line': 99, ':column': 5, ':add': 1 },
+        { ':source': 'fighter/fighter.yaml', ':line': 113, ':column': 5, ':add': 1 },
       ],
     });
     // A `+key` addition is itself a change: the feature records who added it.
     expect(data.data.features.extra_attack).toEqual({
       ':label': 'Extra Attack',
       ':doc': 'Strike twice whenever you take the Attack action.',
-      ':events': [{ ':source': 'fighter/fighter.yaml', ':line': 95, ':column': 3, ':add': 'extra_attack' }],
+      ':events': [{ ':source': 'fighter/fighter.yaml', ':line': 109, ':column': 3, ':add': 'extra_attack' }],
     });
     expect(data.data.features.fighting_style).toEqual({
       ':label': 'Fighting Style',
       ':doc': 'Pick the combat style you trained in.',
       ':param': true,
       ':type': 'string',
-      ':options': ['archery', 'defense', 'dueling', 'great_weapon_fighting', 'protection', 'two_weapon_fighting'],
+      ':options': [
+        'archery',
+        'blind_fighting',
+        'defense',
+        'dueling',
+        'great_weapon_fighting',
+        'interception',
+        'protection',
+        'thrown_weapon_fighting',
+        'two_weapon_fighting',
+        'unarmed_fighting',
+      ],
       ':value': 'dueling',
-      ':events': [{ ':source': 'fighter/fighter.yaml', ':line': 30, ':column': 3, ':add': 'fighting_style' }],
+      ':events': [{ ':source': 'fighter/fighter.yaml', ':line': 34, ':column': 3, ':add': 'fighting_style' }],
     });
   });
 
@@ -334,6 +344,8 @@ describe('5e', () => {
   it('spends point buy within its budget, and refuses more', () => {
     const spread = (...scores: number[]): string[] => [
       '--param',
+      'class=fighter',
+      '--param',
       'ability_method=point_buy',
       ...['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma'].flatMap((ability, i) => [
         '--param',
@@ -380,6 +392,8 @@ describe('5e', () => {
       'name=Aria',
       '--param',
       'xp=0',
+      '--param',
+      'class=fighter',
       '--param',
       'ability_method=standard_array',
       '--param',
@@ -437,6 +451,8 @@ describe('5e', () => {
       '--param',
       'xp=0',
       '--param',
+      'class=fighter',
+      '--param',
       'ability_method=roll',
       '--param',
       'features.fighting_style=dueling',
@@ -469,6 +485,8 @@ describe('5e', () => {
       'name=Aria',
       '--param',
       'xp=0',
+      '--param',
+      'class=fighter',
       '--param',
       'ability_method=roll_assign',
       '--param',
@@ -522,6 +540,8 @@ describe('5e', () => {
       '--strip-metadata',
       '--param',
       'name=Aria',
+      '--param',
+      'class=fighter',
       '--param',
       'ability_method=roll',
       '--param',
@@ -629,6 +649,8 @@ describe('5e', () => {
       '--param',
       'xp=6500',
       '--param',
+      'class=fighter',
+      '--param',
       'ability_method=point_buy',
     ) as {
       query: Array<{ path: string; label?: string }>;
@@ -658,7 +680,7 @@ describe('5e', () => {
         'improvements.level_4=["strength","strength"]',
       ),
     ).toContain(
-      'param options mismatch: features.fighting_style expected one of ["archery", "defense", "dueling", "great_weapon_fighting", "protection", "two_weapon_fighting"], got "kung_fu"',
+      'param options mismatch: features.fighting_style expected one of ["archery", "blind_fighting", "defense", "dueling", "great_weapon_fighting", "interception", "protection", "thrown_weapon_fighting", "two_weapon_fighting", "unarmed_fighting"], got "kung_fu"',
     );
   });
 

@@ -1,0 +1,92 @@
+'@': Character
+$if: "@.class == 'bard'"
+
+'@.hit_die': d8
+'@.hit_points':
+  max: 8 + @.abilities.constitution.modifier
+  current: '@.hit_points.max'
+'@.proficiencies.weapon':
+  - simple_weapons
+'@.proficiencies.armor':
+  - light_armor
+'@.proficiencies.saving_throws':
+  - dexterity
+  - charisma
+'@.skills.trained':
+  :label: Skill Proficiencies
+  :doc: 'Choose three proficient skills.'
+  :param: true
+  :type: array
+  :options:
+    - acrobatics
+    - animal_handling
+    - arcana
+    - athletics
+    - deception
+    - history
+    - insight
+    - intimidation
+    - investigation
+    - medicine
+    - nature
+    - perception
+    - performance
+    - persuasion
+    - religion
+    - sleight_of_hand
+    - stealth
+    - survival
+  :count: 3
+  :unique: true
+'@.features':
+  +bardic_inspiration:
+    :label: Bardic Inspiration
+  +spellcasting:
+    :label: Spellcasting
+  +expertise_1:
+    $if: '@.level >= 2'
+    :label: Expertise
+  +jack_of_all_trades:
+    $if: '@.level >= 2'
+    :label: Jack of All Trades
+  +ability_score_improvement_1:
+    $if: '@.level >= 4'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_4': '$.feature.ability_improvement(4)'
+  +font_of_inspiration:
+    $if: '@.level >= 5'
+    :label: Font of Inspiration
+  +countercharm:
+    $if: '@.level >= 7'
+    :label: Countercharm
+  +ability_score_improvement_2:
+    $if: '@.level >= 8'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_8': '$.feature.ability_improvement(8)'
+  +expertise_2:
+    $if: '@.level >= 9'
+    :label: Expertise
+  +magical_secrets:
+    $if: '@.level >= 10'
+    :label: Magical Secrets
+  +ability_score_improvement_3:
+    $if: '@.level >= 12'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_12': '$.feature.ability_improvement(12)'
+  +ability_score_improvement_4:
+    $if: '@.level >= 16'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_16': '$.feature.ability_improvement(16)'
+  +superior_inspiration:
+    $if: '@.level >= 18'
+    :label: Superior Inspiration
+  +epic_boon:
+    $if: '@.level >= 19'
+    :label: Epic Boon
+  +words_of_creation:
+    $if: '@.level >= 20'
+    :label: Words of Creation

@@ -1,0 +1,75 @@
+'@': Character
+$if: "@.class == 'cleric'"
+
+'@.hit_die': d8
+'@.hit_points':
+  max: 8 + @.abilities.constitution.modifier
+  current: '@.hit_points.max'
+'@.proficiencies.weapon':
+  - simple_weapons
+'@.proficiencies.armor':
+  - light_armor
+  - medium_armor
+  - shields
+'@.proficiencies.saving_throws':
+  - wisdom
+  - charisma
+'@.skills.trained':
+  :label: Skill Proficiencies
+  :doc: 'Choose two proficient skills.'
+  :param: true
+  :type: array
+  :options:
+    - history
+    - insight
+    - medicine
+    - persuasion
+    - religion
+  :count: 2
+  :unique: true
+'@.features':
+  +spellcasting:
+    :label: Spellcasting
+  +divine_order:
+    :label: Divine Order
+  +channel_divinity:
+    $if: '@.level >= 2'
+    :label: Channel Divinity
+  +ability_score_improvement_1:
+    $if: '@.level >= 4'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_4': '$.feature.ability_improvement(4)'
+  +sear_undead:
+    $if: '@.level >= 5'
+    :label: Sear Undead
+  +blessed_strikes:
+    $if: '@.level >= 7'
+    :label: Blessed Strikes
+  +ability_score_improvement_2:
+    $if: '@.level >= 8'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_8': '$.feature.ability_improvement(8)'
+  +divine_intervention:
+    $if: '@.level >= 10'
+    :label: Divine Intervention
+  +ability_score_improvement_3:
+    $if: '@.level >= 12'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_12': '$.feature.ability_improvement(12)'
+  +improved_blessed_strikes:
+    $if: '@.level >= 14'
+    :label: Improved Blessed Strikes
+  +ability_score_improvement_4:
+    $if: '@.level >= 16'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_16': '$.feature.ability_improvement(16)'
+  +epic_boon:
+    $if: '@.level >= 19'
+    :label: Epic Boon
+  +greater_divine_intervention:
+    $if: '@.level >= 20'
+    :label: Greater Divine Intervention
