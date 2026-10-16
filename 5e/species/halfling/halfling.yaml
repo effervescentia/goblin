@@ -1,0 +1,15 @@
+'@': Character
+$if: "@.species == 'halfling'"
+
+'@.size': small
+'@.speed': 30
+
+'@.features':
+  +brave:
+    :label: Brave
+  +halfling_nimbleness:
+    :label: Halfling Nimbleness
+  +luck:
+    :label: Luck
+  +naturally_stealthy:
+    :label: Naturally Stealthy

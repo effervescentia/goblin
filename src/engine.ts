@@ -484,7 +484,7 @@ export class GoblinEngine {
   evaluate(raw: unknown, scope: EvalRoots): unknown {
     if (scope.path === undefined) {
       if (this.expandCalls(raw, scope)) this.cache.clear();
-      if (RecordNode.materializeParams(raw, scope.provided)) this.cache.clear();
+      if (RecordNode.materializeParams(raw, scope.provided, this.namespaceOf)) this.cache.clear();
       return this.evaluate(raw, { ...scope, path: [] });
     }
     return parse(raw).evaluate(this, scope);
@@ -609,7 +609,7 @@ export class GoblinEngine {
     };
     // Calls (and mixins) expand before params fill, so their params fill too.
     if (this.expandCalls(raw, scope)) this.cache.clear();
-    if (RecordNode.materializeParams(raw, keyed.provided)) this.cache.clear();
+    if (RecordNode.materializeParams(raw, keyed.provided, this.namespaceOf)) this.cache.clear();
     return this.evaluate(raw, { ...scope, path: [] });
   }
 
@@ -743,10 +743,12 @@ export class GoblinEngine {
       }
       return [byPath, byName] as const;
     };
-    const [providedByPath, providedByName] = split(provided);
+    // Provided values stay whole: the root's param pre-fill reads both keys.
+    // Overrides split, since an unmatched path key would create `aria` at the root.
+    const [, providedByName] = split(provided);
     const [overridesByPath, overridesByName] = split(overrides);
     return {
-      provided: providedByPath,
+      provided,
       overrides: overridesByPath,
       namespaced: { provided: providedByName, overrides: overridesByName },
     };
@@ -1012,7 +1014,7 @@ export class GoblinEngine {
     const patch = this.claim(this.clone(doc as object), source);
     this.origins.set(patch, source);
     if (scope.doc !== null && typeof scope.doc === 'object') this.parents.set(patch, scope.doc);
-    RecordNode.materializeParams(actor, scope.provided);
+    RecordNode.materializeParams(actor, scope.provided, this.namespaceOf);
     this.applyRaw(actor, patch, source, scope.provided);
   }
 

@@ -600,6 +600,13 @@ describe('nested actors', () => {
       }
     });
 
+    it('fills a namespaced param for the expressions that read it', () => {
+      const engine = named({ guide: "$tmpl('hero.yaml', 'bree')" });
+      (engine.docs.get('party.yaml') as Record<string, unknown>).lead = '$.party.guide.name';
+      const state = engine.resolve('party.yaml', { 'bree.name': 'Bree' }) as { data: Record<string, unknown> };
+      expect(state.data.lead).toBe('Bree');
+    });
+
     it('throws when two actors share a namespace', () => {
       const engine = named({ scout: "$tmpl('hero.yaml', 'x')", guide: "$tmpl('hero.yaml', 'x')" });
       expect(() => engine.resolve('party.yaml')).toThrow('duplicate actor namespace x: party.scout and party.guide');

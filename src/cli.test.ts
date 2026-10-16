@@ -288,12 +288,14 @@ describe('cli', () => {
   });
 
   it('--strip-metadata drops metadata keys from data output', () => {
-    // 5e/main.yaml nests its character under `characters.character_1`.
+    // 5e/main.yaml nests its character at `party.aria`, namespaced `aria`.
     const character = (data: Record<string, unknown>) =>
-      (data.characters as Record<string, Record<string, unknown>>).character_1 as Record<string, unknown>;
+      (data.party as Record<string, Record<string, unknown>>).aria as Record<string, unknown>;
     const params = [
       '--param',
       'class=fighter',
+      '--param',
+      'species=dwarf',
       '--param',
       'ability_method=point_buy',
       '--param',
@@ -320,7 +322,7 @@ describe('cli', () => {
       'skills.trained=["athletics","perception"]',
       '--param',
       'improvements.level_4=["strength","strength"]',
-    ].map((arg) => (arg === '--param' ? arg : `characters.character_1.${arg}`));
+    ].map((arg) => (arg === '--param' ? arg : `aria.${arg}`));
     const args = ['5e/main.yaml', '--compact', ...params];
     const full = runCli(...args);
     expect(full.status).toBe(0);

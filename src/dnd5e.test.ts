@@ -8,9 +8,9 @@ import { describe, expect, it } from 'vitest';
 // choices, and progression.
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-// 5e/main.yaml nests its character at this path: params are addressed under
-// it, and `cli` answers relative to it.
-const PC = 'characters.character_1';
+// 5e/main.yaml nests its character at `party.aria`, namespaced `aria`: params
+// are addressed by the namespace, and `cli` answers relative to it.
+const PC = 'aria';
 
 function run(entry: string, ...extra: string[]): unknown {
   const out = execFileSync('bun', ['src/cli.ts', entry, '--compact', ...extra], {
@@ -26,10 +26,10 @@ function run(entry: string, ...extra: string[]): unknown {
 function cli(entry: string, ...extra: string[]): unknown {
   const args = extra.map((arg, i) => (extra[i - 1] === '--param' || extra[i - 1] === '--set' ? `${PC}.${arg}` : arg));
   const state = run(entry, ...args) as {
-    data?: { characters: Record<string, unknown> };
+    data?: { party: Record<string, unknown> };
     query?: Array<{ path: string }>;
   };
-  if (state.data) return { data: state.data.characters.character_1 };
+  if (state.data) return { data: state.data.party.aria };
   if (state.query) return { query: state.query.map((param) => ({ ...param, path: param.path.slice(PC.length + 1) })) };
   return state;
 }
@@ -58,6 +58,7 @@ const script = `
 
   const BOUGHT = {
     class: 'fighter',
+    species: 'dwarf',
     ability_method: 'point_buy',
     'abilities.strength.bought': 7,
     'abilities.dexterity.bought': 6,
@@ -89,7 +90,7 @@ const script = `
   };
 
   const a3 = fresh();
-  e.evaluate(a3, scopeOf(a3, { name: 'X', xp: 900, class: 'fighter', ability_method: 'point_buy' }));
+  e.evaluate(a3, scopeOf(a3, { name: 'X', xp: 900, class: 'fighter', species: 'dwarf', ability_method: 'point_buy' }));
   const mergedMissing = RecordNode.collectParams(a3).map((m) => m.path).sort();
 
   const levels = {};
@@ -174,6 +175,8 @@ const BOUGHT = [
   '--param',
   'class=fighter',
   '--param',
+  'species=dwarf',
+  '--param',
   'ability_method=point_buy',
   '--param',
   'abilities.strength.bought=7',
@@ -194,7 +197,7 @@ describe('5e', () => {
     const out = execFileSync('bun', ['-e', script], { cwd: root, encoding: 'utf8' });
     expect(JSON.parse(out)).toEqual({
       // Each ability's choice waits on its method; class features wait on the class.
-      baseMissing: ['ability_method', 'class', 'name'],
+      baseMissing: ['ability_method', 'class', 'name', 'species'],
       mergedMissing: [
         'abilities.charisma.bought',
         'abilities.constitution.bought',
@@ -208,6 +211,7 @@ describe('5e', () => {
         'features.martial_archetype',
         'name',
         'skills.trained',
+        'species',
       ],
       ac: 12,
       strength: 17,
@@ -247,9 +251,9 @@ describe('5e', () => {
   });
 
   it('serves the composed fighter through the root entry', () => {
-    // Method and class come first: neither abilities nor class features ask until chosen.
+    // Method, species and class come first: neither abilities nor class features ask until chosen.
     const query = cli('5e/main.yaml') as { query: Array<{ path: string }> };
-    expect(query.query.map((param) => param.path).sort()).toEqual(['ability_method', 'class', 'name']);
+    expect(query.query.map((param) => param.path).sort()).toEqual(['ability_method', 'class', 'name', 'species']);
 
     const data = cli(
       '5e/main.yaml',
@@ -363,6 +367,8 @@ describe('5e', () => {
       '--param',
       'class=fighter',
       '--param',
+      'species=dwarf',
+      '--param',
       'ability_method=point_buy',
       ...['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma'].flatMap((ability, i) => [
         '--param',
@@ -411,6 +417,8 @@ describe('5e', () => {
       'xp=0',
       '--param',
       'class=fighter',
+      '--param',
+      'species=dwarf',
       '--param',
       'ability_method=standard_array',
       '--param',
@@ -470,6 +478,8 @@ describe('5e', () => {
       '--param',
       'class=fighter',
       '--param',
+      'species=dwarf',
+      '--param',
       'ability_method=roll',
       '--param',
       'features.fighting_style=dueling',
@@ -504,6 +514,8 @@ describe('5e', () => {
       'xp=0',
       '--param',
       'class=fighter',
+      '--param',
+      'species=dwarf',
       '--param',
       'ability_method=roll_assign',
       '--param',
@@ -559,6 +571,8 @@ describe('5e', () => {
       'name=Aria',
       '--param',
       'class=fighter',
+      '--param',
+      'species=dwarf',
       '--param',
       'ability_method=roll',
       '--param',
@@ -667,6 +681,8 @@ describe('5e', () => {
       'xp=6500',
       '--param',
       'class=fighter',
+      '--param',
+      'species=dwarf',
       '--param',
       'ability_method=point_buy',
     ) as {

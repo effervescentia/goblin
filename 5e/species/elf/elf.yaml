@@ -1,0 +1,15 @@
+'@': Character
+$if: "@.species == 'elf'"
+
+'@.size': medium
+'@.speed': 30
+
+'@.features':
+  +darkvision:
+    :label: Darkvision
+  +fey_ancestry:
+    :label: Fey Ancestry
+  +keen_senses:
+    :label: Keen Senses
+  +trance:
+    :label: Trance

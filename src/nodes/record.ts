@@ -197,14 +197,23 @@ export class RecordNode extends Node<Record<string, unknown>> {
    * else `null`) so `<path>.value` references resolve like any other node.
    * Returns true when anything was written. Idempotent.
    */
-  static materializeParams(raw: unknown, provided: Record<string, unknown> = {}): boolean {
+  static materializeParams(
+    raw: unknown,
+    provided: Record<string, unknown> = {},
+    namespaceOf?: (record: object) => string | undefined,
+  ): boolean {
     let wrote = false;
-    eachParamRecord(raw, (record, key) => {
-      const def = record[DEFAULT_KEY];
-      const hasDefault = def !== undefined && def !== null;
-      record[VALUE_KEY] = provided[key] !== undefined ? provided[key] : hasDefault ? def : null;
-      wrote = true;
-    });
+    eachParamRecord(
+      raw,
+      (record, key, full) => {
+        const def = record[DEFAULT_KEY];
+        const hasDefault = def !== undefined && def !== null;
+        const given = provided[key] !== undefined ? provided[key] : provided[full];
+        record[VALUE_KEY] = given !== undefined ? given : hasDefault ? def : null;
+        wrote = true;
+      },
+      namespaceOf,
+    );
     return wrote;
   }
 

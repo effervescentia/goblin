@@ -1,0 +1,15 @@
+'@': Character
+$if: "@.species == 'dwarf'"
+
+'@.size': medium
+'@.speed': 30
+
+'@.features':
+  +darkvision:
+    :label: Darkvision
+  +dwarven_resilience:
+    :label: Dwarven Resilience
+  +dwarven_toughness:
+    :label: Dwarven Toughness
+  +stonecunning:
+    :label: Stonecunning

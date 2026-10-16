@@ -93,6 +93,27 @@ proficiencies:
 # (back on any rest) or `long` (back only on a long rest).
 resources: {}
 
+species:
+  :label: Species
+  :doc: Choose a species for your character.
+  :param: true
+  :type: string
+  :options:
+    - dwarf
+    - elf
+    - gnome
+    - halfling
+    - orc
+    - tiefling
+
+_species:
+  dwarf: $mixin('species/dwarf/dwarf.yaml')
+  elf: $mixin('species/elf/elf.yaml')
+  gnome: $mixin('species/gnome/gnome.yaml')
+  halfling: $mixin('species/halfling/halfling.yaml')
+  orc: $mixin('species/orc/orc.yaml')
+  tiefling: $mixin('species/tiefling/tiefling.yaml')
+
 class:
   :label: Class
   :doc: Choose a class for your character.
@@ -112,7 +133,6 @@ class:
     - warlock
     - wizard
 
-# Every class mixes in; each gates on `class`, so only the chosen one applies.
 _classes:
   barbarian: $mixin('class/barbarian/barbarian.yaml')
   bard: $mixin('class/bard/bard.yaml')

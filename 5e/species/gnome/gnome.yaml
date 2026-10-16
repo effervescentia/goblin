@@ -1,0 +1,11 @@
+'@': Character
+$if: "@.species == 'gnome'"
+
+'@.size': small
+'@.speed': 30
+
+'@.features':
+  +darkvision:
+    :label: Darkvision
+  +gnomish_cunning:
+    :label: Gnomish Cunning
