@@ -3,7 +3,7 @@
  * Goblin CLI — resolves the application state and prints it as JSON.
  *
  * Usage:
- *   goblin [entry.yaml] [--compact] [--out file.json] [--help]
+ *   goblin [entry.yaml] [--compact] [--in state.json|-] [--out file.json] [--help]
  *
  * With no entry file, `.goblin.yaml` in the current directory is required.
  * An entry containing a directory (`examples/foo.yaml`) is resolved with
@@ -15,11 +15,12 @@ import { createHash } from 'node:crypto';
 import { GoblinEngine } from './engine';
 import { print } from './nodes/serialize';
 
-export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--strip-metadata] [--out file.json] [--help]
+export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--strip-metadata] [--in state.json|-] [--out file.json] [--help]
 
 Resolves a goblin document and prints the result as JSON: either
-{ "hash": "sha256:…", "data": … } when all :param values are satisfied
-(hash covers the compact JSON of data), or
+{ "hash", "parameters", "overrides", "data" } when all :param values are
+satisfied (parameters/overrides are this run's inputs; hash is a sha256 over
+the compact JSON of the rest), or
 { "query": […] } listing the outstanding parameters. A resolved sheet must
 also pass its !validate rules; failing rules print as { "errors": […] }.
 
@@ -35,6 +36,10 @@ Arguments:
   --strip-metadata  Drop metadata keys (:doc, :type, !validate, …) from the
                 printed data, leaving plain values only. Functions print as
                 their source expression; records left empty collapse to null.
+  --in          Rehydrate from a prior { "data": … } output (a file, or
+                - for stdin): its parameters and overrides are replayed, with
+                this run's --param/--set taking precedence. A hash must
+                match the rest of the state.
   --out         Also write the JSON to this file (replacing it) when the
                 document fully resolves to { "data": … }; a { "query" } or
                 { "errors" } result leaves the file untouched.
@@ -45,6 +50,7 @@ export interface CliArgs {
   compact: boolean;
   stripMetadata: boolean;
   help: boolean;
+  in?: string;
   out?: string;
   params: Record<string, unknown>;
   overrides: Record<string, unknown>;
@@ -82,6 +88,11 @@ export function parseArgs(argv: string[]): CliArgs {
       if (path === undefined || path.startsWith('-'))
         throw new Error(`--out expects a file path, got: ${path ?? '(nothing)'}`);
       args.out = path;
+    } else if (arg === '--in') {
+      const path = argv[++i];
+      if (path === undefined || (path.startsWith('-') && path !== '-'))
+        throw new Error(`--in expects a file path or -, got: ${path ?? '(nothing)'}`);
+      args.in = path;
     } else if (arg === '--param' || arg === '--set') {
       const [key, value] = parseKeyValue(arg, argv[++i]);
       if (arg === '--param') args.params[key] = value;
@@ -95,12 +106,42 @@ export function parseArgs(argv: string[]): CliArgs {
   return args;
 }
 
-/** Prefix a `{ data }` envelope with a sha256 of its compact JSON, so saved
- * sheets can be compared or cache-checked without diffing them. */
-export function withHash<T>(state: T): T | { hash: string; data: unknown } {
+export interface Inputs {
+  parameters: Record<string, unknown>;
+  overrides: Record<string, unknown>;
+}
+
+/** Stamp a `{ data }` envelope with the inputs that produced it and a sha256
+ * over the rest, so a saved state can be replayed and checked for edits. */
+export function withHash<T>(
+  state: T,
+  inputs: Inputs = { parameters: {}, overrides: {} },
+): T | ({ hash: string } & Inputs) {
   if (state === null || typeof state !== 'object' || !('data' in state)) return state;
-  const hex = createHash('sha256').update(JSON.stringify(state.data)).digest('hex');
-  return { hash: `sha256:${hex}`, data: state.data };
+  const body = { parameters: inputs.parameters, overrides: inputs.overrides, data: state.data };
+  return { hash: hashOf(body), ...body };
+}
+
+function hashOf(body: unknown): string {
+  return `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}`;
+}
+
+/** The `parameters` and `overrides` a prior `{ hash, parameters, overrides, data }`
+ * output was resolved with; re-resolving the entry recomputes the rest. */
+export function rehydrate(state: unknown): Inputs {
+  if (state === null || typeof state !== 'object' || !('data' in state))
+    throw new Error('--in expects a resolved { "data": … } envelope');
+  const {
+    hash,
+    parameters = {},
+    overrides = {},
+    data,
+  } = state as { hash?: unknown } & Partial<Inputs> & { data: unknown };
+  const isRecord = (value: unknown) => value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (!isRecord(parameters) || !isRecord(overrides)) throw new Error('--in parameters and overrides must be objects');
+  if (hash !== undefined && hash !== hashOf({ parameters, overrides, data }))
+    throw new Error('--in state hash does not match its contents');
+  return { parameters, overrides };
 }
 
 /** Resolution envelope plus `{ errors }` for sheets failing `!validate`. */
@@ -166,8 +207,16 @@ if (import.meta.main) {
       process.stdout.write(`${USAGE}\n`);
       process.exit(0);
     }
-    const state = await resolveAppState(process.cwd(), args.entry, args.params, args.overrides);
-    const out = withHash(args.stripMetadata && 'data' in state ? { data: print(state.data) } : state);
+    const prior =
+      args.in === undefined
+        ? { parameters: {}, overrides: {} }
+        : rehydrate(JSON.parse(args.in === '-' ? await Bun.stdin.text() : await Bun.file(args.in).text()));
+    const inputs = {
+      parameters: { ...prior.parameters, ...args.params },
+      overrides: { ...prior.overrides, ...args.overrides },
+    };
+    const state = await resolveAppState(process.cwd(), args.entry, inputs.parameters, inputs.overrides);
+    const out = withHash(args.stripMetadata && 'data' in state ? { data: print(state.data) } : state, inputs);
     const json = `${JSON.stringify(out, null, args.compact ? 0 : 2)}\n`;
     // Only a full resolution is worth saving; Bun.write replaces the file.
     if (args.out !== undefined && 'data' in state) await Bun.write(args.out, json);

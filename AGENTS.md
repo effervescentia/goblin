@@ -51,8 +51,8 @@ apart. Treat a missing spec update as an incomplete change.
   The final evaluated state always logs; diagnostics need `--debug`
   (validation failures always log as errors).
 - `bun run build` compiles `src/cli.ts` to a `build/goblin` binary
-  (`goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--out file.json] [--help]`) that prints
-  the resolution envelope (`{ hash, data }` — `hash` is `sha256:` of the compact data JSON — `{ query }`, or `{ errors }` for failing `!validate` rules) as JSON to stdout, also writing it to `--out` when the document fully resolves. Keep serialized key order deterministic (same input → same order) — the
+  (`goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--in state.json|-] [--out file.json] [--help]`) that prints
+  the resolution envelope (`{ hash, parameters, overrides, data }` — the run's inputs, with `hash` a `sha256:` of the compact JSON of the rest — `{ query }`, or `{ errors }` for failing `!validate` rules) as JSON to stdout, also writing it to `--out` when the document fully resolves. `--in` replays a prior output's `parameters` and `overrides` (`-` reads stdin). Keep serialized key order deterministic (same input → same order) — the
   `hash` is over `JSON.stringify`, so unstable ordering silently changes it. `src/cli.ts` is Bun-only; keep `parseArgs` pure
   so `src/cli.test.ts` stays runtime-agnostic.
 - `bun run ui` serves the inspector (`ui/`, Bun-only) at localhost:3000: it
@@ -75,6 +75,8 @@ apart. Treat a missing spec update as an incomplete change.
 - The standard library (`$lib`) lives in `src/lib/`: one file per namespace
   (`math.ts`), listed in `src/lib/index.ts`, plus `src/lib/lib.yaml` for
   yaml-defined helpers. Natives always win over yaml of the same name.
+- Only comment complex or confusing code; superfluous comments (restating
+  what the code plainly does) are not welcome.
 - Keep new comments to one or two lines. Say the non-obvious thing — why, or
   the catch — and let the code say the rest.
 - Imports stay acyclic: `src/utils.ts` may import from `src/nodes/` (e.g. `Die`),

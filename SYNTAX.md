@@ -739,8 +739,15 @@ envelope that is either satisfied or asking:
   (satisfied ones are filtered out).
 - The CLI then validates `{ data }`: any failing `!validate` rule turns it
   into `{ errors }` (see Validation). A passing result prints as
-  `{ hash, data }`, where `hash` is `sha256:<hex>` of the compact
-  `JSON.stringify(data)` (after `--strip-metadata`, when given).
+  `{ hash, parameters, overrides, data }`: `parameters` / `overrides` are the
+  `--param` / `--set` values the run used (as given, keyed the same way),
+  and `hash` is `sha256:<hex>` of the compact
+  `JSON.stringify({ parameters, overrides, data })` (data after
+  `--strip-metadata`, when given).
+- `--in state.json` (or `--in -` for stdin) rehydrates from a prior output:
+  its `parameters` and `overrides` replay, and everything else recomputes from
+  the entry. This run's `--param`/`--set` win; a `hash` that doesn't match
+  the rest of the state throws.
 - Provided values of the wrong `:type` — or violating `:options` / `:min` /
   `:max` / `:count` / `:unique` — still throw instead of resolving.
 - `resolve(file, provided, overrides)` writes override values into the tree

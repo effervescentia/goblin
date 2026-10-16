@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { parseArgs, parseParamValue, USAGE, withHash } from './cli';
+import { type Inputs, parseArgs, parseParamValue, rehydrate, USAGE, withHash } from './cli';
 import { COMPANION_PARAMS } from './dnd5e.fixtures';
 import { print } from './nodes/serialize';
 
@@ -160,6 +160,13 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['--out', '--compact'])).toThrow('--out expects a file path');
   });
 
+  it('accepts --in with a path or - for stdin', () => {
+    expect(parseArgs(['main.yaml', '--in', 'state.json']).in).toBe('state.json');
+    expect(parseArgs(['main.yaml', '--in', '-']).in).toBe('-');
+    expect(() => parseArgs(['--in'])).toThrow('--in expects a file path or -');
+    expect(() => parseArgs(['--in', '--compact'])).toThrow('--in expects a file path or -');
+  });
+
   it('rejects unexpected arguments', () => {
     expect(() => parseArgs(['--bogus'])).toThrow('unexpected argument');
     expect(() => parseArgs(['a.yaml', 'b.yaml'])).toThrow('unexpected argument');
@@ -212,25 +219,49 @@ describe('parseParamValue', () => {
 });
 
 describe('withHash', () => {
-  it('prefixes data envelopes with a sha256 of the compact data JSON', () => {
-    const { hash, data } = withHash({ data: { a: 1 } }) as { hash: string; data: unknown };
-    expect(hash).toBe(`sha256:${createHash('sha256').update('{"a":1}').digest('hex')}`);
-    expect(data).toEqual({ a: 1 });
-    expect((withHash({ data: { a: 2 } }) as { hash: string }).hash).not.toBe(hash);
+  const inputs: Inputs = { parameters: { name: 'Aria' }, overrides: { level: 5 } };
+
+  it('stamps data envelopes with their inputs and a sha256 over the rest', () => {
+    const body = { ...inputs, data: { a: 1 } };
+    expect(withHash({ data: { a: 1 } }, inputs)).toEqual({
+      hash: `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}`,
+      ...body,
+    });
+    const hash = (data: unknown, given = inputs) => (withHash({ data }, given) as { hash: string }).hash;
+    expect(hash({ a: 2 })).not.toBe(hash({ a: 1 }));
+    expect(hash({ a: 1 }, { ...inputs, parameters: {} })).not.toBe(hash({ a: 1 }));
   });
 
   it('leaves query and errors envelopes alone', () => {
-    expect(withHash({ query: [] })).toEqual({ query: [] });
-    expect(withHash({ errors: ['x'] })).toEqual({ errors: ['x'] });
+    expect(withHash({ query: [] }, inputs)).toEqual({ query: [] });
+    expect(withHash({ errors: ['x'] }, inputs)).toEqual({ errors: ['x'] });
+  });
+});
+
+describe('rehydrate', () => {
+  const inputs = { parameters: { name: 'Aria', starting_level: 2 }, overrides: { 'hp.max': 14 } };
+
+  it('returns the parameters and overrides a state was resolved with', () => {
+    expect(rehydrate(withHash({ data: { x: 1 } }, inputs))).toEqual(inputs);
+    expect(rehydrate({ data: { x: 1 } })).toEqual({ parameters: {}, overrides: {} });
+  });
+
+  it('rejects edited states, bad inputs, and non-data envelopes', () => {
+    const state = withHash({ data: { x: 1 } }, inputs) as Record<string, unknown>;
+    expect(() => rehydrate({ ...state, parameters: { name: 'Bob' } })).toThrow('hash does not match');
+    expect(() => rehydrate({ ...state, data: { x: 2 } })).toThrow('hash does not match');
+    expect(() => rehydrate({ data: {}, parameters: [] })).toThrow('must be objects');
+    expect(() => rehydrate({ query: [] })).toThrow('resolved { "data": … } envelope');
   });
 });
 
 describe('USAGE', () => {
   it('documents the CLI', () => {
     expect(USAGE).toContain(
-      'goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--strip-metadata] [--out file.json] [--help]',
+      'goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--strip-metadata] [--in state.json|-] [--out file.json] [--help]',
     );
     expect(USAGE).toContain('--out');
+    expect(USAGE).toContain('--in');
     expect(USAGE).toContain('--compact');
     expect(USAGE).toContain('--strip-metadata');
     expect(USAGE).toContain('--param');
@@ -268,10 +299,7 @@ describe('cli', () => {
     writeFileSync(join(cwd, 'docs', 'nested', 'actor.yaml'), 'name: Config actor\n');
     try {
       const stdout = execFileSync('bun', [join(root, 'src/cli.ts')], { cwd, encoding: 'utf8' });
-      expect(JSON.parse(stdout)).toEqual({
-        hash: `sha256:${createHash('sha256').update('{"name":"Config actor"}').digest('hex')}`,
-        data: { name: 'Config actor' },
-      });
+      expect(JSON.parse(stdout)).toMatchObject({ parameters: {}, overrides: {}, data: { name: 'Config actor' } });
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
@@ -328,6 +356,52 @@ describe('cli', () => {
       expect(query.status).toBe(0);
       expect(JSON.parse(query.stdout)).toHaveProperty('query');
       expect(existsSync(pending)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('--in replays the parameters and overrides saved in a prior output, file or stdin', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'goblin-in-'));
+    const state = join(dir, 'state.json');
+    try {
+      const first = runCli(
+        'examples/08-parameters.yaml',
+        '--compact',
+        '--param',
+        'hero_name=Aria',
+        '--param',
+        'starting_level=2',
+        '--param',
+        'details.title=Sir',
+        '--set',
+        'hit_points.max=12',
+        '--out',
+        state,
+      );
+      expect(first.status).toBe(0);
+      expect(JSON.parse(first.stdout)).toMatchObject({
+        parameters: { hero_name: 'Aria', starting_level: 2, 'details.title': 'Sir' },
+        overrides: { 'hit_points.max': 12 },
+      });
+      expect(runCli('examples/08-parameters.yaml', '--compact', '--in', state).stdout).toBe(first.stdout);
+
+      const piped = execFileSync('bun', ['src/cli.ts', 'examples/08-parameters.yaml', '--in', '-'], {
+        cwd: root,
+        encoding: 'utf8',
+        input: first.stdout,
+      });
+      const next = JSON.parse(piped) as { data: Record<string, Record<string, unknown>> };
+      expect(next.data.hero_name?.[':value']).toBe('Aria');
+
+      // This run's flags win over the rehydrated state.
+      const bumped = runCli('examples/08-parameters.yaml', '--in', state, '--param', 'starting_level=5');
+      expect((JSON.parse(bumped.stdout) as typeof next).data.level?.[':value']).toBe(5);
+
+      writeFileSync(state, first.stdout.replace('"Aria"', '"Bob"'));
+      const tampered = runCli('examples/08-parameters.yaml', '--in', state);
+      expect(tampered.status).toBe(1);
+      expect(tampered.stderr).toContain('hash does not match');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
