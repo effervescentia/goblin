@@ -3,7 +3,7 @@
  * Goblin CLI — resolves the application state and prints it as JSON.
  *
  * Usage:
- *   goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--in state.json|-] [--out file.json] [--help]
+ *   goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--in state.json|-] [--out file.json] [--help]
  *
  * With no entry file, `.goblin.yaml` in the current directory is required.
  * An entry containing a directory (`examples/foo.yaml`) is resolved with
@@ -16,14 +16,14 @@ import { GoblinEngine } from './engine';
 import type { InputEvent } from './inputs';
 import { print } from './nodes/serialize';
 
-export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--strip-metadata] [--in state.json|-] [--out file.json] [--help]
+export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--help]
 
 Resolves a goblin document and prints the result as JSON: either
 { "hash", "version", "events", "data" } when all :param values are
 satisfied (version counts runs since the first, bumped by each --in; events
-is the stream of every --param/--set given so far, in order, each as
-{ version, type: "param" | "set", path, value }; hash is a sha256 over the
-compact JSON of the rest), or
+is the stream of every --param/--set/--invoke given so far, in order, each
+as { version, type: "param" | "set" | "invoke", path, value }; hash is a
+sha256 over the compact JSON of the rest, plus "result" under --invoke), or
 { "query": […] } listing the outstanding parameters. A resolved sheet must
 also pass its !validate rules; failing rules print as { "errors": […] }.
 
@@ -36,13 +36,18 @@ Arguments:
   --set         Override any value by path (repeatable, applied after
                 patches): --set level=5. Overridden originals are ignored,
                 even missing paths; :param records keep their :type contract.
+  --invoke      Call a function on the resolved document (once per run), by
+                path with JSON arguments: --invoke rest.short or
+                --invoke 'heal(5)'. Its writes land in "data" and its return
+                value prints as "result"; the call is saved as an event, so
+                --in replays its writes (a later --set still wins).
   --strip-metadata  Drop metadata keys (:doc, :type, !validate, …) from the
                 printed data, leaving plain values only. Functions print as
                 their source expression; records left empty collapse to null.
   --in          Rehydrate from a prior { "data": … } output (a file, or
                 - for stdin): its events are replayed in order (later wins),
-                this run's --param/--set are appended as events of the
-                incremented version. A hash must match the rest of the state.
+                this run's --param/--set/--invoke are appended as events of
+                the incremented version. A hash must match the rest of the state.
   --out         Also write the JSON to this file (replacing it) when the
                 document fully resolves to { "data": … }; a { "query" } or
                 { "errors" } result leaves the file untouched.
@@ -55,7 +60,7 @@ export interface CliArgs {
   help: boolean;
   in?: string;
   out?: string;
-  /** Every --param / --set in the order given; the run stamps their version. */
+  /** Every --param / --set / --invoke in the order given; the run stamps their version. */
   events: Omit<InputEvent, 'version'>[];
 }
 
@@ -73,6 +78,18 @@ function parseKeyValue(flag: string, pair: string | undefined): [string, unknown
   const eq = pair?.indexOf('=') ?? -1;
   if (pair === undefined || eq <= 0) throw new Error(`${flag} expects key=value, got: ${pair ?? '(nothing)'}`);
   return [pair.slice(0, eq), parseParamValue(pair.slice(eq + 1))];
+}
+
+/** Split an --invoke target `path` / `path(args)`, its arguments a JSON list body. */
+function parseInvoke(target: string | undefined): [string, unknown[]] {
+  const match = target?.match(/^([^()\s=]+)(?:\((.*)\))?$/s);
+  if (target === undefined || !match) throw new Error(`--invoke expects fn or fn(args), got: ${target ?? '(nothing)'}`);
+  const [, path = '', inner = ''] = match;
+  try {
+    return [path, JSON.parse(`[${inner}]`) as unknown[]];
+  } catch {
+    throw new Error(`--invoke arguments must be JSON values, got: ${inner}`);
+  }
 }
 
 /** Pure argv parsing (excludes node/bun binary and script name). */
@@ -99,6 +116,10 @@ export function parseArgs(argv: string[]): CliArgs {
     } else if (arg === '--param' || arg === '--set') {
       const [path, value] = parseKeyValue(arg, argv[++i]);
       args.events.push({ type: arg === '--param' ? 'param' : 'set', path, value });
+    } else if (arg === '--invoke') {
+      if (args.events.some((event) => event.type === 'invoke')) throw new Error('--invoke may be given once per run');
+      const [path, value] = parseInvoke(argv[++i]);
+      args.events.push({ type: 'invoke', path, value });
     } else if (!arg.startsWith('-') && args.entry === undefined) {
       args.entry = arg;
     } else {
@@ -108,15 +129,16 @@ export function parseArgs(argv: string[]): CliArgs {
   return args;
 }
 
-/** Stamp a `{ data }` envelope with its version, the input events that produced it
- * and a sha256 over the rest, so a saved state can be replayed and checked for edits. */
+/** Stamp a `{ data }` (or `{ result, data }`) envelope with its version, the
+ * input events that produced it and a sha256 over the rest, so a saved state
+ * can be replayed and checked for edits. */
 export function withHash<T>(
   state: T,
   events: InputEvent[] = [],
   version = 1,
-): T | { hash: string; version: number; events: InputEvent[] } {
+): T | { hash: string; version: number; events: InputEvent[]; result?: unknown } {
   if (state === null || typeof state !== 'object' || !('data' in state)) return state;
-  const body = { version, events, data: state.data };
+  const body = { version, events, ...('result' in state ? { result: state.result } : {}), data: state.data };
   return { hash: hashOf(body), ...body };
 }
 
@@ -132,7 +154,7 @@ function isEvent(event: unknown): event is InputEvent {
   return (
     isRecord(event) &&
     isVersion(event.version) &&
-    (event.type === 'param' || event.type === 'set') &&
+    (event.type === 'param' || event.type === 'set' || (event.type === 'invoke' && Array.isArray(event.value))) &&
     typeof event.path === 'string' &&
     event.path !== '' &&
     'value' in event
@@ -143,12 +165,12 @@ function isEvent(event: unknown): event is InputEvent {
  * re-resolving the entry recomputes the rest. A missing version reads as 0. */
 export function rehydrate(state: unknown): { version: number; events: InputEvent[] } {
   if (!isRecord(state) || !('data' in state)) throw new Error('--in expects a resolved { "data": … } envelope');
-  const { hash, version, events = [], data } = state;
+  const { hash, version, events = [], result, data } = state;
   if (version !== undefined && !isVersion(version)) throw new Error('--in version must be a non-negative integer');
   if (!Array.isArray(events) || !events.every(isEvent))
-    throw new Error('--in events must be { version, type: "param" | "set", path, value } objects');
-  // Stringify drops an undefined version, so states predating it still verify.
-  if (hash !== undefined && hash !== hashOf({ version, events, data }))
+    throw new Error('--in events must be { version, type: "param" | "set" | "invoke", path, value } objects');
+  // Stringify drops an undefined version or result, so states without them still verify.
+  if (hash !== undefined && hash !== hashOf({ version, events, result, data }))
     throw new Error('--in state hash does not match its contents');
   return { version: version ?? 0, events };
 }
@@ -217,7 +239,14 @@ if (import.meta.main) {
     const version = prior.version + 1;
     const events = [...prior.events, ...args.events.map((event) => ({ version, ...event }))];
     const state = await resolveAppState(process.cwd(), args.entry, events);
-    const out = withHash(args.stripMetadata && 'data' in state ? { data: print(state.data) } : state, events, version);
+    // Only this run's invoke answers with a result; earlier ones just replay their writes.
+    const invoked = args.events.some((event) => event.type === 'invoke');
+    const show = args.stripMetadata ? print : (value: unknown) => value;
+    const shown =
+      'data' in state
+        ? { ...(invoked && 'result' in state ? { result: show(state.result) } : {}), data: show(state.data) }
+        : state;
+    const out = withHash(shown, events, version);
     const json = `${JSON.stringify(out, null, args.compact ? 0 : 2)}\n`;
     // Only a full resolution is worth saving; Bun.write replaces the file.
     if (args.out !== undefined && 'data' in state) await Bun.write(args.out, json);

@@ -51,8 +51,8 @@ apart. Treat a missing spec update as an incomplete change.
   The final evaluated state always logs; diagnostics need `--debug`
   (validation failures always log as errors).
 - `bun run build` compiles `src/cli.ts` to a `build/goblin` binary
-  (`goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--in state.json|-] [--out file.json] [--help]`) that prints
-  the resolution envelope (`{ hash, version, events, data }` — a run counter and the append-only stream of every `--param`/`--set` given, with `hash` a `sha256:` of the compact JSON of the rest — `{ query }`, or `{ errors }` for failing `!validate` rules) as JSON to stdout, also writing it to `--out` when the document fully resolves. `--in` replays a prior output's `events`, appends this run's, and bumps its `version` (`-` reads stdin). Keep serialized key order deterministic (same input → same order) — the
+  (`goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--in state.json|-] [--out file.json] [--help]`) that prints
+  the resolution envelope (`{ hash, version, events, result?, data }` — a run counter, the append-only stream of every `--param`/`--set`/`--invoke` given, and the return value of this run's `--invoke`, with `hash` a `sha256:` of the compact JSON of the rest — `{ query }`, or `{ errors }` for failing `!validate` rules) as JSON to stdout, also writing it to `--out` when the document fully resolves. `--in` replays a prior output's `events`, appends this run's, and bumps its `version` (`-` reads stdin). Keep serialized key order deterministic (same input → same order) — the
   `hash` is over `JSON.stringify`, so unstable ordering silently changes it. `src/cli.ts` is Bun-only; keep `parseArgs` pure
   so `src/cli.test.ts` stays runtime-agnostic.
 - `bun run ui` serves the inspector (`ui/`, Bun-only) at localhost:3000: it

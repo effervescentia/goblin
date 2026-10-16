@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parse as parseYaml } from 'yaml';
 import { GoblinEngine } from './engine';
-import { type InputEvent, param, set } from './inputs';
+import { type InputEvent, invoke, param, set } from './inputs';
 import { Die, DieNode } from './nodes/die';
 import { ExpressionNode } from './nodes/expression';
 import { FunctionNode } from './nodes/function';
@@ -550,6 +550,15 @@ describe('nested actors', () => {
     expect(fieldValue(guide?.speed)).toBe(20);
     expect(fieldValue(guide?.gold)).toBe(1);
     expect(guide?.pace).toBe(20);
+  });
+
+  it('invokes a function inside a nested actor as that actor', () => {
+    const engine = party();
+    (engine.docs.get('hero.yaml') as Record<string, unknown>)['rest()'] = '@.gold = @.gold + @.speed';
+    const inputs = [param('party.scout.name', 'Ash'), param('party.guide.name', 'Bree'), invoke('party.guide.rest')];
+    const state = engine.resolve('party.yaml', inputs) as { data: { party: Record<string, Record<string, unknown>> } };
+    expect(fieldValue(state.data.party.guide?.gold)).toBe(46);
+    expect(fieldValue(state.data.party.scout?.gold)).toBe(6);
   });
 
   it('reads into a nested actor as that actor, through any sigil', () => {
@@ -1310,6 +1319,40 @@ describe('parameters', () => {
       ':events': [{ ':set': '1 + 1' }, { ':source': 'override', ':version': 3, ':set': 7 }],
     });
     expect(resolved.data.name?.[':value']).toBe('Bree');
+  });
+
+  it('invokes functions on the resolved tree, returning the last result', () => {
+    const engine = new GoblinEngine('.');
+    engine.docs.set('fn.yaml', {
+      hp: 5,
+      base: 10,
+      'heal(n)': '@.hp += n',
+      'double(x)': 'x * 2',
+      'shield(bonus)': { armor: '#.base + bonus' },
+    });
+    expect(engine.resolve('fn.yaml', [invoke('double', [1]), invoke('double', [21])])).toMatchObject({ result: 42 });
+    expect(engine.resolve('fn.yaml', [invoke('shield', [3])])).toMatchObject({ result: { armor: 13 } });
+    expect(engine.resolve('fn.yaml')).not.toHaveProperty('result');
+    expect(() => engine.resolve('fn.yaml', [invoke('hp')])).toThrow('invoke: hp is not a function');
+
+    const healed = engine.resolve('fn.yaml', [invoke('heal', [2]), invoke('heal', [3])]) as {
+      data: Record<string, unknown>;
+      result: unknown;
+    };
+    // An assignment statement returns nothing.
+    expect(healed.result).toBeNull();
+    expect(fieldValue(healed.data.hp)).toBe(10);
+  });
+
+  it('replays sets and invokes in stream order', () => {
+    const run = (inputs: InputEvent[]) => {
+      const engine = new GoblinEngine('.');
+      engine.docs.set('fn.yaml', { hp: 5, 'heal(n)': '@.hp += n' });
+      return fieldValue((engine.resolve('fn.yaml', inputs) as { data: Record<string, unknown> }).data.hp);
+    };
+    // An earlier set is the base the call heals from; a later one wins over it.
+    expect(run([set('hp', 1, 1), invoke('heal', [4], 2)])).toBe(5);
+    expect(run([invoke('heal', [4], 1), set('hp', 1, 2)])).toBe(1);
   });
 
   it('resolve honors overrides over derived and missing values', () => {

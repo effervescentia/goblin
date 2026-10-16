@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parseArgs, parseParamValue, rehydrate, USAGE, withHash } from './cli';
 import { COMPANION_PARAMS } from './dnd5e.fixtures';
-import { type InputEvent, latest, nest, paramValue } from './inputs';
+import { type InputEvent, invoke, latest, nest, paramValue } from './inputs';
 import { print } from './nodes/serialize';
 
 describe('parseArgs', () => {
@@ -140,6 +140,17 @@ describe('parseArgs', () => {
     ]);
   });
 
+  it('accepts one --invoke per run, by path with JSON arguments', () => {
+    expect(parseArgs(['--invoke', 'rest.short']).events).toEqual([{ type: 'invoke', path: 'rest.short', value: [] }]);
+    expect(parseArgs(['--invoke', 'heal()']).events).toEqual([{ type: 'invoke', path: 'heal', value: [] }]);
+    expect(parseArgs(['--invoke', 'pick("str", [1, 2])']).events).toEqual([
+      { type: 'invoke', path: 'pick', value: ['str', [1, 2]] },
+    ]);
+    expect(() => parseArgs(['--invoke'])).toThrow('--invoke expects fn or fn(args)');
+    expect(() => parseArgs(['--invoke', 'heal(x)'])).toThrow('--invoke arguments must be JSON values');
+    expect(() => parseArgs(['--invoke', 'a', '--invoke', 'b'])).toThrow('--invoke may be given once per run');
+  });
+
   it('rejects malformed --set', () => {
     expect(() => parseArgs(['--set'])).toThrow('--set expects key=value');
     expect(() => parseArgs(['--set', 'nokey'])).toThrow('--set expects key=value');
@@ -255,6 +266,11 @@ describe('withHash', () => {
     expect((withHash({ data: { a: 1 } }, events, 2) as { hash: string }).hash).not.toBe(hash({ a: 1 }));
   });
 
+  it('hashes a result alongside the data', () => {
+    const body = { version: 1, events, result: 42, data: { a: 1 } };
+    expect(withHash({ result: 42, data: { a: 1 } }, events)).toEqual({ hash: sha(body), ...body });
+  });
+
   it('leaves query and errors envelopes alone', () => {
     expect(withHash({ query: [] }, events)).toEqual({ query: [] });
     expect(withHash({ errors: ['x'] }, events)).toEqual({ errors: ['x'] });
@@ -266,6 +282,16 @@ describe('rehydrate', () => {
     { version: 1, type: 'param', path: 'name', value: 'Aria' },
     { version: 2, type: 'set', path: 'hp.max', value: 14 },
   ];
+
+  it('verifies a result and accepts invoke events', () => {
+    const invoked = [...events, invoke('heal', [2], 3)];
+    const state = withHash({ result: 7, data: { x: 1 } }, invoked, 3) as Record<string, unknown>;
+    expect(rehydrate(state)).toEqual({ version: 3, events: invoked });
+    expect(() => rehydrate({ ...state, result: 8 })).toThrow('hash does not match');
+    expect(() => rehydrate({ data: {}, events: [{ version: 1, type: 'invoke', path: 'x', value: 2 }] })).toThrow(
+      'events must be',
+    );
+  });
 
   it('returns the version and events a state was resolved with', () => {
     expect(rehydrate(withHash({ data: { x: 1 } }, events, 3))).toEqual({ version: 3, events });
@@ -290,7 +316,7 @@ describe('rehydrate', () => {
 describe('USAGE', () => {
   it('documents the CLI', () => {
     expect(USAGE).toContain(
-      'goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--strip-metadata] [--in state.json|-] [--out file.json] [--help]',
+      'goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--help]',
     );
     expect(USAGE).toContain('--out');
     expect(USAGE).toContain('--in');
@@ -388,6 +414,31 @@ describe('cli', () => {
       expect(query.status).toBe(0);
       expect(JSON.parse(query.stdout)).toHaveProperty('query');
       expect(existsSync(pending)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('--invoke prints a result for its own run, and --in replays the call without one', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'goblin-invoke-'));
+    const state = join(dir, 'state.json');
+    try {
+      const first = runCli('examples/04-functions.yaml', '--compact', '--invoke', 'utils.double(21)', '--out', state);
+      expect(first.status).toBe(0);
+      expect(JSON.parse(first.stdout)).toMatchObject({
+        events: [{ version: 1, type: 'invoke', path: 'utils.double', value: [21] }],
+        result: 42,
+      });
+      const shield = runCli('examples/04-functions.yaml', '--strip-metadata', '--invoke', 'shield("Kite", 3)');
+      expect(JSON.parse(shield.stdout).result).toEqual({ armor_class: 13 });
+
+      const replayed = JSON.parse(runCli('examples/04-functions.yaml', '--in', state).stdout);
+      expect(replayed).toMatchObject({ version: 2 });
+      expect(replayed).not.toHaveProperty('result');
+
+      const missing = runCli('examples/04-functions.yaml', '--invoke', 'nope');
+      expect(missing.status).toBe(1);
+      expect(missing.stderr).toContain('invoke: nope is not a function');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

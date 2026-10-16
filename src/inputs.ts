@@ -1,10 +1,12 @@
-/** Goblin inputs — the append-only `--param` / `--set` stream a resolution
- * replays. A later event for the same path wins. */
+/** Goblin inputs — the append-only `--param` / `--set` / `--invoke` stream a
+ * resolution replays. A later param or set for the same path wins; invokes
+ * all run, in order. */
 
-/** One `--param` or `--set`, given on the run that produced `version`. */
+/** One `--param`, `--set` or `--invoke` (`value` holds its arguments), given
+ * on the run that produced `version`. */
 export interface InputEvent {
   version: number;
-  type: 'param' | 'set';
+  type: 'param' | 'set' | 'invoke';
   path: string;
   value: unknown;
 }
@@ -15,6 +17,10 @@ export function param(path: string, value: unknown, version = 1): InputEvent {
 
 export function set(path: string, value: unknown, version = 1): InputEvent {
   return { version, type: 'set', path, value };
+}
+
+export function invoke(path: string, args: unknown[] = [], version = 1): InputEvent {
+  return { version, type: 'invoke', path, value: args };
 }
 
 /** The latest event of `type` for each path, ordered by when it arrived. */

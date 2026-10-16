@@ -539,7 +539,8 @@ it. Each `$tmpl` makes a fresh copy, so one file can fill several slots.
   expressions and gates (`$if: "@.class == 'fighter'"`) are unchanged.
 - Reading into it from outside (`$.characters.character_1.level`, or the
   same through `#`, `@` or `.`) evaluates the target as that actor: its `@`
-  and `#` are the nested actor, not the reader's document. The entry's
+  and `#` are the nested actor, not the reader's document — functions too,
+  so `$.characters.character_1.rest.long()` rests that character. The entry's
   top-level values are shared with `$` once they expand, so `$.x` and `#.x`
   read the same tree.
 - Overrides reach it as it expands, before its mixins gate on anything, so
@@ -735,9 +736,10 @@ engine.evaluateDoc('08-parameters.yaml', [param('starting_level', 'high')]);
 ## Resolution
 
 Inputs reach the engine as an append-only event stream, the same one the
-CLI saves: `InputEvent = { version, type: 'param' | 'set', path, value }`
-(`src/inputs.ts`; `param(path, value, version = 1)` and `set(…)` build
-them). Replaying the stream, the latest event of a type for a path wins.
+CLI saves: `InputEvent = { version, type: 'param' | 'set' | 'invoke', path, value }`
+(`src/inputs.ts`; `param(path, value, version = 1)`, `set(…)` and
+`invoke(path, args = [], version = 1)` build them). Replaying the stream,
+the latest `param` / `set` for a path wins; every `invoke` runs, in order.
 `resolve(file, events)` answers a document in one call, returning an
 envelope that is either satisfied or asking:
 
@@ -747,23 +749,25 @@ envelope that is either satisfied or asking:
   (satisfied ones are filtered out).
 - The CLI then validates `{ data }`: any failing `!validate` rule turns it
   into `{ errors }` (see Validation). A passing result prints as
-  `{ hash, version, events, data }`: `version` is `1` for a fresh run and
-  the prior state's version + 1 under `--in` (a state without one counts as
-  `0`); `events` is the append-only stream of every `--param` / `--set`
-  given so far, in the order given, each tagged with the run that gave it;
-  and `hash` is `sha256:<hex>` of the compact
-  `JSON.stringify({ version, events, data })` (data after
+  `{ hash, version, events, result?, data }` (`result` under `--invoke`; see
+  Invoking functions): `version` is `1` for a fresh run and the prior
+  state's version + 1 under `--in` (a state without one counts as `0`);
+  `events` is the append-only stream of every `--param` / `--set` /
+  `--invoke` given so far, in the order given, each tagged with the run that
+  gave it; and `hash` is `sha256:<hex>` of the compact
+  `JSON.stringify({ version, events, result, data })` (result and data after
   `--strip-metadata`, when given).
 - `--in state.json` (or `--in -` for stdin) rehydrates from a prior output:
-  its `events` replay in order (a later event for the same path wins), this
-  run's `--param`/`--set` append as events of the incremented `version`, and
-  everything else recomputes from the entry. A `hash` that doesn't match
-  the rest of the state throws.
+  its `events` replay in order (a later param or set for the same path
+  wins), this run's `--param`/`--set`/`--invoke` append as events of the
+  incremented `version`, and everything else recomputes from the entry. A
+  `hash` that doesn't match the rest of the state throws.
 - Param values of the wrong `:type` — or violating `:options` / `:min` /
   `:max` / `:count` / `:unique` — still throw instead of resolving.
-- `set` events write their values into the tree first (`.`/`#`/`@` target the actor, `$` the app; bare paths default to the
-  actor). Overridden originals are ignored — derivations never run and
-  missing paths are created — but `:param` records keep their `:type`
+- `set` events write their values into the tree first (`.`/`#`/`@` target
+  the actor, `$` the app; bare paths default to the actor). Overridden
+  originals are ignored — derivations never run and missing paths are
+  created — but `:param` records keep their `:type`
   contract. CLI flag: `--set path=value` (separate from `--param`).
 
 ```ts
@@ -786,6 +790,31 @@ engine.resolve('08-parameters.yaml', [
   param('details.title', 'Kid'),
 ]);
 // { data: { hero_name: 'Aria', … } }
+```
+
+### Invoking functions
+
+An `invoke` event (CLI: `--invoke fn` or `--invoke 'fn(args)'`, arguments as
+JSON values, once per run) calls a function on the fully resolved document.
+`value` holds the argument list.
+
+- The path is actor-relative unless led by a sigil, like `--set`, and may
+  reach into a nested actor (`party.aria.rest.long`), which the call then
+  reads as `@` and `#`.
+- Invokes run only once every param is satisfied (a `{ query }` runs none),
+  after the sets and in stream order. Their writes land in `data` and file
+  `:events` like any assignment. A `set` given after an invoke still wins
+  over what it wrote; earlier sets are the base it works from.
+- The last invoke's return value comes back as `result` (`null` when it
+  returns nothing, e.g. an assignment statement; a record-bodied function's
+  copy is evaluated). The CLI prints `result` only for this run's
+  `--invoke` — between `events` and `data`, inside the `hash` — and `--in`
+  replays earlier invokes for their writes without one. Naming anything but
+  a function throws (`invoke: x is not a function`).
+
+```ts
+engine.resolve('04-functions.yaml', [invoke('utils.double', [21])]);
+// { data: { … }, result: 42 }
 ```
 
 ## Evaluation model

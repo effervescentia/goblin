@@ -313,8 +313,14 @@ export class GoblinEngine {
       // strings (e.g. a `$tmpl('…')` table) evaluate on the way down, with
       // `.` bound to their enclosing record.
       const found = this.walkScoped(base, segments, scope);
+      // A target inside a nested actor reads `#` and `@` as that actor.
+      const nested = this.nestedActorOn(base, segments, scope);
       if (found !== null) {
-        const fn = this.entryCallable(found, scope);
+        const fnScope =
+          nested === undefined
+            ? scope
+            : this.enterActor(nested.actor, scope, base === scope.actor ? segments.slice(0, nested.depth) : []);
+        const fn = this.entryCallable(found, fnScope);
         if (fn !== undefined) return fn;
       }
       const rawTarget = this.derefValue(found?.value);
@@ -330,8 +336,6 @@ export class GoblinEngine {
         // values by where they live, not where the reference was written.
         path: root === CURRENT ? [...(scope.path ?? []), ...segments] : segments,
       };
-      // A target inside a nested actor reads `#` and `@` as that actor.
-      const nested = this.nestedActorOn(base, segments, scope);
       const targetScope =
         nested === undefined
           ? ownScope
@@ -683,9 +687,14 @@ export class GoblinEngine {
   /**
    * Resolve an in-memory actor tree (e.g. composed from `actor`/`adopt`
    * entry keys): `{ data }` when the param events satisfy all params, else
-   * `{ query }` with only the outstanding ones. Set events apply first.
+   * `{ query }` with only the outstanding ones. Set events apply first;
+   * invoke events then call their functions on the resolved tree, in order,
+   * and the last one's return value comes back as `result`.
    */
-  resolveRaw(actorRaw: unknown, inputs: InputEvent[] = []): { data: unknown } | { query: MissingParam[] } {
+  resolveRaw(
+    actorRaw: unknown,
+    inputs: InputEvent[] = [],
+  ): { data: unknown; result?: unknown } | { query: MissingParam[] } {
     const keyed = this.splitNamespaced(actorRaw, inputs);
     this.applyOverrides(actorRaw, keyed.inputs);
     const scope: EvalRoots = { doc: actorRaw, actor: actorRaw, app: this.appRoot, current: actorRaw, ...keyed };
@@ -694,7 +703,35 @@ export class GoblinEngine {
     this.shareWithApp(actorRaw);
     const outstanding = RecordNode.collectParams(actorRaw, this.namespaceOf, inputs);
     if (outstanding.length > 0) return { query: outstanding };
-    return { data: debug(this.evaluate(actorRaw, scope)) };
+    const invokes = keyed.inputs.filter((event) => event.type === 'invoke');
+    if (invokes.length === 0) return { data: debug(this.evaluate(actorRaw, scope)) };
+    RecordNode.materializeParams(actorRaw, keyed.inputs, this.namespaceOf);
+    let result: unknown;
+    for (const event of invokes) {
+      result = this.invoke(event, { ...scope, path: [] });
+      // A set given after the invoke still wins over what the call wrote,
+      // nested actors included; earlier sets must not undo the call.
+      const after = (events: InputEvent[]) => events.filter((e) => inputs.indexOf(e) > inputs.indexOf(event));
+      const later = { inputs: after(keyed.inputs), namespaced: after(keyed.namespaced) };
+      this.applyOverrides(actorRaw, later.inputs);
+      this.expandCalls(actorRaw, { ...scope, ...later });
+      this.cache.clear();
+    }
+    // Already expanded: a fresh expansion would re-apply every set.
+    return { data: debug(this.evaluate(actorRaw, { ...scope, path: [] })), result: debug(result) ?? null };
+  }
+
+  /** Call the function an invoke event names (actor-relative unless led by a
+   * sigil, like a set) with the event's arguments. */
+  private invoke(event: InputEvent, scope: EvalRoots): unknown {
+    const ref = /^[.@#$]/.test(event.path) ? event.path : `@.${event.path}`;
+    const fn = this.resolveRef(ref, scope);
+    if (typeof fn !== 'function') throw new Error(`invoke: ${event.path} is not a function`);
+    const result = fn(...(Array.isArray(event.value) ? event.value : []));
+    // A record-bodied function hands back a raw copy; evaluate it like any node.
+    return result !== null && typeof result === 'object'
+      ? this.evaluate(result, { ...scope, current: result })
+      : result;
   }
 
   /** Split events whose path is led by an actor namespace (`aria.name`) from
@@ -717,9 +754,10 @@ export class GoblinEngine {
     const isNamed = (event: InputEvent) => declared.has(event.path.split('.')[0] ?? '');
     // Param events stay whole: the root's param pre-fill reads both keys.
     // Set events split, since an unmatched path key would create `aria` at the root.
+    // Invokes run from the root, so they stay whole too.
     return {
-      inputs: events.filter((event) => event.type === 'param' || !isNamed(event)),
-      namespaced: events.filter(isNamed),
+      inputs: events.filter((event) => event.type !== 'set' || !isNamed(event)),
+      namespaced: events.filter((event) => event.type !== 'invoke' && isNamed(event)),
     };
   }
 
