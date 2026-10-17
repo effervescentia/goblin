@@ -34,7 +34,7 @@ import {
   VALUE_KEY,
 } from './constants';
 import { Documents } from './documents';
-import { type InputEvent, isInputEvent, latest, nest, type StateEvent } from './inputs';
+import { type InputEvent, isInputEvent, isWriteEvent, latest, nest, type StateEvent } from './inputs';
 import { type EngineEvent, Journal } from './journal';
 import type { Location } from './locations';
 import { Die, DieNode } from './nodes/die';
@@ -574,15 +574,22 @@ export class GoblinEngine {
     events: StateEvent[] = [],
   ): { data: unknown; result?: unknown } | { query: MissingParam[] } {
     const inputs = events.filter(isInputEvent);
+    // Actors an invoke wrote in (`$.party[name] = $tmpl(…)`) declare their
+    // namespaces through the recorded writes.
+    const written = events
+      .filter(isWriteEvent)
+      .map((event) => (typeof event.value === 'string' ? event.value.trim().match(TEMPLATE_CALL)?.[2] : undefined))
+      .filter((namespace) => namespace !== undefined);
     const run = this.journal.begin(actorRaw, events, inputs);
-    return Die.within(run, () => this.resolveInputs(actorRaw, inputs));
+    return Die.within(run, () => this.resolveInputs(actorRaw, inputs, written));
   }
 
   private resolveInputs(
     actorRaw: unknown,
     inputs: InputEvent[],
+    written: string[],
   ): { data: unknown; result?: unknown } | { query: MissingParam[] } {
-    const keyed = this.splitNamespaced(actorRaw, inputs);
+    const keyed = this.splitNamespaced(actorRaw, inputs, written);
     this.applyOverrides(actorRaw, keyed.inputs);
     const scope: EvalRoots = { doc: actorRaw, actor: actorRaw, app: this.appRoot, current: actorRaw, ...keyed };
     this.patcher.expandCalls(actorRaw, scope);
@@ -601,15 +608,26 @@ export class GoblinEngine {
     for (const event of invokes) {
       result = this.invoke(event, { ...scope, path: [] });
       // A set given after the invoke still wins over what the call wrote,
-      // nested actors included; earlier sets must not undo the call.
-      const after = (events: InputEvent[]) => events.filter((e) => inputs.indexOf(e) > inputs.indexOf(event));
+      // nested actors included; earlier sets must not undo the call. Every
+      // parameter counts, so an actor the call wrote in fills its choices.
+      const after = (events: InputEvent[]) =>
+        events.filter((e) => e.type === 'parameter' || inputs.indexOf(e) > inputs.indexOf(event));
       const later = { inputs: after(keyed.inputs), namespaced: after(keyed.namespaced) };
       this.applyOverrides(actorRaw, later.inputs);
-      this.patcher.expandCalls(actorRaw, { ...scope, ...later });
+      // An actor the call wrote in expands with its mixins; a second pass
+      // puts its overrides back over what they wrote.
+      if (this.patcher.expandCalls(actorRaw, { ...scope, ...later }))
+        this.patcher.expandCalls(actorRaw, { ...scope, ...later });
       this.cache.clear();
     }
+    // An actor an invoke wrote in brings its own params: ask for them, and
+    // read its namespace's events from here on.
+    const settled = { ...scope, ...this.splitNamespaced(actorRaw, inputs, this.provenance.namespacesIn(actorRaw)) };
+    RecordNode.materializeParams(actorRaw, keyed.inputs, this.namespaceOf);
+    const asked = RecordNode.collectParams(actorRaw, this.namespaceOf, inputs);
+    if (asked.length > 0) return { query: asked };
     // Already expanded: a fresh expansion would re-apply every set.
-    return { data: debug(this.evaluate(actorRaw, { ...scope, path: [] })), result: debug(result) ?? null };
+    return { data: debug(this.evaluate(actorRaw, { ...settled, path: [] })), result: debug(result) ?? null };
   }
 
   /** Call the function an invoke event names (actor-relative unless led by a
@@ -628,8 +646,12 @@ export class GoblinEngine {
   /** Split events whose path is led by an actor namespace (`aria.name`) from
    * path-addressed ones. Namespaces are found by scanning loaded documents, so
    * the split happens before expansion creates the actors that hold them. */
-  private splitNamespaced(root: unknown, events: InputEvent[]): { inputs: InputEvent[]; namespaced: InputEvent[] } {
-    const declared = new Set<string>();
+  private splitNamespaced(
+    root: unknown,
+    events: InputEvent[],
+    written: string[] = [],
+  ): { inputs: InputEvent[]; namespaced: InputEvent[] } {
+    const declared = new Set<string>(written);
     const scan = (node: unknown): void => {
       if (typeof node === 'string') {
         const namespace = node.trim().match(TEMPLATE_CALL)?.[2];
@@ -715,6 +737,8 @@ export class GoblinEngine {
     return log.map((entry, i) => {
       const event = entry as Record<string, unknown>;
       const kind = [SET_KEY, ADD_KEY, SUBTRACT_KEY].find((k) => k in event) ?? SET_KEY;
+      // A written-in actor logs the call that made it, not its whole tree.
+      if (typeof event[kind] === 'string' && TEMPLATE_CALL.test(event[kind].trim())) return event;
       if (i === log.length - 1 && kind === SET_KEY) return { ...event, [kind]: value };
       return { ...event, [kind]: this.resolveWritten(event, kind, event[kind], scope) };
     });

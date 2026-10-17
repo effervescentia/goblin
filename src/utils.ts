@@ -227,6 +227,8 @@ function transpileStatement(stmt: string): { code: string; isAssign: boolean } {
       literals.push(m);
       return `__STR${literals.length - 1}__`;
     })
+    // `$tmpl(…)` is a call, not an app ref (must come before DOTLESS_SIGIL).
+    .replace(/[$]tmpl\(/g, '__tmpl(')
     // Protect $lib refs (must come before DOTLESS_SIGIL).
     .replace(/[$]lib(\.\w+)+/g, libPlaceholder)
     // Normalize dot-less sigils (`@abilities` → `@.abilities`).
@@ -244,6 +246,14 @@ function transpileStatement(stmt: string): { code: string; isAssign: boolean } {
     const compound = lhs.match(/[+-]$/)?.[0];
     if (compound) lhs = lhs.slice(0, -1).trim();
     const op = JSON.stringify(compound ?? '=');
+    // `ref[key]…` writes the field each key names, computed per call.
+    const indexed = splitIndexes(lhs);
+    if (indexed) {
+      const keys = indexed.keys.map((key) => rewriteExpr(rewriteIndexing(key), unmark));
+      const target = `__at(${JSON.stringify(indexed.ref)}, ${keys.join(', ')})`;
+      const code = `__assign(${target}, (${rewriteExpr(rewriteIndexing(rhs), unmark)}), ${op})`;
+      return { code: restoreLiterals(code, literals), isAssign: true };
+    }
     SIGIL_REF.lastIndex = 0;
     if (SIGIL_REF.test(lhs) && lhs.replace(SIGIL_REF, '').trim() === '') {
       // A wildcard target assigns each match, evaluating the right side per
@@ -323,6 +333,45 @@ function rewriteIndexing(code: string): string {
   return code;
 }
 
+/** An assignment target `ref[a][b]`: one plain (non-wildcard) ref, then
+ * only indexes; null for anything else. */
+function splitIndexes(lhs: string): { ref: string; keys: string[] } | null {
+  const open = lhs.indexOf('[');
+  if (open <= 0 || !lhs.endsWith(']')) return null;
+  const ref = lhs.slice(0, open).trim();
+  SIGIL_REF.lastIndex = 0;
+  if (!SIGIL_REF.test(ref) || ref.replace(SIGIL_REF, '') !== '' || ref.includes('__each')) return null;
+  const keys: string[] = [];
+  for (let i = open; i < lhs.length; i++) {
+    if (lhs[i] !== '[') return null;
+    const close = matchBracket(lhs, i, 1);
+    keys.push(lhs.slice(i + 1, close));
+    i = close;
+  }
+  return { ref, keys };
+}
+
+/** The ref an indexed assignment writes: each key one path segment. */
+function refAt(ref: string, ...keys: unknown[]): string {
+  const segments = keys.map((key) => {
+    if (typeof key === 'number' && Number.isInteger(key) && key >= 0) return String(key);
+    if (typeof key === 'string' && /^[A-Za-z_]\w*$/.test(key)) return key;
+    throw new Error(`invalid assignment key ${JSON.stringify(key)} for ${ref}`);
+  });
+  return `${ref.endsWith('.') ? ref : `${ref}.`}${segments.join('.')}`;
+}
+
+/** `$tmpl(file, name?)` inside an expression is the call itself, as text: it
+ * expands once written into the tree, like one a document spelled out. */
+function templateCall(file: unknown, namespace?: unknown): string {
+  const quoted = (arg: unknown, what: string) => {
+    if (typeof arg !== 'string' || /['"]/.test(arg)) throw new Error(`$tmpl: ${what} must be a string without quotes`);
+    return `'${arg}'`;
+  };
+  const args = [quoted(file, 'file'), ...(namespace === undefined ? [] : [quoted(namespace, 'namespace')])];
+  return `$tmpl(${args.join(', ')})`;
+}
+
 /** Index of the bracket pairing with `code[at]`, scanning in `step` direction. */
 function matchBracket(code: string, at: number, step: 1 | -1): number {
   let depth = 0;
@@ -348,9 +397,15 @@ function restoreLiterals(code: string, literals: string[]): string {
   return code.replace(/__STR(\d+)__/g, (_m, i: string) => literals[Number(i)]!);
 }
 
-/** `list[index]`: from 0, negative from the end, null past either end. */
-function indexList(list: unknown, index: unknown): unknown {
-  if (!Array.isArray(list)) throw new Error(`cannot index ${list === null ? 'null' : typeof list}: not a list`);
+/** `list[index]`: from 0, negative from the end, null past either end.
+ * `record[key]`: the field a string names, null when missing. */
+function indexValue(list: unknown, index: unknown): unknown {
+  if (list !== null && typeof list === 'object' && !Array.isArray(list) && !(list instanceof Die)) {
+    if (typeof index !== 'string') throw new Error(`record index must be a string, got ${String(index)}`);
+    return Object.hasOwn(list, index) ? (list as Record<string, unknown>)[index] : null;
+  }
+  if (!Array.isArray(list))
+    throw new Error(`cannot index ${list === null ? 'null' : typeof list}: not a list or record`);
   if (typeof index !== 'number' || !Number.isInteger(index)) {
     throw new Error(`list index must be an integer, got ${String(index)}`);
   }
@@ -384,13 +439,30 @@ export function compileBody(body: string, paramNames: string[] = []) {
 
   // No stdlib free variable is bound here: `$lib.…` is the only way in, so
   // `$math` stays an ordinary app ref that resolves to nothing.
-  const fn = new Function('__resolve', '__assign', '__assign_each', '__roll', '__index', ...paramNames, js) as (
-    ...args: unknown[]
-  ) => unknown;
+  const fn = new Function(
+    '__resolve',
+    '__assign',
+    '__assign_each',
+    '__roll',
+    '__index',
+    '__at',
+    '__tmpl',
+    ...paramNames,
+    js,
+  ) as (...args: unknown[]) => unknown;
 
   return (hooks: ResolveHooks, params: Record<string, unknown> = {}) => {
     const roll = (count: number, sides: number) => Die.faces(count, sides).reduce((total, face) => total + face, 0);
-    const args = [hooks.resolve, hooks.assign, hooks.assignEach, roll, indexList, ...paramNames.map((p) => params[p])];
+    const args = [
+      hooks.resolve,
+      hooks.assign,
+      hooks.assignEach,
+      roll,
+      indexValue,
+      refAt,
+      templateCall,
+      ...paramNames.map((p) => params[p]),
+    ];
     return fn(...args);
   };
 }

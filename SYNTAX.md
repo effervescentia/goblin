@@ -139,9 +139,11 @@ strong: '#.strength > #.dexterity'      # → true
 ## Indexing
 
 `list[index]` picks one item from a list, counting from 0. A negative index
-counts from the end, and an index past either end gives `null`. The index is
-any expression, and indexes chain (`#.grid[1][0]`). Indexing anything but a
-list, or with a non-integer, throws. A `[` right after a ref, a call or
+counts from the end, and an index past either end gives `null`.
+`record[key]` picks the field a string key names, or `null` when it has none.
+The index is any expression, and indexes chain (`#.grid[1][0]`). Indexing
+anything but a list or a record, a list with a non-integer, or a record with
+a non-string throws. A `[` right after a ref, a call or
 another index is indexing; anywhere else it opens a list literal
 (`$lib.set.subset([1, 2], .picks)`).
 
@@ -155,6 +157,8 @@ first: '#.ranked[0]'              # → gold
 last: '#.ranked[-1]'              # → bronze
 placed: '#.ranked[#.place - 1]'   # → silver
 missing: '#.ranked[5]'            # → null
+medals: { gold: 3, silver: 1 }
+golds: '#.medals[#.ranked[0]]'    # → 3
 ```
 
 ## Dice
@@ -323,6 +327,12 @@ in one place and still be filled: `5e/class/fighter/fighter.yaml` writes
 `'@.improvements.level_4': '$.feature.ability_improvement()'`, and the
 `:param` record it hands back lands in the actor tree where the query finds
 it.
+
+Inside a larger expression, `$tmpl(file, name?)` takes computed arguments
+and is the call itself, as text (`$tmpl('character.yaml', 'dorn')`): assigned
+into the tree, it expands where it lands like one the document spelled out,
+namespace and all (see Writing actors in). The file is still a string
+literal, so discovery finds it.
 
 ```yaml
 # Examples (examples/05-templates.yaml, examples/05-greeting.yaml)
@@ -529,6 +539,12 @@ A wildcard target (`@.resources.*.current`) assigns each match, with the
 right side evaluated per match and `.` bound to that match's record (see
 Wildcards).
 
+A target can end in indexes (`$.party[name] = …`), each key computed when the
+statement runs and naming one path segment: an identifier string, or a
+non-negative integer for a list item. Any other key throws (`invalid
+assignment key "a.b" for $.party`). Wildcards and indexes do not mix in one
+target.
+
 ## Nested actors
 
 A document's root is its data: resolving an entry answers the whole tree.
@@ -604,6 +620,35 @@ party:
   scout: $tmpl('15-nested-hero.yaml') # query: party.scout.name
   guide: $tmpl('15-nested-hero.yaml', 'bree') # query: bree.name
 guide_pace: $.party.guide.pace # → 40, or 20 with --set bree.speed=20
+```
+
+### Writing actors in
+
+An invoked function can add an actor by assigning a `$tmpl(…)` call to a
+computed key: 5e's `recruit(name)` is
+`$.party[name] = $tmpl('character.yaml', name)`, so
+`--invoke 'recruit("dorn")'` puts a fresh character at `party.dorn` under the
+namespace `dorn`.
+
+- The write is the call text, and so is its `:set` and its stream event
+  (`{ type: 'set', path: 'party.dorn', value: "$tmpl('character.yaml', 'dorn')" }`),
+  not the actor's whole tree. The actor expands after the invoke, mixins
+  and all, and overrides given after the invoke land over them.
+- Its params are asked for after the invokes run: a run that writes one in
+  answers `{ query }` for its choices (`dorn.name`, `dorn.class`, …), and the
+  next run sends them with the same invoke.
+- Replayed (`--in`), the recorded write makes the actor again and declares
+  its namespace, so later `--set dorn.…` reach it. A `--set` keyed by the new
+  namespace in the run that first writes it in is not routed yet.
+- The namespace rules hold as for any `$tmpl`: one that shadows a top-level
+  key of the entry throws. Writing over a key that already holds an actor
+  replaces it.
+
+```yaml
+# Examples (examples/17-recruit.yaml)
+party:
+  scout: $tmpl('15-nested-hero.yaml')
+'recruit(name)': $.party[name] = $tmpl('15-nested-hero.yaml', name) # → party.cade as `cade`
 ```
 
 ## Mixins
@@ -840,7 +885,8 @@ JSON values, once per run) calls a function on the fully resolved document.
   reach into a nested actor (`party.aria.rest.long`), which the call then
   reads as `@` and `#`.
 - Invokes run only once every param is satisfied (a `{ query }` runs none),
-  after the overrides and in stream order. Their writes land in `data`, file
+  after the overrides and in stream order. Params an invoke brings in (an
+  actor it wrote in) are asked for after it runs. Their writes land in `data`, file
   `:events` like any assignment, and follow the invoke in the CLI's
   `events`. An override given after an invoke still wins over what it
   wrote; earlier overrides are the base it works from.

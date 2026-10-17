@@ -291,7 +291,7 @@ describe('indexing', () => {
 
   it('refuses non-lists and non-integer indexes', () => {
     const engine = new GoblinEngine('.');
-    expect(() => engine.evalExpr('#.name[0]', scopeOf(doc))).toThrow('cannot index string: not a list');
+    expect(() => engine.evalExpr('#.name[0]', scopeOf(doc))).toThrow('cannot index string: not a list or record');
     expect(() => engine.evalExpr('#.ranked[0.5]', scopeOf(doc))).toThrow('list index must be an integer, got 0.5');
   });
 });
@@ -584,6 +584,47 @@ describe('nested actors', () => {
     const state = engine.resolve('party.yaml', inputs) as { data: { party: Record<string, Record<string, unknown>> } };
     expect(fieldValue(state.data.party.guide?.gold)).toBe(46);
     expect(fieldValue(state.data.party.scout?.gold)).toBe(6);
+  });
+
+  // Each resolve gets a fresh engine, as each CLI run does: resolving expands the raw doc in place.
+  const recruiting = () => {
+    const engine = party();
+    (engine.docs.get('party.yaml') as Record<string, unknown>)['recruit(name)'] =
+      "$.party[name] = $tmpl('hero.yaml', name)";
+    return engine;
+  };
+  const named = [parameter('party.scout.name', 'Ash'), parameter('party.guide.name', 'Bree')];
+
+  it('writes in a new namespaced actor from an invoke, then asks for its params', () => {
+    const asked = recruiting().resolve('party.yaml', [...named, invoke('recruit', ['dorn'])]) as {
+      query: Array<{ path: string }>;
+    };
+    expect(asked.query.map((param) => param.path)).toEqual(['dorn.name']);
+
+    const engine = recruiting();
+    const recruited = [...named, invoke('recruit', ['dorn']), parameter('dorn.name', 'Dorn')];
+    const state = engine.resolve('party.yaml', recruited) as {
+      data: { party: Record<string, Record<string, unknown>> };
+    };
+    const dorn = state.data.party.dorn;
+    expect(fieldValue(dorn?.name)).toBe('Dorn');
+    expect(fieldValue(dorn?.speed)).toBe(40); // its mixin applied
+    // The write logs the call that made the actor, not its whole tree.
+    const call = "$tmpl('hero.yaml', 'dorn')";
+    expect(dorn?.[':events']).toEqual([{ ':source': 'party.yaml', ':set': call }]);
+    const writes = engine.events(engine.docs.get('party.yaml'), state.data).map((entry) => entry.event);
+    expect(writes).toContainEqual(expect.objectContaining({ type: 'set', path: 'party.dorn', value: call }));
+
+    // Replayed, the recorded write declares `dorn`, so a later set reaches it.
+    const written: StateEvent = { version: 1, type: 'set', path: 'party.dorn', value: call };
+    const later = recruiting().resolve('party.yaml', [...recruited, written, override('dorn.gold', 9)]) as typeof state;
+    expect(fieldValue(later.data.party.dorn?.gold)).toBe(9);
+  });
+
+  it('rejects an indexed assignment key that is not one path segment', () => {
+    expect(() => recruiting().resolve('party.yaml', [...named, invoke('recruit', ['a.b'])])).toThrow(
+      'invalid assignment key "a.b" for $.party',
+    );
   });
 
   it('reads into a nested actor as that actor, through any sigil', () => {

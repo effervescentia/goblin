@@ -103,6 +103,31 @@ describe('examples', () => {
     });
   });
 
+  it('17-recruit.yaml writes in a namespaced actor, then asks for its params', () => {
+    const scout = ['--param', 'party.scout.name=Ash'];
+    const asked = cli('examples/17-recruit.yaml', ...scout, '--invoke', 'recruit("cade")') as {
+      query: Array<{ path: string }>;
+    };
+    expect(asked.query.map((param) => param.path)).toEqual(['cade.name']);
+
+    const state = cli(
+      'examples/17-recruit.yaml',
+      '--strip-metadata',
+      ...scout,
+      '--invoke',
+      'recruit("cade")',
+      '--param',
+      'cade.name=Cade',
+    ) as { events: Array<{ type: string; path: string; value: unknown }>; data: { party: unknown } };
+    expect(state.data.party).toEqual({
+      scout: { name: 'Ash', speed: 40, gold: 15, pace: 40 },
+      cade: { name: 'Cade', speed: 40, gold: 15, pace: 40 },
+    });
+    expect(state.events).toContainEqual(
+      expect.objectContaining({ type: 'set', path: 'party.cade', value: "$tmpl('15-nested-hero.yaml', 'cade')" }),
+    );
+  });
+
   it('04-functions.yaml hands back a record body per call', () => {
     const data = (cli('examples/04-functions.yaml') as { data: Record<string, unknown> }).data;
     expect(data.off_hand).toEqual({
@@ -206,7 +231,14 @@ describe('examples', () => {
 
   it('12-indexing.yaml picks list items by position', () => {
     const state = cli('examples/12-indexing.yaml') as { data: Record<string, unknown> };
-    expect(state.data).toMatchObject({ first: 'gold', last: 'bronze', placed: 'silver', missing: null, corner: 3 });
+    expect(state.data).toMatchObject({
+      first: 'gold',
+      last: 'bronze',
+      placed: 'silver',
+      missing: null,
+      corner: 3,
+      golds: 3,
+    });
   });
 
   it('11-private-fields.yaml reads its own `_` fields and strips them', () => {

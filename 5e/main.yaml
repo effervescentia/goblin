@@ -26,3 +26,5 @@ party:
   aria: $tmpl('character.yaml', 'aria')
   bram: $tmpl('character.yaml', 'bram')
   cora: $tmpl('character.yaml', 'cora')
+
+'recruit(name)': $.party[name] = $tmpl('character.yaml', name)

@@ -90,6 +90,19 @@ export class Provenance {
     this.namespaces.set(clone, namespace);
   }
 
+  /** The namespaces of the actors in `raw`. */
+  namespacesIn(raw: unknown): string[] {
+    const found: string[] = [];
+    const visit = (node: unknown): void => {
+      if (node === null || typeof node !== 'object') return;
+      const namespace = this.namespaces.get(node);
+      if (namespace !== undefined) found.push(namespace);
+      Object.values(node).forEach(visit);
+    };
+    visit(raw);
+    return found;
+  }
+
   /** Namespaces name one actor each across the whole tree. */
   assertUniqueNamespaces(raw: unknown): void {
     const seen = new Map<string, { node: object; path: string }>();
