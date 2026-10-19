@@ -589,7 +589,7 @@ export class GoblinEngine {
     inputs: InputEvent[],
     written: string[],
   ): { data: unknown; result?: unknown } | { query: MissingParam[] } {
-    const keyed = this.splitNamespaced(actorRaw, inputs, written);
+    let keyed = this.splitNamespaced(actorRaw, inputs, written);
     this.applyOverrides(actorRaw, keyed.inputs);
     const scope: EvalRoots = { doc: actorRaw, actor: actorRaw, app: this.appRoot, current: actorRaw, ...keyed };
     this.patcher.expandCalls(actorRaw, scope);
@@ -607,6 +607,8 @@ export class GoblinEngine {
     let result: unknown;
     for (const event of invokes) {
       result = this.invoke(event, { ...scope, path: [] });
+      // An actor the call wrote in reads its namespace's events as it expands.
+      keyed = this.splitNamespaced(actorRaw, inputs, written);
       // A set given after the invoke still wins over what the call wrote,
       // nested actors included; earlier sets must not undo the call. Every
       // parameter counts, so an actor the call wrote in fills its choices.
@@ -620,9 +622,8 @@ export class GoblinEngine {
         this.patcher.expandCalls(actorRaw, { ...scope, ...later });
       this.cache.clear();
     }
-    // An actor an invoke wrote in brings its own params: ask for them, and
-    // read its namespace's events from here on.
-    const settled = { ...scope, ...this.splitNamespaced(actorRaw, inputs, this.provenance.namespacesIn(actorRaw)) };
+    // An actor an invoke wrote in brings its own params: ask for them.
+    const settled = { ...scope, ...keyed };
     RecordNode.materializeParams(actorRaw, keyed.inputs, this.namespaceOf);
     const asked = RecordNode.collectParams(actorRaw, this.namespaceOf, inputs);
     if (asked.length > 0) return { query: asked };
@@ -644,8 +645,9 @@ export class GoblinEngine {
   }
 
   /** Split events whose path is led by an actor namespace (`aria.name`) from
-   * path-addressed ones. Namespaces are found by scanning loaded documents, so
-   * the split happens before expansion creates the actors that hold them. */
+   * path-addressed ones. Namespaces are found by scanning loaded documents and
+   * the tree, so the split happens before expansion creates the actors that
+   * hold them; `written` adds those a replayed invoke wrote in. */
   private splitNamespaced(
     root: unknown,
     events: InputEvent[],
@@ -659,6 +661,9 @@ export class GoblinEngine {
       } else if (node !== null && typeof node === 'object') Object.values(node).forEach(scan);
     };
     this.docs.forEach(scan);
+    // Actors written in by an invoke: the call as written, then the actor it expands to.
+    scan(root);
+    for (const namespace of this.provenance.namespacesIn(root)) declared.add(namespace);
     if (root !== null && typeof root === 'object' && !Array.isArray(root)) {
       for (const namespace of declared) {
         if (namespace in root) throw new Error(`actor namespace ${namespace} shadows a top-level key of the entry`);

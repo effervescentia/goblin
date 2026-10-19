@@ -591,6 +591,9 @@ describe('nested actors', () => {
     const engine = party();
     (engine.docs.get('party.yaml') as Record<string, unknown>)['recruit(name)'] =
       "$.party[name] = $tmpl('hero.yaml', name)";
+    // Gated on a param, so it only applies once the recruit's choices reach it.
+    engine.docs.set('perk.yaml', { '@': 'Hero', $if: "@.name == 'Dorn'", '+@.gold': 100 });
+    (engine.docs.get('hero.yaml') as Record<string, unknown>).perk = "$mixin('perk.yaml')";
     return engine;
   };
   const named = [parameter('party.scout.name', 'Ash'), parameter('party.guide.name', 'Bree')];
@@ -608,17 +611,20 @@ describe('nested actors', () => {
     };
     const dorn = state.data.party.dorn;
     expect(fieldValue(dorn?.name)).toBe('Dorn');
-    expect(fieldValue(dorn?.speed)).toBe(40); // its mixin applied
+    expect(fieldValue(dorn?.speed)).toBe(40); // its mixins applied, the param-gated one too
+    expect(fieldValue(dorn?.gold)).toBe(106);
     // The write logs the call that made the actor, not its whole tree.
     const call = "$tmpl('hero.yaml', 'dorn')";
     expect(dorn?.[':events']).toEqual([{ ':source': 'party.yaml', ':set': call }]);
     const writes = engine.events(engine.docs.get('party.yaml'), state.data).map((entry) => entry.event);
     expect(writes).toContainEqual(expect.objectContaining({ type: 'set', path: 'party.dorn', value: call }));
+    expect(writes).toContainEqual(expect.objectContaining({ type: 'add', path: 'party.dorn.gold', value: 100 }));
 
     // Replayed, the recorded write declares `dorn`, so a later set reaches it.
     const written: StateEvent = { version: 1, type: 'set', path: 'party.dorn', value: call };
     const later = recruiting().resolve('party.yaml', [...recruited, written, override('dorn.gold', 9)]) as typeof state;
     expect(fieldValue(later.data.party.dorn?.gold)).toBe(9);
+    expect(fieldValue(later.data.party.scout?.gold)).toBe(6); // no perk: not Dorn
   });
 
   it('rejects an indexed assignment key that is not one path segment', () => {

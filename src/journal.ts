@@ -3,6 +3,8 @@
  * printed `:events`), every write and roll in the order made (the stream
  * events), and the roll tape a replayed stream re-rolls from.
  */
+
+import { match } from 'ts-pattern';
 import {
   ADD_KEY,
   COLUMN_KEY,
@@ -404,7 +406,12 @@ export class Journal {
       const log = this.fieldEvents.get(record)?.get(key);
       const index = log?.indexOf(event) ?? -1;
       if (at === undefined || log === undefined || index < 0) return [];
-      const printed = (printedAt([...at, key])?.[EVENTS_KEY] as Record<string, unknown>[] | undefined)?.[index];
+      // Without `data` (an unresolved run) only an invoke's writes are kept:
+      // assignments log resolved values, and the rest recompute on replay.
+      const printed = match({ data, cause })
+        .with({ data: undefined, cause: undefined }, () => undefined)
+        .with({ data: undefined }, () => event)
+        .otherwise(() => (printedAt([...at, key])?.[EVENTS_KEY] as Record<string, unknown>[] | undefined)?.[index]);
       if (printed === undefined) return [];
       const write: Omit<WriteEvent, 'version'> = {
         type: writeType(kind),

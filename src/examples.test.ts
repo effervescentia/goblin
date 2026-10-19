@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { readdirSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -104,28 +105,37 @@ describe('examples', () => {
   });
 
   it('17-recruit.yaml writes in a namespaced actor, then asks for its params', () => {
-    const scout = ['--param', 'party.scout.name=Ash'];
-    const asked = cli('examples/17-recruit.yaml', ...scout, '--invoke', 'recruit("cade")') as {
-      query: Array<{ path: string }>;
-    };
-    expect(asked.query.map((param) => param.path)).toEqual(['cade.name']);
+    const dir = mkdtempSync(join(tmpdir(), 'goblin-recruit-'));
+    const state = join(dir, 'state.json');
+    try {
+      cli('examples/17-recruit.yaml', '--param', 'party.scout.name=Ash', '--out', state);
+      const asked = cli('examples/17-recruit.yaml', '--in', state, '--invoke', 'recruit("cade")', '--out', state) as {
+        events: Array<{ type: string; path: string; value: unknown }>;
+        query: Array<{ path: string }>;
+      };
+      expect(asked.query.map((param) => param.path)).toEqual(['cade.name']);
+      // The asking state keeps the invoke's write, so its answer replays it.
+      expect(asked.events).toContainEqual(
+        expect.objectContaining({ type: 'set', path: 'party.cade', value: "$tmpl('15-nested-hero.yaml', 'cade')" }),
+      );
 
-    const state = cli(
-      'examples/17-recruit.yaml',
-      '--strip-metadata',
-      ...scout,
-      '--invoke',
-      'recruit("cade")',
-      '--param',
-      'cade.name=Cade',
-    ) as { events: Array<{ type: string; path: string; value: unknown }>; data: { party: unknown } };
-    expect(state.data.party).toEqual({
-      scout: { name: 'Ash', speed: 40, gold: 15, pace: 40 },
-      cade: { name: 'Cade', speed: 40, gold: 15, pace: 40 },
-    });
-    expect(state.events).toContainEqual(
-      expect.objectContaining({ type: 'set', path: 'party.cade', value: "$tmpl('15-nested-hero.yaml', 'cade')" }),
-    );
+      const answered = cli(
+        'examples/17-recruit.yaml',
+        '--strip-metadata',
+        '--in',
+        state,
+        '--param',
+        'cade.name=Cade',
+      ) as {
+        data: { party: unknown };
+      };
+      expect(answered.data.party).toEqual({
+        scout: { name: 'Ash', speed: 40, gold: 15, pace: 40 },
+        cade: { name: 'Cade', speed: 40, gold: 15, pace: 40 },
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('04-functions.yaml hands back a record body per call', () => {

@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -149,6 +149,12 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['--invoke'])).toThrow('--invoke expects fn or fn(args)');
     expect(() => parseArgs(['--invoke', 'heal(x)'])).toThrow('--invoke arguments must be JSON values');
     expect(() => parseArgs(['--invoke', 'a', '--invoke', 'b'])).toThrow('--invoke may be given once per run');
+  });
+
+  it('rejects --invoke alongside --param or --set, in either order', () => {
+    const alone = '--invoke cannot be combined with --param or --set';
+    expect(() => parseArgs(['--param', 'a=1', '--invoke', 'f'])).toThrow(alone);
+    expect(() => parseArgs(['--invoke', 'f', '--set', 'a=1'])).toThrow(alone);
   });
 
   it('rejects malformed --set', () => {
@@ -300,8 +306,9 @@ describe('withHash', () => {
     expect(withHash({ result: 42, data: { a: 1 } }, events)).toEqual({ hash: sha(body), ...body });
   });
 
-  it('leaves query and errors envelopes alone', () => {
-    expect(withHash({ query: [] }, events)).toEqual({ query: [] });
+  it('stamps query envelopes too, and leaves errors alone', () => {
+    const body = { version: 1, events, query: [{ path: 'name' }] };
+    expect(withHash({ query: [{ path: 'name' }] }, events)).toEqual({ hash: sha(body), ...body });
     expect(withHash({ errors: ['x'] }, events)).toEqual({ errors: ['x'] });
   });
 });
@@ -315,7 +322,7 @@ describe('rehydrate', () => {
   it('verifies a result and accepts invoke events', () => {
     const invoked = [...events, invoke('heal', [2], 3)];
     const state = withHash({ result: 7, data: { x: 1 } }, invoked, 3) as Record<string, unknown>;
-    expect(rehydrate(state)).toEqual({ version: 3, events: invoked });
+    expect(rehydrate(state)).toEqual({ version: 3, events: invoked, stable: true });
     expect(() => rehydrate({ ...state, result: 8 })).toThrow('hash does not match');
     expect(() => rehydrate({ data: {}, events: [{ version: 1, type: 'invoke', path: 'x', value: 2 }] })).toThrow(
       'events must be',
@@ -325,13 +332,19 @@ describe('rehydrate', () => {
   it('keeps recorded writes, whose rolls the engine replays', () => {
     const writes = [{ version: 1, type: 'add', path: 'gold', value: 5, rolled: true, source: 'boon.yaml' }];
     const stream = [...events, ...(writes as never[])];
-    expect(rehydrate(withHash({ data: { x: 1 } }, stream))).toEqual({ version: 1, events: stream });
+    expect(rehydrate(withHash({ data: { x: 1 } }, stream))).toEqual({ version: 1, events: stream, stable: true });
     expect(() => rehydrate({ data: {}, events: [{ ...writes[0], rolled: 'yes' }] })).toThrow('events must be');
   });
 
   it('returns the version and events a state was resolved with', () => {
-    expect(rehydrate(withHash({ data: { x: 1 } }, events, 3))).toEqual({ version: 3, events });
-    expect(rehydrate({ data: { x: 1 } })).toEqual({ version: 0, events: [] });
+    expect(rehydrate(withHash({ data: { x: 1 } }, events, 3))).toEqual({ version: 3, events, stable: true });
+    expect(rehydrate({ data: { x: 1 } })).toEqual({ version: 0, events: [], stable: true });
+  });
+
+  it('accepts a query state as unstable, verifying its hash', () => {
+    const state = withHash({ query: [{ path: 'name' }] }, events, 2) as Record<string, unknown>;
+    expect(rehydrate(state)).toEqual({ version: 2, events, stable: false });
+    expect(() => rehydrate({ ...state, query: [] })).toThrow('hash does not match');
   });
 
   it('rejects edited states, bad inputs, and non-data envelopes', () => {
@@ -347,7 +360,7 @@ describe('rehydrate', () => {
     expect(() => rehydrate({ data: {}, events: [{ version: 1, type: 'override', path: 'x' }] })).toThrow(
       'events must be',
     );
-    expect(() => rehydrate({ query: [] })).toThrow('resolved { "data": … } envelope');
+    expect(() => rehydrate({ errors: [] })).toThrow('{ "data": … } or { "query": … } envelope');
   });
 });
 
@@ -437,7 +450,7 @@ describe('cli', () => {
     expect(JSON.parse(pretty.stdout)).toEqual(JSON.parse(compact.stdout));
   });
 
-  it('--out replaces the file with the output only when the document fully resolves', () => {
+  it('--out replaces the file with a resolved or asking state, never errors', () => {
     const dir = mkdtempSync(join(tmpdir(), 'goblin-out-'));
     const out = join(dir, 'nested', 'sheet.json');
     try {
@@ -451,7 +464,7 @@ describe('cli', () => {
       const query = runCli('examples/08-parameters.yaml', '--out', pending);
       expect(query.status).toBe(0);
       expect(JSON.parse(query.stdout)).toHaveProperty('query');
-      expect(existsSync(pending)).toBe(false);
+      expect(readFileSync(pending, 'utf8')).toBe(query.stdout);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -477,6 +490,38 @@ describe('cli', () => {
       const missing = runCli('examples/04-functions.yaml', '--invoke', 'nope');
       expect(missing.status).toBe(1);
       expect(missing.stderr).toContain('invoke: nope is not a function');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('--invoke needs a stable state: an entry or --in state that asks for nothing', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'goblin-stable-'));
+    const pending = join(dir, 'pending.json');
+    try {
+      const fresh = runCli('examples/08-parameters.yaml', '--invoke', 'f');
+      expect(fresh.status).toBe(1);
+      expect(fresh.stderr).toContain('--invoke needs a stable state: the entry asks for params');
+
+      expect(runCli('examples/08-parameters.yaml', '--out', pending).status).toBe(0);
+      const asking = runCli('examples/08-parameters.yaml', '--in', pending, '--invoke', 'f');
+      expect(asking.status).toBe(1);
+      expect(asking.stderr).toContain('--invoke needs a stable state: --in still asks for params');
+
+      // Answered in a later run, the saved query state resolves.
+      const answered = runCli(
+        'examples/08-parameters.yaml',
+        '--compact',
+        '--in',
+        pending,
+        '--param',
+        'hero_name=Aria',
+        '--param',
+        'starting_level=3',
+        '--param',
+        'details.title=Kid',
+      );
+      expect(JSON.parse(answered.stdout)).toMatchObject({ version: 2, data: {} });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -1,8 +1,8 @@
 # Writing an actor in: an invoked function assigns a `$tmpl(…)` call to a
 # computed key, and it expands there like one written in the document.
-#   goblin examples/17-recruit.yaml --param party.scout.name=Ash \
-#     --invoke 'recruit("cade")'                     → { query: [cade.name] }
-#   … --invoke 'recruit("cade")' --param cade.name=Cade → party.cade, as `cade`
+#   goblin examples/17-recruit.yaml --param party.scout.name=Ash --out s.json
+#   … --in s.json --invoke 'recruit("cade")' --out s.json → { query: [cade.name] }
+#   … --in s.json --param cade.name=Cade                 → party.cade, as `cade`
 
 party:
   scout: $tmpl('15-nested-hero.yaml')

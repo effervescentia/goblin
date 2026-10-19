@@ -635,11 +635,11 @@ namespace `dorn`.
   not the actor's whole tree. The actor expands after the invoke, mixins
   and all, and overrides given after the invoke land over them.
 - Its params are asked for after the invokes run: a run that writes one in
-  answers `{ query }` for its choices (`dorn.name`, `dorn.class`, …), and the
-  next run sends them with the same invoke.
+  answers `{ query }` for its choices (`dorn.name`, `dorn.class`, …). The CLI
+  saves that state with the invoke's write, and the next run answers it with
+  `--in` and `--param` (see Invoking functions).
 - Replayed (`--in`), the recorded write makes the actor again and declares
-  its namespace, so later `--set dorn.…` reach it. A `--set` keyed by the new
-  namespace in the run that first writes it in is not routed yet.
+  its namespace, so `--param dorn.…` and `--set dorn.…` reach it.
 - The namespace rules hold as for any `$tmpl`: one that shadows a top-level
   key of the entry throws. Writing over a key that already holds an actor
   replaces it.
@@ -796,7 +796,12 @@ envelope that is either satisfied or asking:
 - All `:param` keys filled by a `parameter` event (by path or alias) → `{ data }`
   with the serialized evaluated document.
 - Otherwise → `{ query }` with **only** the outstanding params
-  (satisfied ones are filtered out).
+  (satisfied ones are filtered out). The CLI stamps it like data, as
+  `{ hash, version, events, query }` with `hash` over
+  `{ version, events, query }`: its events hold the inputs, every roll and
+  the writes an invoke made (other writes recompute on replay). `--out`
+  saves it and `--in` takes it back, so a choice can be answered in a
+  later run; an `{ errors }` result is neither stamped nor saved.
 - The CLI then validates `{ data }`: any failing `!validate` rule turns it
   into `{ errors }` (see Validation). A passing result prints as
   `{ hash, version, events, result?, data }` (`result` under `--invoke`; see
@@ -890,6 +895,12 @@ JSON values, once per run) calls a function on the fully resolved document.
   `:events` like any assignment, and follow the invoke in the CLI's
   `events`. An override given after an invoke still wins over what it
   wrote; earlier overrides are the base it works from.
+- The CLI only invokes on a stable state. `--invoke` cannot share a run with
+  `--param` or `--set` (`--invoke cannot be combined with --param or
+  --set…`), and the state it acts on must resolve to `{ data }`: the `--in`
+  state, or without one the entry with no inputs (`--invoke needs a stable
+  state: …`). An invoke that brings in params answers a `{ query }` state,
+  saved like any other, which later runs answer with `--param`.
 - The last invoke's return value comes back as `result` (`null` when it
   returns nothing, e.g. an assignment statement; a record-bodied function's
   copy is evaluated). The CLI prints `result` only for this run's
