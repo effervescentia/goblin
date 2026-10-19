@@ -89,6 +89,7 @@ apart. Treat a missing spec update as an incomplete change.
   what the code plainly does) are not welcome.
 - Keep new comments to one or two lines. Say the non-obvious thing — why, or
   the catch — and let the code say the rest.
+- Use `ts-pattern`'s `match` instead of nested ternary expressions.
 - Imports stay acyclic: `src/utils.ts` may import from `src/nodes/` (e.g. `Die`),
   so helpers it depends on must not be moved onto a node class that imports
   back from `src/utils.ts`.
