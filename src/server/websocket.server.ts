@@ -5,7 +5,7 @@
  */
 import { type Codec, codecFor } from './codec';
 import type { Format } from './dtos';
-import { failure, type Methods, PARSE_ERROR, RpcServer } from './rpc';
+import { failure, type Methods, PARSE_ERROR, RpcServer } from './rpc.server';
 
 /** The slice of a server WebSocket this transport uses (Bun's `ServerWebSocket` fits). */
 export interface Socket {

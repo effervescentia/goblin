@@ -4,7 +4,7 @@
  */
 import { type Codec, codecFor } from './codec';
 import type { Format } from './dtos';
-import { failure, type Methods, PARSE_ERROR, RpcServer } from './rpc';
+import { failure, type Methods, PARSE_ERROR, RpcServer } from './rpc.server';
 
 /** Answers JSON-RPC `methods` read from a byte stream, one message at a time and in order. */
 export class StdioServer {

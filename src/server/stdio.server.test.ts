@@ -1,7 +1,7 @@
 import { decodeMultiple, encode } from 'cbor-x';
 import { describe, expect, it } from 'vitest';
-import { PARSE_ERROR } from './rpc';
-import { StdioServer } from './stdio';
+import { PARSE_ERROR } from './rpc.server';
+import { StdioServer } from './stdio.server';
 
 const server = new StdioServer({ echo: (params: unknown) => params });
 

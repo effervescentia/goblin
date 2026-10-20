@@ -19,10 +19,10 @@ import { StateEventSchema, VersionSchema } from '@/dtos';
 import { type InputEvent, isInputEvent, type StateEvent } from '@/inputs';
 import { print } from '@/nodes/serialize';
 import { type Format, FormatSchema } from '@/server/dtos';
-import { HttpServer } from '@/server/http';
-import { INVALID_PARAMS, type Methods, RpcError } from '@/server/rpc';
-import { StdioServer } from '@/server/stdio';
-import { WebSocketServer } from '@/server/websocket';
+import { HttpServer } from '@/server/http.server';
+import { INVALID_PARAMS, type Methods, RpcError } from '@/server/rpc.server';
+import { StdioServer } from '@/server/stdio.server';
+import { WebSocketServer } from '@/server/websocket.server';
 import { DEFAULT_PORT, INVOKE_ALONE, ONE_SHOT, USAGE } from './constants';
 import { ConfigSchema, ResolveParamsSchema, type ServerMode, ServerModeSchema } from './dtos';
 

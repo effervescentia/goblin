@@ -1,7 +1,7 @@
 import { decode, encode } from 'cbor-x';
 import { describe, expect, it } from 'vitest';
-import { PARSE_ERROR } from './rpc';
-import { UNSUPPORTED_DATA, WebSocketServer } from './websocket';
+import { PARSE_ERROR } from './rpc.server';
+import { UNSUPPORTED_DATA, WebSocketServer } from './websocket.server';
 
 const methods = {
   echo: (params: unknown) => params,

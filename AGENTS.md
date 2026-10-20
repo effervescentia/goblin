@@ -56,10 +56,10 @@ apart. Treat a missing spec update as an incomplete change.
   `hash` is over `JSON.stringify`, so unstable ordering silently changes it. `src/cli/cli.ts` is Bun-only; keep `parseArgs` pure
   so `src/cli/cli.test.ts` stays runtime-agnostic.
 - `--server stdio|http|websocket` keeps the CLI up as a JSON-RPC 2.0 server. Dispatch lives in
-  `src/server/rpc.ts`; the transports only frame it — `stdio` one message per CBOR item or JSON line
-  (`src/server/stdio.ts`), `http` one body per `POST /` on 127.0.0.1, `--port`
-  (`src/server/http.ts`, a web-standard `fetch` handler so tests need no Bun), `websocket` one message
-  per frame after an upgrade at `/` on 127.0.0.1, `--port` (`src/server/websocket.ts`, Bun-shaped
+  `src/server/rpc.server.ts`; the transports only frame it — `stdio` one message per CBOR item or JSON line
+  (`src/server/stdio.server.ts`), `http` one body per `POST /` on 127.0.0.1, `--port`
+  (`src/server/http.server.ts`, a web-standard `fetch` handler so tests need no Bun), `websocket` one message
+  per frame after an upgrade at `/` on 127.0.0.1, `--port` (`src/server/websocket.server.ts`, Bun-shaped
   `fetch`/`websocket` handlers over minimal socket interfaces). `--format cbor|json`
   (default `cbor`, `--server` only) picks the encoding for all three — binary or text frames over websocket — via `src/server/codec.ts`. Its `resolve`
   method calls the same `run` as a one-shot invocation, so its result is the exact envelope
@@ -104,6 +104,8 @@ apart. Treat a missing spec update as an incomplete change.
 - Imports stay acyclic: `src/utils.ts` may import from `src/nodes/` (e.g. `Die`),
   so helpers it depends on must not be moved onto a node class that imports
   back from `src/utils.ts`.
+- Server modules in `src/server/` use a `.server.ts` suffix (`rpc.server.ts`,
+  `http.server.ts`, …); shared helpers like `codec.ts` and `dtos.ts` don't.
 
 ## Dependencies
 

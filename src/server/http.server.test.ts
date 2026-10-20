@@ -1,7 +1,7 @@
 import { decode, encode } from 'cbor-x';
 import { describe, expect, it } from 'vitest';
-import { HttpServer } from './http';
-import { PARSE_ERROR } from './rpc';
+import { HttpServer } from './http.server';
+import { PARSE_ERROR } from './rpc.server';
 
 const methods = { echo: (params: unknown) => params };
 
