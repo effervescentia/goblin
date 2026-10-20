@@ -3,7 +3,7 @@
  * Goblin CLI — resolves the application state and prints it as JSON.
  *
  * Usage:
- *   goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--in state.json|-] [--out file.json] [--server stdio|http] [--format cbor|json] [--port n] [--help]
+ *   goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--format cbor|json] [--port n] [--help]
  *
  * With no entry file, `.goblin.yaml` in the current directory is required.
  * An entry containing a directory (`examples/foo.yaml`) is resolved with
@@ -22,6 +22,7 @@ import { type Format, FormatSchema } from '@/server/dtos';
 import { HttpServer } from '@/server/http';
 import { INVALID_PARAMS, type Methods, RpcError } from '@/server/rpc';
 import { StdioServer } from '@/server/stdio';
+import { WebSocketServer } from '@/server/websocket';
 import { DEFAULT_PORT, INVOKE_ALONE, ONE_SHOT, USAGE } from './constants';
 import { ConfigSchema, ResolveParamsSchema, type ServerMode, ServerModeSchema } from './dtos';
 
@@ -30,11 +31,11 @@ export interface CliArgs {
   compact: boolean;
   stripMetadata: boolean;
   help: boolean;
-  /** Serve JSON-RPC instead of resolving once, over stdio or HTTP. */
+  /** Serve JSON-RPC instead of resolving once, over stdio, HTTP or WebSocket. */
   server?: ServerMode;
   /** The `--server` wire format; CBOR unless given. */
   format?: Format;
-  /** The `--server http` port; 0 lets the OS pick. */
+  /** The `--server http|websocket` port; 0 lets the OS pick. */
   port?: number;
   in?: string;
   out?: string;
@@ -85,7 +86,7 @@ export function parseArgs(argv: string[]): CliArgs {
       args.help = true;
     } else if (arg === '--server') {
       const mode = ServerModeSchema.safeParse(argv[++i]);
-      if (!mode.success) throw new Error(`--server expects stdio or http, got: ${argv[i] ?? '(nothing)'}`);
+      if (!mode.success) throw new Error(`--server expects stdio, http or websocket, got: ${argv[i] ?? '(nothing)'}`);
       args.server = mode.data;
     } else if (arg === '--format') {
       const format = FormatSchema.safeParse(argv[++i]);
@@ -122,7 +123,8 @@ export function parseArgs(argv: string[]): CliArgs {
     }
   }
   if (args.server && oneShot.length > 0) throw new Error(`--server cannot be combined with ${oneShot[0]}`);
-  if (args.port !== undefined && args.server !== 'http') throw new Error('--port needs --server http');
+  if (args.port !== undefined && args.server !== 'http' && args.server !== 'websocket')
+    throw new Error('--port needs --server http or websocket');
   if (args.format !== undefined && !args.server) throw new Error('--format needs --server');
   return args;
 }
@@ -316,6 +318,10 @@ if (import.meta.main) {
       const { fetch } = new HttpServer(serverMethods(process.cwd()), args.format);
       const server = Bun.serve({ hostname: '127.0.0.1', port: args.port ?? DEFAULT_PORT, fetch });
       console.error(`listening on ${server.url}`);
+    } else if (args.server === 'websocket') {
+      const { fetch, websocket } = new WebSocketServer(serverMethods(process.cwd()), args.format);
+      const server = Bun.serve({ hostname: '127.0.0.1', port: args.port ?? DEFAULT_PORT, fetch, websocket });
+      console.error(`listening on ${server.url.href.replace(/^http/, 'ws')}`);
     } else {
       const prior =
         args.in === undefined

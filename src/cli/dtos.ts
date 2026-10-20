@@ -2,7 +2,7 @@ import z from 'zod';
 import { InputSchema } from '@/dtos';
 import { INVOKE_ALONE } from './constants';
 
-export const ServerModeSchema = z.enum(['stdio', 'http']);
+export const ServerModeSchema = z.enum(['stdio', 'http', 'websocket']);
 
 export type ServerMode = z.infer<typeof ServerModeSchema>;
 
