@@ -4,7 +4,7 @@
     "check": "bun run check:format && bun run check:types",
     "check:format": "biome check --use-editorconfig true",
     "check:types": "tsc -p . --noEmit",
-    "format": "biome format --write --use-editorconfig true",
+    "format": "biome check --write --use-editorconfig true",
     "dev": "bun src/cli/cli.ts",
     "ui": "PORT=1337 bun ui/server.ts",
     "test": "vitest run",

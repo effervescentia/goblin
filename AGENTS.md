@@ -17,7 +17,7 @@ Always validate code changes with **both** of the following before finishing:
    ```
    This runs `check:format` (`biome check`) and `check:types` (`tsc --noEmit`).
    Fix all errors. Pre-existing style warnings (e.g. `noNonNullAssertion`) are acceptable;
-   do not add new ones if avoidable. Use `bun run format` to auto-fix formatting.
+   do not add new ones if avoidable. Use `bun run format` to auto-fix formatting, import order and safe lint fixes.
 
 2. **Tests** — [Vitest](https://vitest.dev):
    ```sh
@@ -83,7 +83,7 @@ apart. Treat a missing spec update as an incomplete change.
   it delegates to `src/patcher.ts` (applying patches and mixins, call
   expansion), `src/journal.ts` (per-field `:events`, the write/roll stream,
   the roll tape), `src/provenance.ts` (WeakMap side tables: origins, owners,
-  homes, namespaces, locations) and `src/documents.ts` (loading, `$tmpl`
+  homes, namespaces, locations) and `src/registry.ts` (loading, `$tmpl`
   discovery, `$`/`$lib` binding). New history state goes in
   the journal and new "where did this come from" state in provenance, not on the engine.
 - The standard library (`$lib`) lives in `src/lib/`: one file per namespace

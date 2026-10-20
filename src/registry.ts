@@ -8,7 +8,7 @@ import { collectLocations } from './locations';
 import type { Provenance } from './provenance';
 import { isBareSigil, isMetaKey, isValidateKey, joinPath } from './utils';
 
-export class Documents {
+export class Registry {
   /** Raw (unevaluated) documents by file name. */
   readonly docs = new Map<string, unknown>();
   /** `$` — shared global namespace (cross-doc values). */

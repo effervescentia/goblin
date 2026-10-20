@@ -33,7 +33,6 @@ import {
   VALIDATE_KEY,
   VALUE_KEY,
 } from './constants';
-import { Documents } from './documents';
 import { type InputEvent, isInputEvent, isWriteEvent, latest, nest, type StateEvent } from './inputs';
 import { type EngineEvent, Journal } from './journal';
 import type { Location } from './locations';
@@ -45,6 +44,7 @@ import { type MissingParam, RecordNode } from './nodes/record';
 import { debug } from './nodes/serialize';
 import { Patcher } from './patcher';
 import { Provenance } from './provenance';
+import { Registry } from './registry';
 import {
   type AssignOp,
   compileBody,
@@ -72,7 +72,7 @@ export class GoblinEngine {
   private readonly provenance = new Provenance();
   private readonly journal = new Journal(this.provenance);
   private readonly patcher = new Patcher(this, this.journal, this.provenance);
-  private readonly documents: Documents;
+  private readonly registry: Registry;
   /** Raw (unevaluated) documents by file name. */
   readonly docs: Map<string, unknown>;
   /** `$` — shared global namespace (cross-doc values). */
@@ -86,27 +86,27 @@ export class GoblinEngine {
   private nextId = 1;
 
   constructor(rootDir = '.') {
-    this.documents = new Documents(this.provenance, rootDir);
-    ({ docs: this.docs, appRoot: this.appRoot, library: this.library } = this.documents);
+    this.registry = new Registry(this.provenance, rootDir);
+    ({ docs: this.docs, appRoot: this.appRoot, library: this.library } = this.registry);
   }
 
   loadFile(file: string): Promise<unknown> {
-    return this.documents.loadFile(file);
+    return this.registry.loadFile(file);
   }
 
   /** Merge a parsed library document under the native defaults. */
   mergeLib(data: unknown): void {
-    this.documents.mergeLib(data);
+    this.registry.mergeLib(data);
   }
 
   /** Store a document under `file`, merging top-level tables into `$`. */
   register(file: string, data: unknown, text?: string): unknown {
-    return this.documents.register(file, data, text);
+    return this.registry.register(file, data, text);
   }
 
   /** `$tmpl('other.yaml')` helper + any registered template loader. */
   loadTemplate(file: string): Promise<unknown> {
-    return this.documents.loadTemplate(file);
+    return this.registry.loadTemplate(file);
   }
 
   // -- reference resolution -------------------------------------------------
