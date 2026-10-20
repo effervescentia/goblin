@@ -3,7 +3,7 @@
  * item. CBOR items are self-delimiting, so the stream needs no other framing.
  */
 import { Decoder, Encoder } from 'cbor-x';
-import { z } from 'zod';
+import { RequestSchema } from './dtos';
 
 export const PARSE_ERROR = -32700;
 export const INVALID_REQUEST = -32600;
@@ -31,14 +31,6 @@ export type Methods = Record<string, (params: unknown) => unknown>;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
-
-// A present `id` must be a string, number or null; an absent one makes the request a notification.
-const RequestSchema = z.object({
-  jsonrpc: z.literal('2.0'),
-  method: z.string(),
-  id: z.union([z.string(), z.number(), z.null()]).exactOptional(),
-  params: z.union([z.record(z.string(), z.unknown()), z.array(z.unknown()), z.null()]).optional(),
-});
 
 const failure = (id: Id, code: number, message: string): StdioResponse => ({
   jsonrpc: '2.0',

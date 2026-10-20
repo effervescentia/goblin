@@ -14,7 +14,7 @@ const files = readdirSync(join(root, 'examples'))
   .sort();
 
 function cli(entry: string, ...extra: string[]): unknown {
-  const out = execFileSync('bun', ['src/cli.ts', entry, '--compact', ...extra], {
+  const out = execFileSync('bun', ['src/cli/cli.ts', entry, '--compact', ...extra], {
     cwd: root,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],

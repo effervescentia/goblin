@@ -5,10 +5,11 @@
  *   bun run ui            # http://localhost:3000
  */
 import { resolve as resolvePath } from 'node:path';
-import { z } from 'zod';
-import { resolveApp } from '../src/cli';
+import z from 'zod';
+import { resolveApp } from '../src/cli/cli';
 import { override, parameter } from '../src/inputs';
 import { inspect } from '../src/inspect';
+import { ResolveRequestSchema } from './dtos';
 import index from './index.html';
 
 const root = `${import.meta.dir}/..`;
@@ -19,12 +20,6 @@ async function entries(): Promise<string[]> {
   for await (const file of new Bun.Glob('{5e,examples,wip}/**/*.yaml').scan(root)) found.push(file);
   return found.sort();
 }
-
-const ResolveRequestSchema = z.object({
-  entry: z.string(),
-  params: z.record(z.string(), z.unknown()).default({}),
-  overrides: z.record(z.string(), z.unknown()).default({}),
-});
 
 const server = Bun.serve({
   port: Number(process.env.PORT ?? 3000),

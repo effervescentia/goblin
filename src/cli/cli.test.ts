@@ -6,10 +6,11 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { decodeMultiple, encode } from 'cbor-x';
 import { describe, expect, it } from 'vitest';
-import { parseArgs, parseParamValue, rehydrate, USAGE, weave, withHash } from './cli';
-import { COMPANION_PARAMS } from './dnd5e.fixtures';
-import { type InputEvent, invoke, latest, nest, override, parameter, paramValue } from './inputs';
-import { print } from './nodes/serialize';
+import { COMPANION_PARAMS } from '../dnd5e.fixtures';
+import { type InputEvent, invoke, latest, nest, override, parameter, paramValue } from '../inputs';
+import { print } from '../nodes/serialize';
+import { parseArgs, parseParamValue, rehydrate, weave, withHash } from './cli';
+import { USAGE } from './constants';
 
 describe('parseArgs', () => {
   it('defaults to no entry and pretty output', () => {
@@ -415,11 +416,11 @@ describe('USAGE', () => {
 });
 
 // Subprocess tests through the real entry point (Bun-only code paths).
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 
 function runCli(...args: string[]): { stdout: string; stderr: string; status: number } {
   try {
-    const stdout = execFileSync('bun', ['src/cli.ts', ...args], {
+    const stdout = execFileSync('bun', ['src/cli/cli.ts', ...args], {
       cwd: root,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -442,7 +443,7 @@ describe('cli', () => {
     writeFileSync(join(cwd, '.goblin.yaml'), 'root: docs\nmain: nested/actor.yaml\n');
     writeFileSync(join(cwd, 'docs', 'nested', 'actor.yaml'), 'name: Config actor\n');
     try {
-      const stdout = execFileSync('bun', [join(root, 'src/cli.ts')], { cwd, encoding: 'utf8' });
+      const stdout = execFileSync('bun', [join(root, 'src/cli/cli.ts')], { cwd, encoding: 'utf8' });
       expect(JSON.parse(stdout)).toMatchObject({ version: 1, events: [], data: { name: 'Config actor' } });
     } finally {
       rmSync(cwd, { recursive: true, force: true });
@@ -454,7 +455,7 @@ describe('cli', () => {
     writeFileSync(join(cwd, '.goblin.yaml'), 'main: actor.yaml\n');
     writeFileSync(join(cwd, 'actor.yaml'), 'name: Rootless\n');
     try {
-      const stdout = execFileSync('bun', [join(root, 'src/cli.ts')], { cwd, encoding: 'utf8' });
+      const stdout = execFileSync('bun', [join(root, 'src/cli/cli.ts')], { cwd, encoding: 'utf8' });
       expect(JSON.parse(stdout)).toMatchObject({ data: { name: 'Rootless' } });
     } finally {
       rmSync(cwd, { recursive: true, force: true });
@@ -466,7 +467,11 @@ describe('cli', () => {
     writeFileSync(join(cwd, '.goblin.yaml'), 'root: docs\n');
     try {
       expect(() =>
-        execFileSync('bun', [join(root, 'src/cli.ts')], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }),
+        execFileSync('bun', [join(root, 'src/cli/cli.ts')], {
+          cwd,
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        }),
       ).toThrow(/invalid \.goblin\.yaml[\s\S]*main/);
     } finally {
       rmSync(cwd, { recursive: true, force: true });
@@ -654,7 +659,7 @@ describe('cli', () => {
       const { hash: _, version: __, ...rest } = JSON.parse(first.stdout);
       expect(replayed).toMatchObject({ version: 2, ...rest });
 
-      const piped = execFileSync('bun', ['src/cli.ts', 'examples/08-parameters.yaml', '--in', '-'], {
+      const piped = execFileSync('bun', ['src/cli/cli.ts', 'examples/08-parameters.yaml', '--in', '-'], {
         cwd: root,
         encoding: 'utf8',
         input: first.stdout,
@@ -759,7 +764,7 @@ describe('cli', () => {
 describe('cli --server', () => {
   const server = (...messages: unknown[]): unknown[] => {
     const input = Buffer.concat(messages.map((message) => encode(message)));
-    const stdout = execFileSync('bun', ['src/cli.ts', '--server'], { cwd: root, input });
+    const stdout = execFileSync('bun', ['src/cli/cli.ts', '--server'], { cwd: root, input });
     return decodeMultiple(stdout) ?? [];
   };
 

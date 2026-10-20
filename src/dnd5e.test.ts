@@ -15,7 +15,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PC = 'aria';
 
 function run(entry: string, ...extra: string[]): unknown {
-  const out = execFileSync('bun', ['src/cli.ts', entry, '--compact', ...extra], {
+  const out = execFileSync('bun', ['src/cli/cli.ts', entry, '--compact', ...extra], {
     cwd: root,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],

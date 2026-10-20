@@ -5,10 +5,10 @@
     "check:format": "biome check --use-editorconfig true",
     "check:types": "tsc -p . --noEmit",
     "format": "biome format --write --use-editorconfig true",
-    "dev": "bun src/cli.ts",
+    "dev": "bun src/cli/cli.ts",
     "ui": "PORT=1337 bun ui/server.ts",
     "test": "vitest run",
-    "build": "bun build --compile src/cli.ts --outfile build/goblin && rm -f .*.bun-build"
+    "build": "bun build --compile src/cli/cli.ts --outfile build/goblin && rm -f .*.bun-build"
   },
   "bin": {
     "goblin": "build/goblin"
