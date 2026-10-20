@@ -3,7 +3,7 @@
  * Goblin CLI — resolves the application state and prints it as JSON.
  *
  * Usage:
- *   goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--in state.json|-] [--out file.json] [--server] [--help]
+ *   goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--in state.json|-] [--out file.json] [--server stdio|http] [--format cbor|json] [--port n] [--help]
  *
  * With no entry file, `.goblin.yaml` in the current directory is required.
  * An entry containing a directory (`examples/foo.yaml`) is resolved with
@@ -18,17 +18,24 @@ import type { EngineEvent } from '@/core/journal';
 import { StateEventSchema, VersionSchema } from '@/dtos';
 import { type InputEvent, isInputEvent, type StateEvent } from '@/inputs';
 import { print } from '@/nodes/serialize';
-import { INVALID_PARAMS, StdioError, StdioServer } from '@/server/stdio';
-import { INVOKE_ALONE, ONE_SHOT, USAGE } from './constants';
-import { ConfigSchema, ResolveParamsSchema } from './dtos';
+import { type Format, FormatSchema } from '@/server/dtos';
+import { HttpServer } from '@/server/http';
+import { INVALID_PARAMS, type Methods, RpcError } from '@/server/rpc';
+import { StdioServer } from '@/server/stdio';
+import { DEFAULT_PORT, INVOKE_ALONE, ONE_SHOT, USAGE } from './constants';
+import { ConfigSchema, ResolveParamsSchema, type ServerMode, ServerModeSchema } from './dtos';
 
 export interface CliArgs {
   entry?: string;
   compact: boolean;
   stripMetadata: boolean;
   help: boolean;
-  /** Serve CBOR-encoded JSON-RPC over stdio instead of resolving once. */
-  server: boolean;
+  /** Serve JSON-RPC instead of resolving once, over stdio or HTTP. */
+  server?: ServerMode;
+  /** The `--server` wire format; CBOR unless given. */
+  format?: Format;
+  /** The `--server http` port; 0 lets the OS pick. */
+  port?: number;
   in?: string;
   out?: string;
   /** Every --param / --set / --invoke in the order given; the run stamps their version. */
@@ -65,7 +72,7 @@ function parseInvoke(target: string | undefined): [string, unknown[]] {
 
 /** Pure argv parsing (excludes node/bun binary and script name). */
 export function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { compact: false, stripMetadata: false, help: false, server: false, events: [] };
+  const args: CliArgs = { compact: false, stripMetadata: false, help: false, events: [] };
   const oneShot: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -77,7 +84,18 @@ export function parseArgs(argv: string[]): CliArgs {
     } else if (arg === '--help' || arg === '-h') {
       args.help = true;
     } else if (arg === '--server') {
-      args.server = true;
+      const mode = ServerModeSchema.safeParse(argv[++i]);
+      if (!mode.success) throw new Error(`--server expects stdio or http, got: ${argv[i] ?? '(nothing)'}`);
+      args.server = mode.data;
+    } else if (arg === '--format') {
+      const format = FormatSchema.safeParse(argv[++i]);
+      if (!format.success) throw new Error(`--format expects cbor or json, got: ${argv[i] ?? '(nothing)'}`);
+      args.format = format.data;
+    } else if (arg === '--port') {
+      const port = argv[++i];
+      if (port === undefined || !/^\d+$/.test(port) || Number(port) > 65535)
+        throw new Error(`--port expects a port number (0-65535), got: ${port ?? '(nothing)'}`);
+      args.port = Number(port);
     } else if (arg === '--out') {
       const path = argv[++i];
       if (path === undefined || path.startsWith('-'))
@@ -104,6 +122,8 @@ export function parseArgs(argv: string[]): CliArgs {
     }
   }
   if (args.server && oneShot.length > 0) throw new Error(`--server cannot be combined with ${oneShot[0]}`);
+  if (args.port !== undefined && args.server !== 'http') throw new Error('--port needs --server http');
+  if (args.format !== undefined && !args.server) throw new Error('--format needs --server');
   return args;
 }
 
@@ -268,10 +288,15 @@ const RESOLVE_PARAMS = 'resolve expects { entry?, in?, inputs?: [{ type, path, v
 /** Check `--server` `resolve` params. */
 export function parseRunParams(params: unknown = {}): RunRequest {
   const parsed = ResolveParamsSchema.safeParse(params);
-  if (!parsed.success) throw new StdioError(INVALID_PARAMS, `${RESOLVE_PARAMS}\n${z.prettifyError(parsed.error)}`);
+  if (!parsed.success) throw new RpcError(INVALID_PARAMS, `${RESOLVE_PARAMS}\n${z.prettifyError(parsed.error)}`);
   const { entry, in: prior, inputs, stripMetadata } = parsed.data;
   return { entry, prior, inputs, stripMetadata };
 }
+
+/** The JSON-RPC methods `--server` answers, whichever the transport. */
+export const serverMethods = (cwd: string): Methods => ({
+  resolve: (params) => run(cwd, parseRunParams(params)),
+});
 
 // Entry point only — no-op when imported (e.g. by tests).
 if (import.meta.main) {
@@ -281,27 +306,33 @@ if (import.meta.main) {
       process.stdout.write(`${USAGE}\n`);
       process.exit(0);
     }
-    if (args.server) {
-      const cwd = process.cwd();
-      const server = new StdioServer({ resolve: (params) => run(cwd, parseRunParams(params)) });
+    if (args.server === 'stdio') {
+      const server = new StdioServer(serverMethods(process.cwd()), args.format);
       await server.serve(process.stdin, (bytes) => process.stdout.write(bytes));
       process.exit(0);
     }
-    const prior =
-      args.in === undefined
-        ? undefined
-        : JSON.parse(args.in === '-' ? await Bun.stdin.text() : await Bun.file(args.in).text());
-    const out = await run(process.cwd(), {
-      entry: args.entry,
-      prior,
-      inputs: args.events,
-      stripMetadata: args.stripMetadata,
-    });
-    const json = `${JSON.stringify(out, null, args.compact ? 0 : 2)}\n`;
-    // A state that resolves or asks can be saved; Bun.write replaces the file.
-    if (args.out !== undefined && !(out !== null && typeof out === 'object' && 'errors' in out))
-      await Bun.write(args.out, json);
-    process.stdout.write(json);
+    if (args.server === 'http') {
+      // Loopback only: `entry` names files on this machine, so the server must not answer other hosts.
+      const { fetch } = new HttpServer(serverMethods(process.cwd()), args.format);
+      const server = Bun.serve({ hostname: '127.0.0.1', port: args.port ?? DEFAULT_PORT, fetch });
+      console.error(`listening on ${server.url}`);
+    } else {
+      const prior =
+        args.in === undefined
+          ? undefined
+          : JSON.parse(args.in === '-' ? await Bun.stdin.text() : await Bun.file(args.in).text());
+      const out = await run(process.cwd(), {
+        entry: args.entry,
+        prior,
+        inputs: args.events,
+        stripMetadata: args.stripMetadata,
+      });
+      const json = `${JSON.stringify(out, null, args.compact ? 0 : 2)}\n`;
+      // A state that resolves or asks can be saved; Bun.write replaces the file.
+      if (args.out !== undefined && !(out !== null && typeof out === 'object' && 'errors' in out))
+        await Bun.write(args.out, json);
+      process.stdout.write(json);
+    }
   } catch (err) {
     console.error(err instanceof Error ? err.message : err);
     process.exit(1);

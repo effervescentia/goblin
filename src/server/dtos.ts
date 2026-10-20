@@ -9,3 +9,7 @@ export const RequestSchema = z.object({
   id: z.union([z.string(), z.number(), z.null()]).exactOptional(),
   params: z.union([z.record(z.string(), z.unknown()), z.array(z.unknown()), z.null()]).optional(),
 });
+
+export const FormatSchema = z.enum(['cbor', 'json']);
+
+export type Format = z.infer<typeof FormatSchema>;
