@@ -1,4 +1,4 @@
-export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server stdio|http] [--port n] [--help]
+export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server stdio|http] [--format cbor|json] [--port n] [--help]
 
 Resolves a goblin document and prints the result as JSON: either
 { "hash", "version", "events", "data" } when all :param values are
@@ -46,8 +46,8 @@ Arguments:
                 { "query": … }; an { "errors" } result leaves it untouched.
   --server      Stay up as a JSON-RPC 2.0 server instead of resolving once.
                 stdio reads requests from stdin and writes responses to
-                stdout, each message one CBOR item; it exits at end of stdin.
-                http answers JSON requests (or batches) POSTed to / on
+                stdout, each message one --format item; it exits at end of
+                stdin. http answers requests (or batches) POSTed to / on
                 127.0.0.1 — 200 with the response, 204 when all were
                 notifications — until killed, logging its URL to stderr.
                 Method "resolve" takes { entry?, in?, inputs?, stripMetadata? }
@@ -56,6 +56,10 @@ Arguments:
                 answers the envelope a run would print.
                 Cannot be combined with --param, --set, --invoke, --out,
                 --strip-metadata or --compact.
+  --format      Wire format for --server requests and responses: cbor
+                (default; one CBOR item per message, application/cbor over
+                http) or json (one line per message over stdio,
+                application/json over http).
   --port        Port for --server http (default 8080; 0 picks a free one).
   --help, -h    Show this help.`;
 

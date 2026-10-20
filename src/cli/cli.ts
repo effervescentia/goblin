@@ -3,7 +3,7 @@
  * Goblin CLI — resolves the application state and prints it as JSON.
  *
  * Usage:
- *   goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--in state.json|-] [--out file.json] [--server stdio|http] [--port n] [--help]
+ *   goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--in state.json|-] [--out file.json] [--server stdio|http] [--format cbor|json] [--port n] [--help]
  *
  * With no entry file, `.goblin.yaml` in the current directory is required.
  * An entry containing a directory (`examples/foo.yaml`) is resolved with
@@ -18,6 +18,7 @@ import type { EngineEvent } from '@/core/journal';
 import { StateEventSchema, VersionSchema } from '@/dtos';
 import { type InputEvent, isInputEvent, type StateEvent } from '@/inputs';
 import { print } from '@/nodes/serialize';
+import { type Format, FormatSchema } from '@/server/dtos';
 import { HttpServer } from '@/server/http';
 import { INVALID_PARAMS, type Methods, RpcError } from '@/server/rpc';
 import { StdioServer } from '@/server/stdio';
@@ -29,8 +30,10 @@ export interface CliArgs {
   compact: boolean;
   stripMetadata: boolean;
   help: boolean;
-  /** Serve JSON-RPC instead of resolving once: CBOR over stdio, or JSON over HTTP. */
+  /** Serve JSON-RPC instead of resolving once, over stdio or HTTP. */
   server?: ServerMode;
+  /** The `--server` wire format; CBOR unless given. */
+  format?: Format;
   /** The `--server http` port; 0 lets the OS pick. */
   port?: number;
   in?: string;
@@ -84,6 +87,10 @@ export function parseArgs(argv: string[]): CliArgs {
       const mode = ServerModeSchema.safeParse(argv[++i]);
       if (!mode.success) throw new Error(`--server expects stdio or http, got: ${argv[i] ?? '(nothing)'}`);
       args.server = mode.data;
+    } else if (arg === '--format') {
+      const format = FormatSchema.safeParse(argv[++i]);
+      if (!format.success) throw new Error(`--format expects cbor or json, got: ${argv[i] ?? '(nothing)'}`);
+      args.format = format.data;
     } else if (arg === '--port') {
       const port = argv[++i];
       if (port === undefined || !/^\d+$/.test(port) || Number(port) > 65535)
@@ -116,6 +123,7 @@ export function parseArgs(argv: string[]): CliArgs {
   }
   if (args.server && oneShot.length > 0) throw new Error(`--server cannot be combined with ${oneShot[0]}`);
   if (args.port !== undefined && args.server !== 'http') throw new Error('--port needs --server http');
+  if (args.format !== undefined && !args.server) throw new Error('--format needs --server');
   return args;
 }
 
@@ -299,13 +307,13 @@ if (import.meta.main) {
       process.exit(0);
     }
     if (args.server === 'stdio') {
-      const server = new StdioServer(serverMethods(process.cwd()));
+      const server = new StdioServer(serverMethods(process.cwd()), args.format);
       await server.serve(process.stdin, (bytes) => process.stdout.write(bytes));
       process.exit(0);
     }
     if (args.server === 'http') {
       // Loopback only: `entry` names files on this machine, so the server must not answer other hosts.
-      const { fetch } = new HttpServer(serverMethods(process.cwd()));
+      const { fetch } = new HttpServer(serverMethods(process.cwd()), args.format);
       const server = Bun.serve({ hostname: '127.0.0.1', port: args.port ?? DEFAULT_PORT, fetch });
       console.error(`listening on ${server.url}`);
     } else {

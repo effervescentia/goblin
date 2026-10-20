@@ -36,3 +36,37 @@ describe('StdioServer.serve', () => {
     ]);
   });
 });
+
+describe('StdioServer.serve --format json', () => {
+  const server = new StdioServer({ echo: (params: unknown) => params }, 'json');
+  const text = new TextEncoder();
+
+  async function served(...parts: string[]): Promise<unknown[]> {
+    const out: string[] = [];
+    await server.serve(chunks(...parts.map((part) => text.encode(part))), (bytes) => {
+      out.push(new TextDecoder().decode(bytes));
+    });
+    return out
+      .join('')
+      .trimEnd()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+  }
+
+  it('reads one message per line, across chunks and without a final newline', async () => {
+    const line = (id: number) => JSON.stringify({ jsonrpc: '2.0', id, method: 'echo', params: { n: id } });
+    const first = line(1);
+    expect(await served(first.slice(0, 5), `${first.slice(5)}\n\n${line(2)}\n`, line(3))).toEqual([
+      { jsonrpc: '2.0', id: 1, result: { n: 1 } },
+      { jsonrpc: '2.0', id: 2, result: { n: 2 } },
+      { jsonrpc: '2.0', id: 3, result: { n: 3 } },
+    ]);
+  });
+
+  it('reports a malformed line as a parse error and keeps reading', async () => {
+    expect(await served(`{\n${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'echo' })}\n`)).toMatchObject([
+      { id: null, error: { code: PARSE_ERROR } },
+      { id: 1, result: null },
+    ]);
+  });
+});

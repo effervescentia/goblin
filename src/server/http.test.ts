@@ -1,13 +1,16 @@
+import { decode, encode } from 'cbor-x';
 import { describe, expect, it } from 'vitest';
 import { HttpServer } from './http';
 import { PARSE_ERROR } from './rpc';
 
-const server = new HttpServer({ echo: (params: unknown) => params });
-
-const post = (body: string, headers: Record<string, string> = { 'content-type': 'application/json' }) =>
-  server.fetch(new Request('http://localhost/', { method: 'POST', headers, body }));
+const methods = { echo: (params: unknown) => params };
 
 describe('HttpServer.fetch', () => {
+  const server = new HttpServer(methods, 'json');
+
+  const post = (body: string, headers: Record<string, string> = { 'content-type': 'application/json' }) =>
+    server.fetch(new Request('http://localhost/', { method: 'POST', headers, body }));
+
   it('answers a posted request with its JSON response', async () => {
     const res = await post(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'echo', params: { a: 1 } }));
     expect(res.status).toBe(200);
@@ -43,5 +46,27 @@ describe('HttpServer.fetch', () => {
     expect(get.status).toBe(405);
     expect(get.headers.get('allow')).toBe('POST');
     expect((await post('{}', { 'content-type': 'text/plain' })).status).toBe(415);
+    expect((await post('{}', { 'content-type': 'application/cbor' })).status).toBe(415);
+  });
+});
+
+describe('HttpServer.fetch over CBOR (the default)', () => {
+  const server = new HttpServer(methods);
+
+  const post = (body: Uint8Array<ArrayBuffer>, type = 'application/cbor') =>
+    server.fetch(new Request('http://localhost/', { method: 'POST', headers: { 'content-type': type }, body }));
+
+  const read = async (res: Response) => decode(new Uint8Array(await res.arrayBuffer()));
+
+  it('answers a CBOR request with its CBOR response', async () => {
+    const res = await post(new Uint8Array(encode({ jsonrpc: '2.0', id: 1, method: 'echo', params: { a: 1 } })));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('application/cbor');
+    expect(await read(res)).toEqual({ jsonrpc: '2.0', id: 1, result: { a: 1 } });
+  });
+
+  it('reports malformed CBOR as a JSON-RPC parse error, and refuses JSON', async () => {
+    expect(await read(await post(new Uint8Array([0x1c])))).toMatchObject({ id: null, error: { code: PARSE_ERROR } });
+    expect((await post(new Uint8Array(encode({})), 'application/json')).status).toBe(415);
   });
 });

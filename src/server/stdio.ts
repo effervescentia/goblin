@@ -1,18 +1,19 @@
 /**
  * JSON-RPC 2.0 over stdio, each message (request, response or batch) one CBOR
- * item. CBOR items are self-delimiting, so the stream needs no other framing.
+ * item, or one line of JSON. Either way the stream needs no other framing.
  */
-import { Decoder, Encoder } from 'cbor-x';
+import { type Codec, codecFor } from './codec';
+import type { Format } from './dtos';
 import { failure, type Methods, PARSE_ERROR, RpcServer } from './rpc';
 
 /** Answers JSON-RPC `methods` read from a byte stream, one message at a time and in order. */
 export class StdioServer {
-  private readonly decoder = new Decoder({ mapsAsObjects: true, useRecords: false });
-  private readonly encoder = new Encoder({ mapsAsObjects: true, useRecords: false });
+  private readonly codec: Codec;
   private readonly rpc: RpcServer;
 
-  constructor(methods: Methods) {
+  constructor(methods: Methods, format: Format = 'cbor') {
     this.rpc = new RpcServer(methods);
+    this.codec = codecFor(format);
   }
 
   /** Serve requests from `input` until it ends. */
@@ -22,31 +23,17 @@ export class StdioServer {
       const joined = new Uint8Array(pending.length + chunk.length);
       joined.set(pending);
       joined.set(chunk, pending.length);
-      pending = joined;
-      const messages: unknown[] = [];
-      try {
-        this.decoder.decodeMultiple(pending, (message) => {
-          messages.push(message);
-        });
-        pending = new Uint8Array(0);
-      } catch (err) {
-        const partial = err as { incomplete?: boolean; lastPosition?: number };
-        // A torn item waits for the rest; a malformed one leaves no way to resync, so drop what is buffered.
-        if (partial.incomplete) pending = pending.slice(partial.lastPosition ?? 0);
-        else {
-          pending = new Uint8Array(0);
-          write(
-            this.encoder.encode(
-              failure(null, PARSE_ERROR, `invalid CBOR: ${err instanceof Error ? err.message : err}`),
-            ),
-          );
-        }
-      }
-      for (const message of messages) {
-        const answer = await this.rpc.handle(message);
-        if (answer !== undefined) write(this.encoder.encode(answer));
-      }
+      pending = await this.answer(joined, false, write);
     }
-    if (pending.length > 0) write(this.encoder.encode(failure(null, PARSE_ERROR, 'input ended mid-message')));
+    if (pending.length > 0) await this.answer(pending, true, write);
+  }
+
+  private async answer(pending: Uint8Array<ArrayBuffer>, final: boolean, write: (bytes: Uint8Array) => unknown) {
+    const { frames, rest } = this.codec.frames(pending, final);
+    for (const frame of frames) {
+      const answer = 'error' in frame ? failure(null, PARSE_ERROR, frame.error) : await this.rpc.handle(frame.message);
+      if (answer !== undefined) write(this.codec.encode(answer));
+    }
+    return rest;
   }
 }
