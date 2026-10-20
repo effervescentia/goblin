@@ -3,7 +3,7 @@
  * Goblin CLI — resolves the application state and prints it as JSON.
  *
  * Usage:
- *   goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--in state.json|-] [--out file.json] [--help]
+ *   goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--in state.json|-] [--out file.json] [--server] [--help]
  *
  * With no entry file, `.goblin.yaml` in the current directory is required.
  * An entry containing a directory (`examples/foo.yaml`) is resolved with
@@ -16,8 +16,9 @@ import { GoblinEngine } from './engine';
 import { type InputEvent, parseDice, type RollEvent, type StateEvent, type WriteEvent } from './inputs';
 import type { EngineEvent } from './journal';
 import { print } from './nodes/serialize';
+import { INVALID_PARAMS, StdioError, serve } from './server/stdio';
 
-export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--help]
+export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server] [--help]
 
 Resolves a goblin document and prints the result as JSON: either
 { "hash", "version", "events", "data" } when all :param values are
@@ -63,6 +64,14 @@ Arguments:
   --out         Also write the JSON to this file (replacing it) when the
                 document resolves to { "data": … } or asks with
                 { "query": … }; an { "errors" } result leaves it untouched.
+  --server      Stay up as a server: read JSON-RPC 2.0 requests from stdin
+                and write responses to stdout, each message one CBOR item.
+                Method "resolve" takes { entry?, in?, inputs?, stripMetadata? }
+                — in is a prior envelope, inputs a list of { type:
+                "parameter" | "override" | "invoke", path, value } — and
+                answers the envelope a run would print. Exits at end of stdin.
+                Cannot be combined with --param, --set, --invoke, --out,
+                --strip-metadata or --compact.
   --help, -h    Show this help.`;
 
 export interface CliArgs {
@@ -70,6 +79,8 @@ export interface CliArgs {
   compact: boolean;
   stripMetadata: boolean;
   help: boolean;
+  /** Serve CBOR-encoded JSON-RPC over stdio instead of resolving once. */
+  server: boolean;
   in?: string;
   out?: string;
   /** Every --param / --set / --invoke in the order given; the run stamps their version. */
@@ -107,17 +118,24 @@ function parseInvoke(target: string | undefined): [string, unknown[]] {
 const INVOKE_ALONE =
   '--invoke cannot be combined with --param or --set: invoke on a stable state, answer in another run';
 
+/** Flags that shape a single run's inputs or output, meaningless to a server answering many. */
+const ONE_SHOT = ['--param', '--set', '--invoke', '--out', '--strip-metadata', '--compact'];
+
 /** Pure argv parsing (excludes node/bun binary and script name). */
 export function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { compact: false, stripMetadata: false, help: false, events: [] };
+  const args: CliArgs = { compact: false, stripMetadata: false, help: false, server: false, events: [] };
+  const oneShot: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
+    if (ONE_SHOT.includes(arg)) oneShot.push(arg);
     if (arg === '--compact') {
       args.compact = true;
     } else if (arg === '--strip-metadata') {
       args.stripMetadata = true;
     } else if (arg === '--help' || arg === '-h') {
       args.help = true;
+    } else if (arg === '--server') {
+      args.server = true;
     } else if (arg === '--out') {
       const path = argv[++i];
       if (path === undefined || path.startsWith('-'))
@@ -143,6 +161,7 @@ export function parseArgs(argv: string[]): CliArgs {
       throw new Error(`unexpected argument: ${arg}`);
     }
   }
+  if (args.server && oneShot.length > 0) throw new Error(`--server cannot be combined with ${oneShot[0]}`);
   return args;
 }
 
@@ -297,6 +316,64 @@ export async function resolveApp(
   return { state, actor, engine };
 }
 
+/** One resolution turn: replay a prior envelope (`--in`), append these inputs
+ * as its next version, and answer with the envelope the CLI prints. */
+export async function run(
+  cwd: string,
+  { entry, prior: saved, inputs, stripMetadata = false }: RunRequest,
+): Promise<unknown> {
+  const prior = saved === undefined ? { version: 0, events: [], stable: true } : rehydrate(saved);
+  // An invoke acts on a settled sheet: a saved one, or an entry that needs no input.
+  const invoked = inputs.some((event) => event.type === 'invoke');
+  if (invoked && inputs.length > 1) throw new Error(INVOKE_ALONE);
+  if (invoked && !prior.stable) throw new Error('--invoke needs a stable state: --in still asks for params');
+  if (invoked && saved === undefined && !('data' in (await resolveAppState(cwd, entry))))
+    throw new Error('--invoke needs a stable state: the entry asks for params or fails validation');
+  const version = prior.version + 1;
+  const events: StateEvent[] = [...prior.events, ...inputs.map((event) => ({ version, ...event }))];
+  const { state, actor, engine } = await resolveApp(cwd, entry, events);
+  // Only this run's invoke answers with a result; earlier ones just replay their writes.
+  const show = stripMetadata ? print : (value: unknown) => value;
+  const shown =
+    'data' in state
+      ? { ...(invoked && 'result' in state ? { result: show(state.result) } : {}), data: show(state.data) }
+      : state;
+  const made = 'errors' in state ? [] : engine.events(actor, 'data' in state ? state.data : undefined);
+  const stream = weave(
+    events.filter(isInput),
+    made.map((entry) => ({ ...entry, event: { ...entry.event, value: show(entry.event.value) } }) as EngineEvent),
+    version,
+  );
+  return withHash(shown, stream, version);
+}
+
+export interface RunRequest {
+  entry?: string;
+  /** A prior `{ data }` / `{ query }` envelope to replay, as `--in` reads it. */
+  prior?: unknown;
+  inputs: Omit<InputEvent, 'version'>[];
+  stripMetadata?: boolean;
+}
+
+const RESOLVE_PARAMS = 'resolve expects { entry?, in?, inputs?: [{ type, path, value }], stripMetadata? }';
+
+/** Check `--server` `resolve` params, holding inputs to the rules `parseArgs` does. */
+export function parseRunParams(params: unknown = {}): RunRequest {
+  if (!isRecord(params)) throw new StdioError(INVALID_PARAMS, RESOLVE_PARAMS);
+  const { entry, in: prior, inputs = [], stripMetadata = false } = params;
+  if (
+    (entry !== undefined && typeof entry !== 'string') ||
+    typeof stripMetadata !== 'boolean' ||
+    !Array.isArray(inputs) ||
+    !inputs.every((input) => isInput({ version: 0, ...input }))
+  )
+    throw new StdioError(INVALID_PARAMS, RESOLVE_PARAMS);
+  const invokes = inputs.filter((input) => input.type === 'invoke').length;
+  if (invokes > 1) throw new StdioError(INVALID_PARAMS, 'inputs may hold one invoke per call');
+  if (invokes > 0 && inputs.length > 1) throw new StdioError(INVALID_PARAMS, INVOKE_ALONE);
+  return { entry, prior, inputs: inputs as RunRequest['inputs'], stripMetadata };
+}
+
 // Entry point only — no-op when imported (e.g. by tests).
 if (import.meta.main) {
   try {
@@ -305,34 +382,27 @@ if (import.meta.main) {
       process.stdout.write(`${USAGE}\n`);
       process.exit(0);
     }
+    if (args.server) {
+      const cwd = process.cwd();
+      await serve(process.stdin, (bytes) => process.stdout.write(bytes), {
+        resolve: (params) => run(cwd, parseRunParams(params)),
+      });
+      process.exit(0);
+    }
     const prior =
       args.in === undefined
-        ? { version: 0, events: [], stable: true }
-        : rehydrate(JSON.parse(args.in === '-' ? await Bun.stdin.text() : await Bun.file(args.in).text()));
-    // An invoke acts on a settled sheet: a saved one, or an entry that needs no input.
-    const invoked = args.events.some((event) => event.type === 'invoke');
-    if (invoked && !prior.stable) throw new Error('--invoke needs a stable state: --in still asks for params');
-    if (invoked && args.in === undefined && !('data' in (await resolveAppState(process.cwd(), args.entry))))
-      throw new Error('--invoke needs a stable state: the entry asks for params or fails validation');
-    const version = prior.version + 1;
-    const events: StateEvent[] = [...prior.events, ...args.events.map((event) => ({ version, ...event }))];
-    const { state, actor, engine } = await resolveApp(process.cwd(), args.entry, events);
-    // Only this run's invoke answers with a result; earlier ones just replay their writes.
-    const show = args.stripMetadata ? print : (value: unknown) => value;
-    const shown =
-      'data' in state
-        ? { ...(invoked && 'result' in state ? { result: show(state.result) } : {}), data: show(state.data) }
-        : state;
-    const made = 'errors' in state ? [] : engine.events(actor, 'data' in state ? state.data : undefined);
-    const stream = weave(
-      events.filter(isInput),
-      made.map((entry) => ({ ...entry, event: { ...entry.event, value: show(entry.event.value) } }) as EngineEvent),
-      version,
-    );
-    const out = withHash(shown, stream, version);
+        ? undefined
+        : JSON.parse(args.in === '-' ? await Bun.stdin.text() : await Bun.file(args.in).text());
+    const out = await run(process.cwd(), {
+      entry: args.entry,
+      prior,
+      inputs: args.events,
+      stripMetadata: args.stripMetadata,
+    });
     const json = `${JSON.stringify(out, null, args.compact ? 0 : 2)}\n`;
     // A state that resolves or asks can be saved; Bun.write replaces the file.
-    if (args.out !== undefined && !('errors' in state)) await Bun.write(args.out, json);
+    if (args.out !== undefined && !(out !== null && typeof out === 'object' && 'errors' in out))
+      await Bun.write(args.out, json);
     process.stdout.write(json);
   } catch (err) {
     console.error(err instanceof Error ? err.message : err);

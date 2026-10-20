@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { decodeMultiple, encode } from 'cbor-x';
 import { describe, expect, it } from 'vitest';
 import { parseArgs, parseParamValue, rehydrate, USAGE, weave, withHash } from './cli';
 import { COMPANION_PARAMS } from './dnd5e.fixtures';
@@ -17,6 +18,7 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
+      server: false,
       events: [],
     });
   });
@@ -27,6 +29,7 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
+      server: false,
       events: [],
     });
   });
@@ -37,6 +40,7 @@ describe('parseArgs', () => {
       compact: true,
       stripMetadata: false,
       help: false,
+      server: false,
       events: [],
     });
     expect(parseArgs(['main.yaml', '--compact'])).toEqual({
@@ -44,6 +48,7 @@ describe('parseArgs', () => {
       compact: true,
       stripMetadata: false,
       help: false,
+      server: false,
       events: [],
     });
   });
@@ -54,6 +59,7 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: true,
       help: false,
+      server: false,
       events: [],
     });
     expect(parseArgs(['main.yaml', '--compact', '--strip-metadata'])).toEqual({
@@ -61,6 +67,7 @@ describe('parseArgs', () => {
       compact: true,
       stripMetadata: true,
       help: false,
+      server: false,
       events: [],
     });
   });
@@ -71,6 +78,7 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: true,
+      server: false,
       events: [],
     });
     expect(parseArgs(['-h'])).toEqual({
@@ -78,6 +86,7 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: true,
+      server: false,
       events: [],
     });
   });
@@ -88,6 +97,7 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
+      server: false,
       events: [{ type: 'parameter', path: 'hero_name', value: 'Aria' }],
     });
     expect(parseArgs(['--param', 'level=3', '--param', 'name=Aria'])).toEqual({
@@ -95,6 +105,7 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
+      server: false,
       events: [
         { type: 'parameter', path: 'level', value: 3 },
         { type: 'parameter', path: 'name', value: 'Aria' },
@@ -108,6 +119,7 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
+      server: false,
       events: [{ type: 'parameter', path: 'skills.trained', value: ['athletics', 'perception'] }],
     });
   });
@@ -128,6 +140,7 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
+      server: false,
       events: [{ type: 'override', path: 'level', value: 5 }],
     });
     expect(
@@ -179,6 +192,28 @@ describe('parseArgs', () => {
   it('rejects unexpected arguments', () => {
     expect(() => parseArgs(['--bogus'])).toThrow('unexpected argument');
     expect(() => parseArgs(['a.yaml', 'b.yaml'])).toThrow('unexpected argument');
+  });
+});
+
+describe('parseArgs --server', () => {
+  it('accepts --server with an entry and --in', () => {
+    expect(parseArgs(['--server', 'a.yaml', '--in', 'state.json'])).toMatchObject({
+      server: true,
+      entry: 'a.yaml',
+      in: 'state.json',
+    });
+  });
+
+  it.each([
+    ['--param', 'level=3'],
+    ['--set', 'level=3'],
+    ['--invoke', 'heal(5)'],
+    ['--out', 'out.json'],
+    ['--strip-metadata'],
+    ['--compact'],
+  ])('rejects %s alongside --server', (...flag) => {
+    expect(() => parseArgs(['--server', ...flag])).toThrow(`--server cannot be combined with ${flag[0]}`);
+    expect(() => parseArgs([...flag, '--server'])).toThrow(`--server cannot be combined with ${flag[0]}`);
   });
 });
 
@@ -367,7 +402,7 @@ describe('rehydrate', () => {
 describe('USAGE', () => {
   it('documents the CLI', () => {
     expect(USAGE).toContain(
-      'goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--help]',
+      'goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server] [--help]',
     );
     expect(USAGE).toContain('--out');
     expect(USAGE).toContain('--in');
@@ -694,5 +729,42 @@ describe('cli', () => {
     expect(pc.level).toBe(5);
     expect(pc.initiative).toEqual({ base: 2, roll: '1d20 + .base' }); // dex 14 → +2
     expect((pc.features as Record<string, unknown>).second_wind).toBeNull();
+  });
+});
+
+describe('cli --server', () => {
+  const server = (...messages: unknown[]): unknown[] => {
+    const input = Buffer.concat(messages.map((message) => encode(message)));
+    const stdout = execFileSync('bun', ['src/cli.ts', '--server'], { cwd: root, input });
+    return decodeMultiple(stdout) ?? [];
+  };
+
+  it('answers resolve turns with the envelope a run prints, until stdin ends', () => {
+    const entry = 'examples/08-parameters.yaml';
+    const [asking] = server({ jsonrpc: '2.0', id: 1, method: 'resolve', params: { entry } }) as [{ result: unknown }];
+    expect(asking).toMatchObject({ jsonrpc: '2.0', id: 1, result: { version: 1, events: [] } });
+    expect(asking.result).toEqual(JSON.parse(runCli(entry).stdout));
+
+    const inputs = [
+      { type: 'parameter', path: 'hero_name', value: 'Aria' },
+      { type: 'parameter', path: 'starting_level', value: 3 },
+      { type: 'parameter', path: 'details.title', value: 'Sir' },
+    ];
+    const [answered, missing] = server(
+      { jsonrpc: '2.0', id: 2, method: 'resolve', params: { entry, in: asking.result, inputs } },
+      { jsonrpc: '2.0', id: 3, method: 'resolve', params: { entry: 'nope.yaml' } },
+    );
+    const cli = runCli(
+      entry,
+      '--param',
+      'hero_name=Aria',
+      '--param',
+      'starting_level=3',
+      '--param',
+      'details.title=Sir',
+    );
+    expect(answered).toMatchObject({ id: 2, result: { version: 2 } });
+    expect((answered as { result: { data: unknown } }).result.data).toEqual(JSON.parse(cli.stdout).data);
+    expect(missing).toMatchObject({ id: 3, error: { code: -32000 } });
   });
 });
