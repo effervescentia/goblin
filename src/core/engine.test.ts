@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { parse as parseYaml } from 'yaml';
+import { type InputEvent, invoke, override, parameter, type StateEvent } from '@/inputs';
+import { Die, DieNode } from '@/nodes/die';
+import { ExpressionNode } from '@/nodes/expression';
+import { FunctionNode } from '@/nodes/function';
+import { RecordNode } from '@/nodes/record';
+import { debug, print } from '@/nodes/serialize';
+import { type EvalRoots, parseRef } from '@/utils';
 import { GoblinEngine } from './engine';
-import { type InputEvent, invoke, override, parameter, type StateEvent } from './inputs';
-import { Die, DieNode } from './nodes/die';
-import { ExpressionNode } from './nodes/expression';
-import { FunctionNode } from './nodes/function';
-import { RecordNode } from './nodes/record';
-import { debug, print } from './nodes/serialize';
-import { type EvalRoots, parseRef } from './utils';
 
 function testEngine() {
   const engine = new GoblinEngine('.');

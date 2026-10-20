@@ -47,9 +47,9 @@ function cliFails(entry: string, ...extra: string[]): string {
 }
 
 const script = `
-  import { GoblinEngine } from './src/engine.ts';
-  import { parameter } from './src/inputs.ts';
-  import { RecordNode } from './src/nodes/record.ts';
+  import { GoblinEngine } from '@/core/engine';
+  import { parameter } from '@/inputs';
+  import { RecordNode } from '@/nodes/record';
   const e = new GoblinEngine('5e');
   const params = (values) => Object.entries(values).map(([path, value]) => parameter(path, value));
   // Fields a patch wrote print as { :value, :events } — read the value.

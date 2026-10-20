@@ -32,19 +32,14 @@ import {
   TYPE_KEY,
   VALIDATE_KEY,
   VALUE_KEY,
-} from './constants';
-import { type InputEvent, isInputEvent, isWriteEvent, latest, nest, type StateEvent } from './inputs';
-import { type EngineEvent, Journal } from './journal';
-import type { Location } from './locations';
-import { Die, DieNode } from './nodes/die';
-import { ExpressionNode } from './nodes/expression';
-import { FunctionNode } from './nodes/function';
-import { parse } from './nodes/parse';
-import { type MissingParam, RecordNode } from './nodes/record';
-import { debug } from './nodes/serialize';
-import { Patcher } from './patcher';
-import { Provenance } from './provenance';
-import { Registry } from './registry';
+} from '@/constants';
+import { type InputEvent, isInputEvent, isWriteEvent, latest, nest, type StateEvent } from '@/inputs';
+import { Die, DieNode } from '@/nodes/die';
+import { ExpressionNode } from '@/nodes/expression';
+import { FunctionNode } from '@/nodes/function';
+import { parse } from '@/nodes/parse';
+import { type MissingParam, RecordNode } from '@/nodes/record';
+import { debug } from '@/nodes/serialize';
 import {
   type AssignOp,
   compileBody,
@@ -66,7 +61,12 @@ import {
   rootFor,
   sameValue,
   setPath,
-} from './utils';
+} from '@/utils';
+import { type EngineEvent, Journal } from './journal';
+import type { Location } from './locations';
+import { Patcher } from './patcher';
+import { Provenance } from './provenance';
+import { Registry } from './registry';
 
 export class GoblinEngine {
   private readonly provenance = new Provenance();

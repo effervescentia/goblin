@@ -1,6 +1,6 @@
 import { decodeMultiple, encode } from 'cbor-x';
 import { describe, expect, it } from 'vitest';
-import { parseRunParams } from '../cli/cli';
+import { parseRunParams } from '@/cli/cli';
 import { INVALID_PARAMS, INVALID_REQUEST, METHOD_NOT_FOUND, PARSE_ERROR, StdioError, StdioServer } from './stdio';
 
 const server = new StdioServer({

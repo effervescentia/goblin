@@ -1,5 +1,5 @@
-import type { GoblinEngine } from '../engine';
-import type { EvalRoots } from '../utils';
+import type { GoblinEngine } from '@/core/engine';
+import type { EvalRoots } from '@/utils';
 
 /**
  * A classified document value. Each subclass implements one branch of

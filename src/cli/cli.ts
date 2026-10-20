@@ -13,12 +13,12 @@
  */
 import { createHash } from 'node:crypto';
 import z from 'zod';
-import { StateEventSchema, VersionSchema } from '../dtos';
-import { GoblinEngine } from '../engine';
-import { type InputEvent, isInputEvent, type StateEvent } from '../inputs';
-import type { EngineEvent } from '../journal';
-import { print } from '../nodes/serialize';
-import { INVALID_PARAMS, StdioError, StdioServer } from '../server/stdio';
+import { GoblinEngine } from '@/core/engine';
+import type { EngineEvent } from '@/core/journal';
+import { StateEventSchema, VersionSchema } from '@/dtos';
+import { type InputEvent, isInputEvent, type StateEvent } from '@/inputs';
+import { print } from '@/nodes/serialize';
+import { INVALID_PARAMS, StdioError, StdioServer } from '@/server/stdio';
 import { INVOKE_ALONE, ONE_SHOT, USAGE } from './constants';
 import { ConfigSchema, ResolveParamsSchema } from './dtos';
 

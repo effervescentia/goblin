@@ -1,5 +1,5 @@
 import z from 'zod';
-import { InputSchema } from '../dtos';
+import { InputSchema } from '@/dtos';
 import { INVOKE_ALONE } from './constants';
 
 export const ConfigSchema = z.object({ root: z.string().default('.'), main: z.string() });

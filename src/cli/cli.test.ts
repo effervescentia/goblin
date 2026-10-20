@@ -4,11 +4,11 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { COMPANION_PARAMS } from '@test/dnd5e.fixtures';
 import { decodeMultiple, encode } from 'cbor-x';
 import { describe, expect, it } from 'vitest';
-import { COMPANION_PARAMS } from '../dnd5e.fixtures';
-import { type InputEvent, invoke, latest, nest, override, parameter, paramValue } from '../inputs';
-import { print } from '../nodes/serialize';
+import { type InputEvent, invoke, latest, nest, override, parameter, paramValue } from '@/inputs';
+import { print } from '@/nodes/serialize';
 import { parseArgs, parseParamValue, rehydrate, weave, withHash } from './cli';
 import { USAGE } from './constants';
 

@@ -23,8 +23,8 @@ Always validate code changes with **both** of the following before finishing:
    ```sh
    bun run test
    ```
-   Tests live in `src/*.test.ts`. All tests must pass. Add or update tests when
-   changing engine behavior in `src/engine.ts`.
+   Unit tests sit beside their source (`src/**/*.test.ts`); end-to-end suites live in `test/`. All tests must pass. Add or update tests when
+   changing engine behavior in `src/core/engine.ts`.
 
 ## Syntax spec
 
@@ -39,9 +39,9 @@ apart. Treat a missing spec update as an incomplete change.
 - `examples/` must demonstrate every language feature from `SYNTAX.md`
   (one focused `NN-name.yaml` file per feature, plus actor/class pairs for
   applied-document syntax like path keys, `+` effects, and level blocks).
-- Every example must stay runnable: `src/examples.test.ts` resolves each file
+- Every example must stay runnable: `test/examples.test.ts` resolves each file
   through the real CLI and fails on non-zero exit or invalid JSON.
-- When syntax changes, update `SYNTAX.md`, `src/engine.ts`, `examples/`, and
+- When syntax changes, update `SYNTAX.md`, `src/core/engine.ts`, `examples/`, and
   the tests together — a feature without a working example is incomplete.
 
 ## Project notes
@@ -66,10 +66,10 @@ apart. Treat a missing spec update as an incomplete change.
 - Engine inputs are the same `InputEvent` stream the CLI saves (`src/inputs.ts`):
   `resolve`/`evaluateDoc`/`apply` take `InputEvent[]`, never param/override
   records. Replay semantics (latest per path wins) live in `src/inputs.ts`.
-- `src/engine.ts` transpiles goblin expressions with `new Function` — every
+- `src/core/engine.ts` transpiles goblin expressions with `new Function` — every
   `.name` token is treated as a goblin ref, so avoid introducing bare JS
   property access in expression strings.
-- Keep test fixtures in `src/engine.test.ts` runtime-agnostic by seeding
+- Keep test fixtures in `src/core/engine.test.ts` runtime-agnostic by seeding
   `engine.docs` directly instead of using `loadFile`.
 
 ## Code layout
@@ -79,11 +79,11 @@ apart. Treat a missing spec update as an incomplete change.
   `DieNode.parse`, `RecordNode.collectParams`, each node's `serialize`) — not as
   loose helpers in `src/utils.ts`. Keep `src/utils.ts` for genuinely shared,
   node-agnostic code (refs, paths, expression compilation, serialization).
-- `GoblinEngine` (`src/engine.ts`) keeps resolution, evaluation and inputs;
-  it delegates to `src/patcher.ts` (applying patches and mixins, call
-  expansion), `src/journal.ts` (per-field `:events`, the write/roll stream,
-  the roll tape), `src/provenance.ts` (WeakMap side tables: origins, owners,
-  homes, namespaces, locations) and `src/registry.ts` (loading, `$tmpl`
+- `GoblinEngine` (`src/core/engine.ts`) keeps resolution, evaluation and inputs;
+  it delegates to `src/core/patcher.ts` (applying patches and mixins, call
+  expansion), `src/core/journal.ts` (per-field `:events`, the write/roll stream,
+  the roll tape), `src/core/provenance.ts` (WeakMap side tables: origins, owners,
+  homes, namespaces, locations) and `src/core/registry.ts` (loading, `$tmpl`
   discovery, `$`/`$lib` binding). New history state goes in
   the journal and new "where did this come from" state in provenance, not on the engine.
 - The standard library (`$lib`) lives in `src/lib/`: one file per namespace
@@ -94,6 +94,8 @@ apart. Treat a missing spec update as an incomplete change.
 - Keep new comments to one or two lines. Say the non-obvious thing — why, or
   the catch — and let the code say the rest.
 - Use `ts-pattern`'s `match` instead of nested ternary expressions.
+- Import across directories with `@/…` (e.g. `@/core/engine`), or `@test/…`
+  for `test/`; use relative paths (`./x`) only within the same directory.
 - Imports stay acyclic: `src/utils.ts` may import from `src/nodes/` (e.g. `Die`),
   so helpers it depends on must not be moved onto a node class that imports
   back from `src/utils.ts`.

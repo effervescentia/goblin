@@ -2,11 +2,11 @@
  * Loaded documents: reading `.yaml` files (Bun-only), following `$tmpl('…')`
  * references, and binding their top-level tables into `$` and `$lib`.
  */
-import { TEMPLATE_SCAN } from './constants';
-import { withNatives } from './lib';
+import { TEMPLATE_SCAN } from '@/constants';
+import { withNatives } from '@/lib';
+import { isBareSigil, isMetaKey, isValidateKey, joinPath } from '@/utils';
 import { collectLocations } from './locations';
 import type { Provenance } from './provenance';
-import { isBareSigil, isMetaKey, isValidateKey, joinPath } from './utils';
 
 export class Registry {
   /** Raw (unevaluated) documents by file name. */

@@ -1,4 +1,4 @@
-import { Die } from '../nodes/die';
+import { Die } from '@/nodes/die';
 
 /** `$lib.dice` — rolls that read each die, which inline `NdM` (a plain sum)
  * cannot. Takes counts and sides, since inline dice roll before a call sees them. */

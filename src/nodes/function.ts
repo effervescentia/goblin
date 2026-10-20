@@ -8,10 +8,10 @@ import {
   SOURCE_KEY,
   STRING_LITERAL,
   TYPE_KEY,
-} from '../constants';
-import type { GoblinEngine } from '../engine';
-import type { EvalRoots } from '../utils';
-import { deepClone, markWildcards } from '../utils';
+} from '@/constants';
+import type { GoblinEngine } from '@/core/engine';
+import type { EvalRoots } from '@/utils';
+import { deepClone, markWildcards } from '@/utils';
 import { ExpressionNode } from './expression';
 import { Node } from './node';
 

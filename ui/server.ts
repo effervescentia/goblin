@@ -6,9 +6,9 @@
  */
 import { resolve as resolvePath } from 'node:path';
 import z from 'zod';
-import { resolveApp } from '../src/cli/cli';
-import { override, parameter } from '../src/inputs';
-import { inspect } from '../src/inspect';
+import { resolveApp } from '@/cli/cli';
+import { override, parameter } from '@/inputs';
+import { inspect } from '@/inspect';
 import { ResolveRequestSchema } from './dtos';
 import index from './index.html';
 
