@@ -12,8 +12,9 @@
  * with a non-zero exit code.
  */
 import { createHash } from 'node:crypto';
+import { z } from 'zod';
 import { GoblinEngine } from './engine';
-import { type InputEvent, parseDice, type RollEvent, type StateEvent, type WriteEvent } from './inputs';
+import { type InputEvent, InputSchema, isInputEvent, type StateEvent, StateEventSchema, VersionSchema } from './inputs';
 import type { EngineEvent } from './journal';
 import { print } from './nodes/serialize';
 import { INVALID_PARAMS, StdioError, serve } from './server/stdio';
@@ -189,44 +190,6 @@ function hashOf(body: unknown): string {
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
-const isVersion = (value: unknown): value is number => Number.isInteger(value) && (value as number) >= 0;
-
-function isInput(event: unknown): event is InputEvent {
-  return (
-    isRecord(event) &&
-    isVersion(event.version) &&
-    (event.type === 'parameter' ||
-      event.type === 'override' ||
-      (event.type === 'invoke' && Array.isArray(event.value))) &&
-    typeof event.path === 'string' &&
-    event.path !== '' &&
-    'value' in event
-  );
-}
-
-function isWrite(event: unknown): event is WriteEvent {
-  return (
-    isRecord(event) &&
-    isVersion(event.version) &&
-    (event.type === 'set' || event.type === 'add' || event.type === 'subtract') &&
-    typeof event.path === 'string' &&
-    'value' in event &&
-    (event.rolled === undefined || typeof event.rolled === 'boolean')
-  );
-}
-
-function isRoll(event: unknown): event is RollEvent {
-  if (!isRecord(event) || !isVersion(event.version) || event.type !== 'roll' || typeof event.path !== 'string')
-    return false;
-  const [count, sides] = (typeof event.dice === 'string' && parseDice(event.dice)) || [];
-  const faces = event.value;
-  return (
-    sides !== undefined &&
-    Array.isArray(faces) &&
-    faces.length === count &&
-    faces.every((face) => Number.isInteger(face) && face >= 1 && face <= sides)
-  );
-}
 
 /** Thread the engine's writes and rolls into the input stream in the order
  * made: those from resolving ahead of the first invoke (or last, with none),
@@ -256,15 +219,17 @@ export function rehydrate(state: unknown): { version: number; events: StateEvent
     throw new Error('--in expects a { "data": … } or { "query": … } envelope');
   const { hash, version, events = [], result, data, query } = state;
   const stable = 'data' in state;
-  if (version !== undefined && !isVersion(version)) throw new Error('--in version must be a non-negative integer');
-  if (!Array.isArray(events) || !events.every((event) => isInput(event) || isWrite(event) || isRoll(event)))
+  if (version !== undefined && !VersionSchema.safeParse(version).success)
+    throw new Error('--in version must be a non-negative integer');
+  // Validate only: the raw events keep their key order, which the hash below covers.
+  if (!z.array(StateEventSchema).safeParse(events).success)
     throw new Error(
       '--in events must be { version, type, path, value } objects of type parameter, override, invoke, set, add, subtract or roll (with dice)',
     );
   // Stringify drops an undefined version or result, so states without them still verify.
   const body = stable ? { version, events, result, data } : { version, events, query };
   if (hash !== undefined && hash !== hashOf(body)) throw new Error('--in state hash does not match its contents');
-  return { version: version ?? 0, events, stable };
+  return { version: (version as number | undefined) ?? 0, events: events as StateEvent[], stable };
 }
 
 /** Resolution envelope plus `{ errors }` for sheets failing `!validate`. */
@@ -340,7 +305,7 @@ export async function run(
       : state;
   const made = 'errors' in state ? [] : engine.events(actor, 'data' in state ? state.data : undefined);
   const stream = weave(
-    events.filter(isInput),
+    events.filter(isInputEvent),
     made.map((entry) => ({ ...entry, event: { ...entry.event, value: show(entry.event.value) } }) as EngineEvent),
     version,
   );
@@ -357,21 +322,29 @@ export interface RunRequest {
 
 const RESOLVE_PARAMS = 'resolve expects { entry?, in?, inputs?: [{ type, path, value }], stripMetadata? }';
 
-/** Check `--server` `resolve` params, holding inputs to the rules `parseArgs` does. */
+// Holds inputs to the rules `parseArgs` does; parsed inputs come out as { type, path, value }, extra keys dropped.
+const ResolveParamsSchema = z.object({
+  entry: z.string().optional(),
+  in: z.unknown().optional(),
+  inputs: z
+    .array(InputSchema)
+    .default([])
+    .check((ctx) => {
+      const invokes = ctx.value.filter((input) => input.type === 'invoke').length;
+      if (invokes > 1)
+        ctx.issues.push({ code: 'custom', input: ctx.value, message: 'inputs may hold one invoke per call' });
+      else if (invokes > 0 && ctx.value.length > 1)
+        ctx.issues.push({ code: 'custom', input: ctx.value, message: INVOKE_ALONE });
+    }),
+  stripMetadata: z.boolean().default(false),
+});
+
+/** Check `--server` `resolve` params. */
 export function parseRunParams(params: unknown = {}): RunRequest {
-  if (!isRecord(params)) throw new StdioError(INVALID_PARAMS, RESOLVE_PARAMS);
-  const { entry, in: prior, inputs = [], stripMetadata = false } = params;
-  if (
-    (entry !== undefined && typeof entry !== 'string') ||
-    typeof stripMetadata !== 'boolean' ||
-    !Array.isArray(inputs) ||
-    !inputs.every((input) => isInput({ version: 0, ...input }))
-  )
-    throw new StdioError(INVALID_PARAMS, RESOLVE_PARAMS);
-  const invokes = inputs.filter((input) => input.type === 'invoke').length;
-  if (invokes > 1) throw new StdioError(INVALID_PARAMS, 'inputs may hold one invoke per call');
-  if (invokes > 0 && inputs.length > 1) throw new StdioError(INVALID_PARAMS, INVOKE_ALONE);
-  return { entry, prior, inputs: inputs as RunRequest['inputs'], stripMetadata };
+  const parsed = ResolveParamsSchema.safeParse(params);
+  if (!parsed.success) throw new StdioError(INVALID_PARAMS, `${RESOLVE_PARAMS}\n${z.prettifyError(parsed.error)}`);
+  const { entry, in: prior, inputs, stripMetadata } = parsed.data;
+  return { entry, prior, inputs, stripMetadata };
 }
 
 // Entry point only — no-op when imported (e.g. by tests).

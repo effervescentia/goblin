@@ -108,6 +108,12 @@ describe('parseRunParams', () => {
     });
   });
 
+  it('drops keys an input does not have, so they never reach the hashed events', () => {
+    expect(parseRunParams({ inputs: [{ value: 3, path: 'level', type: 'parameter', version: 9 }] }).inputs).toEqual([
+      { type: 'parameter', path: 'level', value: 3 },
+    ]);
+  });
+
   it('rejects malformed inputs and invokes the CLI would refuse', () => {
     expect(() => parseRunParams([])).toThrow('resolve expects');
     expect(() => parseRunParams({ entry: 1 })).toThrow('resolve expects');
