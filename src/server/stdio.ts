@@ -37,77 +37,83 @@ const failure = (id: Id, code: number, message: string): StdioResponse => ({
   error: { code, message },
 });
 
-async function call(request: unknown, methods: Methods): Promise<StdioResponse | undefined> {
-  const id =
-    isRecord(request) && (typeof request.id === 'string' || typeof request.id === 'number') ? request.id : null;
-  if (
-    !isRecord(request) ||
-    request.jsonrpc !== '2.0' ||
-    typeof request.method !== 'string' ||
-    ('id' in request && request.id !== null && typeof request.id !== 'string' && typeof request.id !== 'number') ||
-    (request.params !== undefined && typeof request.params !== 'object')
-  )
-    return failure(id, INVALID_REQUEST, 'expected { jsonrpc: "2.0", method, params?, id? }');
-  const notification = !('id' in request);
-  const method = Object.hasOwn(methods, request.method) ? methods[request.method] : undefined;
-  if (method === undefined)
-    return notification ? undefined : failure(id, METHOD_NOT_FOUND, `no such method: ${request.method}`);
-  try {
-    // A JSON round trip keeps results to what the CLI would print (and hash): no undefined, no class instances.
-    const result = JSON.parse(JSON.stringify((await method(request.params)) ?? null));
-    return notification ? undefined : { jsonrpc: '2.0', id, result };
-  } catch (err) {
-    if (notification) return undefined;
-    const message = err instanceof Error ? err.message : String(err);
-    return failure(id, err instanceof StdioError ? err.code : SERVER_ERROR, message);
-  }
-}
+/** Answers JSON-RPC `methods`, one request at a time and in order. */
+export class StdioServer {
+  private readonly decoder = new Decoder({ mapsAsObjects: true, useRecords: false });
+  private readonly encoder = new Encoder({ mapsAsObjects: true, useRecords: false });
 
-/** Answer one decoded message, a request or a batch of them; notifications get no answer. */
-export async function handle(message: unknown, methods: Methods): Promise<StdioResponse | StdioResponse[] | undefined> {
-  if (!Array.isArray(message)) return call(message, methods);
-  if (message.length === 0) return failure(null, INVALID_REQUEST, 'empty batch');
-  const answers: StdioResponse[] = [];
-  for (const request of message) {
-    const answer = await call(request, methods);
-    if (answer !== undefined) answers.push(answer);
-  }
-  return answers.length > 0 ? answers : undefined;
-}
+  constructor(private readonly methods: Methods) {}
 
-/** Serve requests from `input` until it ends, one at a time and in order. */
-export async function serve(
-  input: AsyncIterable<Uint8Array>,
-  write: (bytes: Uint8Array) => unknown,
-  methods: Methods,
-): Promise<void> {
-  const decoder = new Decoder({ mapsAsObjects: true, useRecords: false });
-  const encoder = new Encoder({ mapsAsObjects: true, useRecords: false });
-  let pending = new Uint8Array(0);
-  for await (const chunk of input) {
-    const joined = new Uint8Array(pending.length + chunk.length);
-    joined.set(pending);
-    joined.set(chunk, pending.length);
-    pending = joined;
-    const messages: unknown[] = [];
-    try {
-      decoder.decodeMultiple(pending, (message) => {
-        messages.push(message);
-      });
-      pending = new Uint8Array(0);
-    } catch (err) {
-      const partial = err as { incomplete?: boolean; lastPosition?: number };
-      // A torn item waits for the rest; a malformed one leaves no way to resync, so drop what is buffered.
-      if (partial.incomplete) pending = pending.slice(partial.lastPosition ?? 0);
-      else {
+  /** Serve requests from `input` until it ends. */
+  async serve(input: AsyncIterable<Uint8Array>, write: (bytes: Uint8Array) => unknown): Promise<void> {
+    let pending = new Uint8Array(0);
+    for await (const chunk of input) {
+      const joined = new Uint8Array(pending.length + chunk.length);
+      joined.set(pending);
+      joined.set(chunk, pending.length);
+      pending = joined;
+      const messages: unknown[] = [];
+      try {
+        this.decoder.decodeMultiple(pending, (message) => {
+          messages.push(message);
+        });
         pending = new Uint8Array(0);
-        write(encoder.encode(failure(null, PARSE_ERROR, `invalid CBOR: ${err instanceof Error ? err.message : err}`)));
+      } catch (err) {
+        const partial = err as { incomplete?: boolean; lastPosition?: number };
+        // A torn item waits for the rest; a malformed one leaves no way to resync, so drop what is buffered.
+        if (partial.incomplete) pending = pending.slice(partial.lastPosition ?? 0);
+        else {
+          pending = new Uint8Array(0);
+          write(
+            this.encoder.encode(
+              failure(null, PARSE_ERROR, `invalid CBOR: ${err instanceof Error ? err.message : err}`),
+            ),
+          );
+        }
+      }
+      for (const message of messages) {
+        const answer = await this.handle(message);
+        if (answer !== undefined) write(this.encoder.encode(answer));
       }
     }
-    for (const message of messages) {
-      const answer = await handle(message, methods);
-      if (answer !== undefined) write(encoder.encode(answer));
+    if (pending.length > 0) write(this.encoder.encode(failure(null, PARSE_ERROR, 'input ended mid-message')));
+  }
+
+  /** Answer one decoded message, a request or a batch of them; notifications get no answer. */
+  async handle(message: unknown): Promise<StdioResponse | StdioResponse[] | undefined> {
+    if (!Array.isArray(message)) return this.call(message);
+    if (message.length === 0) return failure(null, INVALID_REQUEST, 'empty batch');
+    const answers: StdioResponse[] = [];
+    for (const request of message) {
+      const answer = await this.call(request);
+      if (answer !== undefined) answers.push(answer);
+    }
+    return answers.length > 0 ? answers : undefined;
+  }
+
+  private async call(request: unknown): Promise<StdioResponse | undefined> {
+    const id =
+      isRecord(request) && (typeof request.id === 'string' || typeof request.id === 'number') ? request.id : null;
+    if (
+      !isRecord(request) ||
+      request.jsonrpc !== '2.0' ||
+      typeof request.method !== 'string' ||
+      ('id' in request && request.id !== null && typeof request.id !== 'string' && typeof request.id !== 'number') ||
+      (request.params !== undefined && typeof request.params !== 'object')
+    )
+      return failure(id, INVALID_REQUEST, 'expected { jsonrpc: "2.0", method, params?, id? }');
+    const notification = !('id' in request);
+    const method = Object.hasOwn(this.methods, request.method) ? this.methods[request.method] : undefined;
+    if (method === undefined)
+      return notification ? undefined : failure(id, METHOD_NOT_FOUND, `no such method: ${request.method}`);
+    try {
+      // A JSON round trip keeps results to what the CLI would print (and hash): no undefined, no class instances.
+      const result = JSON.parse(JSON.stringify((await method(request.params)) ?? null));
+      return notification ? undefined : { jsonrpc: '2.0', id, result };
+    } catch (err) {
+      if (notification) return undefined;
+      const message = err instanceof Error ? err.message : String(err);
+      return failure(id, err instanceof StdioError ? err.code : SERVER_ERROR, message);
     }
   }
-  if (pending.length > 0) write(encoder.encode(failure(null, PARSE_ERROR, 'input ended mid-message')));
 }

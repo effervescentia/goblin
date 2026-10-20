@@ -1,9 +1,9 @@
 import { decodeMultiple, encode } from 'cbor-x';
 import { describe, expect, it } from 'vitest';
 import { parseRunParams } from '../cli';
-import { handle, INVALID_PARAMS, INVALID_REQUEST, METHOD_NOT_FOUND, PARSE_ERROR, StdioError, serve } from './stdio';
+import { INVALID_PARAMS, INVALID_REQUEST, METHOD_NOT_FOUND, PARSE_ERROR, StdioError, StdioServer } from './stdio';
 
-const methods = {
+const server = new StdioServer({
   echo: (params: unknown) => params,
   fail: () => {
     throw new Error('nope');
@@ -11,7 +11,7 @@ const methods = {
   reject: () => {
     throw new StdioError(INVALID_PARAMS, 'bad');
   },
-};
+});
 
 async function* chunks(...parts: Uint8Array[]) {
   yield* parts;
@@ -19,13 +19,13 @@ async function* chunks(...parts: Uint8Array[]) {
 
 async function served(...parts: Uint8Array[]): Promise<unknown[]> {
   const out: Uint8Array[] = [];
-  await serve(chunks(...parts), (bytes) => out.push(bytes), methods);
+  await server.serve(chunks(...parts), (bytes) => out.push(bytes));
   return out.flatMap((bytes) => decodeMultiple(bytes) ?? []);
 }
 
-describe('handle', () => {
+describe('StdioServer.handle', () => {
   it('answers a request with its result', async () => {
-    expect(await handle({ jsonrpc: '2.0', id: 1, method: 'echo', params: { a: 1 } }, methods)).toEqual({
+    expect(await server.handle({ jsonrpc: '2.0', id: 1, method: 'echo', params: { a: 1 } })).toEqual({
       jsonrpc: '2.0',
       id: 1,
       result: { a: 1 },
@@ -33,14 +33,14 @@ describe('handle', () => {
   });
 
   it('answers nothing to notifications, even failing ones', async () => {
-    expect(await handle({ jsonrpc: '2.0', method: 'echo' }, methods)).toBeUndefined();
-    expect(await handle({ jsonrpc: '2.0', method: 'fail' }, methods)).toBeUndefined();
-    expect(await handle({ jsonrpc: '2.0', method: 'missing' }, methods)).toBeUndefined();
+    expect(await server.handle({ jsonrpc: '2.0', method: 'echo' })).toBeUndefined();
+    expect(await server.handle({ jsonrpc: '2.0', method: 'fail' })).toBeUndefined();
+    expect(await server.handle({ jsonrpc: '2.0', method: 'missing' })).toBeUndefined();
   });
 
   it('maps failures to JSON-RPC error codes', async () => {
     const error = async (request: unknown) =>
-      ((await handle(request, methods)) as { error: { code: number } }).error.code;
+      ((await server.handle(request)) as { error: { code: number } }).error.code;
     expect(await error({ jsonrpc: '2.0', id: 1, method: 'missing' })).toBe(METHOD_NOT_FOUND);
     expect(await error({ jsonrpc: '2.0', id: 1, method: 'toString' })).toBe(METHOD_NOT_FOUND);
     expect(await error({ jsonrpc: '2.0', id: 1, method: 'fail' })).toBe(-32000);
@@ -52,23 +52,20 @@ describe('handle', () => {
 
   it('answers a batch in order, leaving out notifications', async () => {
     expect(
-      await handle(
-        [
-          { jsonrpc: '2.0', id: 'a', method: 'echo', params: [1] },
-          { jsonrpc: '2.0', method: 'echo' },
-          { jsonrpc: '2.0', id: 'b', method: 'missing' },
-        ],
-        methods,
-      ),
+      await server.handle([
+        { jsonrpc: '2.0', id: 'a', method: 'echo', params: [1] },
+        { jsonrpc: '2.0', method: 'echo' },
+        { jsonrpc: '2.0', id: 'b', method: 'missing' },
+      ]),
     ).toMatchObject([
       { id: 'a', result: [1] },
       { id: 'b', error: { code: METHOD_NOT_FOUND } },
     ]);
-    expect(await handle([{ jsonrpc: '2.0', method: 'echo' }], methods)).toBeUndefined();
+    expect(await server.handle([{ jsonrpc: '2.0', method: 'echo' }])).toBeUndefined();
   });
 });
 
-describe('serve', () => {
+describe('StdioServer.serve', () => {
   it('reads CBOR items across and within chunks', async () => {
     const first = encode({ jsonrpc: '2.0', id: 1, method: 'echo', params: { n: 1 } });
     const second = encode({ jsonrpc: '2.0', id: 2, method: 'echo', params: { n: 2 } });

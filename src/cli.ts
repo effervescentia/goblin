@@ -17,7 +17,7 @@ import { GoblinEngine } from './engine';
 import { type InputEvent, InputSchema, isInputEvent, type StateEvent, StateEventSchema, VersionSchema } from './inputs';
 import type { EngineEvent } from './journal';
 import { print } from './nodes/serialize';
-import { INVALID_PARAMS, StdioError, serve } from './server/stdio';
+import { INVALID_PARAMS, StdioError, StdioServer } from './server/stdio';
 
 export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server] [--help]
 
@@ -357,9 +357,8 @@ if (import.meta.main) {
     }
     if (args.server) {
       const cwd = process.cwd();
-      await serve(process.stdin, (bytes) => process.stdout.write(bytes), {
-        resolve: (params) => run(cwd, parseRunParams(params)),
-      });
+      const server = new StdioServer({ resolve: (params) => run(cwd, parseRunParams(params)) });
+      await server.serve(process.stdin, (bytes) => process.stdout.write(bytes));
       process.exit(0);
     }
     const prior =
