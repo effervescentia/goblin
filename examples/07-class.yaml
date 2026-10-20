@@ -1,0 +1,33 @@
+# Applied document (class/boon) for 07-actor.yaml.
+# Top-level `@.` keys target the ACTOR; `#` here would be this file's own root.
+# `+` marks additions. `$if` gates its whole node on actor state — false
+# applies nothing (not even `:doc`), so unearned content leaves no residue;
+# `$then` holds absolute patches applied when the condition holds.
+# Patched fields carry `:events` — who wrote them, in order — and a `+key`
+# addition records itself, so even a `:doc`-only feature shows its source.
+# A bare `@` names the actor this document attaches to (07-actor.yaml's `$actor`).
+
+'@': Adventurer
+
+'@.monk': {}
+'@.monk.martial_arts_die': 1d6
+'@.features':
+  +martial_arts:
+    :doc: |
+      Your practice of martial arts gives you mastery of combat styles.
+      **Bonus Unarmed Strike.** You can make an Unarmed Strike as a Bonus Action.
+    '@.proficiencies.weapon':
+      - +simple_melee
+      - +light_martial_melee
+  +unarmored_defense:
+    :doc: |
+      While you aren't wearing armor or wielding a Shield
+      your base Armor Class equals 10 plus your Dexterity and Wisdom modifiers.
+  +monks_focus:
+    :doc: Spend focus points to fuel monastic techniques.
+    $if: '@.level >= 2'
+'@.actions.unarmed_strike':
+  $if: '@.level >= 2'
+  $then:
+    '@.actions.unarmed_strike.die': 1d8
+    '@.actions.unarmed_strike.type': bonus_action

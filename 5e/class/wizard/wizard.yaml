@@ -1,0 +1,69 @@
+'@': Character
+$if: "@.class == 'wizard'"
+
+'@.hit_die': d6
+'@.hit_points':
+  max: 6 + @.abilities.constitution.modifier
+  current: '@.hit_points.max'
+'@.proficiencies.weapon':
+  - simple_weapons
+'@.proficiencies.saving_throws':
+  - intelligence
+  - wisdom
+'@.skills.trained':
+  :label: Skill Proficiencies
+  :doc: 'Choose two proficient skills.'
+  :param: true
+  :type: array
+  :options:
+    - arcana
+    - history
+    - insight
+    - investigation
+    - medicine
+    - nature
+    - religion
+  :count: 2
+  :unique: true
+'@.features':
+  +spellcasting:
+    :label: Spellcasting
+  +ritual_adept:
+    :label: Ritual Adept
+  +arcane_recovery:
+    :label: Arcane Recovery
+  +scholar:
+    $if: '@.level >= 2'
+    :label: Scholar
+  +ability_score_improvement_1:
+    $if: '@.level >= 4'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_4': '$.feature.ability_improvement(4)'
+  +memorize_spell:
+    $if: '@.level >= 5'
+    :label: Memorize Spell
+  +ability_score_improvement_2:
+    $if: '@.level >= 8'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_8': '$.feature.ability_improvement(8)'
+  +ability_score_improvement_3:
+    $if: '@.level >= 12'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_12': '$.feature.ability_improvement(12)'
+  +ability_score_improvement_4:
+    $if: '@.level >= 16'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_16': '$.feature.ability_improvement(16)'
+  +spell_mastery:
+    $if: '@.level >= 18'
+    :label: Spell Mastery
+  +epic_boon:
+    $if: '@.level >= 19'
+    :label: Epic Boon
+  +signature_spells:
+    $if: '@.level >= 20'
+    :label: Signature Spells

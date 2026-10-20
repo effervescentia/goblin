@@ -1,0 +1,82 @@
+'@': Character
+$if: "@.class == 'druid'"
+
+'@.hit_die': d8
+'@.hit_points':
+  max: 8 + @.abilities.constitution.modifier
+  current: '@.hit_points.max'
+'@.proficiencies.weapon':
+  - simple_weapons
+'@.proficiencies.armor':
+  - light_armor
+  - shields
+'@.proficiencies.saving_throws':
+  - intelligence
+  - wisdom
+'@.skills.trained':
+  :label: Skill Proficiencies
+  :doc: 'Choose two proficient skills.'
+  :param: true
+  :type: array
+  :options:
+    - animal_handling
+    - arcana
+    - insight
+    - medicine
+    - nature
+    - perception
+    - religion
+    - survival
+  :count: 2
+  :unique: true
+'@.features':
+  +spellcasting:
+    :label: Spellcasting
+  +druidic:
+    :label: Druidic
+  +primal_order:
+    :label: Primal Order
+  +wild_shape:
+    $if: '@.level >= 2'
+    :label: Wild Shape
+  +wild_companion:
+    $if: '@.level >= 2'
+    :label: Wild Companion
+  +ability_score_improvement_1:
+    $if: '@.level >= 4'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_4': '$.feature.ability_improvement(4)'
+  +wild_resurgence:
+    $if: '@.level >= 5'
+    :label: Wild Resurgence
+  +elemental_fury:
+    $if: '@.level >= 7'
+    :label: Elemental Fury
+  +ability_score_improvement_2:
+    $if: '@.level >= 8'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_8': '$.feature.ability_improvement(8)'
+  +ability_score_improvement_3:
+    $if: '@.level >= 12'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_12': '$.feature.ability_improvement(12)'
+  +improved_elemental_fury:
+    $if: '@.level >= 15'
+    :label: Improved Elemental Fury
+  +ability_score_improvement_4:
+    $if: '@.level >= 16'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_16': '$.feature.ability_improvement(16)'
+  +beast_spells:
+    $if: '@.level >= 18'
+    :label: Beast Spells
+  +epic_boon:
+    $if: '@.level >= 19'
+    :label: Epic Boon
+  +archdruid:
+    $if: '@.level >= 20'
+    :label: Archdruid

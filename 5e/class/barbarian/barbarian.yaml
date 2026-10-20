@@ -1,0 +1,102 @@
+'@': Character
+$if: "@.class == 'barbarian'"
+
+'@.hit_die': d12
+'@.hit_points':
+  max: 12 + @.abilities.constitution.modifier
+  current: '@.hit_points.max'
+'@.proficiencies.weapon':
+  - simple_weapons
+  - martial_weapons
+'@.proficiencies.armor':
+  - light_armor
+  - medium_armor
+  - shields
+'@.proficiencies.saving_throws':
+  - strength
+  - constitution
+'@.skills.trained':
+  :label: Skill Proficiencies
+  :doc: 'Choose two proficient skills.'
+  :param: true
+  :type: array
+  :options:
+    - animal_handling
+    - athletics
+    - intimidation
+    - nature
+    - perception
+    - survival
+  :count: 2
+  :unique: true
+'@.features':
+  +rage:
+    :label: Rage
+  +unarmored_defense:
+    :label: Unarmored Defense
+  +weapon_mastery:
+    :label: Weapon Mastery
+  +danger_sense:
+    :label: Danger Sense
+  +reckless_attack:
+    $if: '@.level >= 2'
+    :label: Reckless Attack
+  +primal_knowledge:
+    $if: '@.level >= 3'
+    :label: Primal Knowledge
+  +ability_score_improvement_1:
+    $if: '@.level >= 4'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_4': '$.feature.ability_improvement(4)'
+  +extra_attack:
+    $if: '@.level >= 5'
+    :label: Extra Attack
+  +fast_movement:
+    $if: '@.level >= 5'
+    :label: Fast Movement
+  +feral_instinct:
+    $if: '@.level >= 7'
+    :label: Feral Instinct
+  +instinctive_pounce:
+    $if: '@.level >= 7'
+    :label: Instinctive Pounce
+  +ability_score_improvement_2:
+    $if: '@.level >= 8'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_8': '$.feature.ability_improvement(8)'
+  +brutal_strike:
+    $if: '@.level >= 9'
+    :label: Brutal Strike
+  +relentless_rage:
+    $if: '@.level >= 11'
+    :label: Relentless Rage
+  +ability_score_improvement_3:
+    $if: '@.level >= 12'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_12': '$.feature.ability_improvement(12)'
+  +improved_brutal_strike_1:
+    $if: '@.level >= 13'
+    :label: Improved Brutal Strike
+  +persistent_rage:
+    $if: '@.level >= 15'
+    :label: Persistent Rage
+  +ability_score_improvement_4:
+    $if: '@.level >= 16'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_16': '$.feature.ability_improvement(16)'
+  +improved_brutal_strike_2:
+    $if: '@.level >= 17'
+    :label: Improved Brutal Strike
+  +indomitable_might:
+    $if: '@.level >= 18'
+    :label: Indomitable Might
+  +epic_boon:
+    $if: '@.level >= 19'
+    :label: Epic boon
+  +primal_champion:
+    $if: '@.level >= 20'
+    :label: Primal Champion

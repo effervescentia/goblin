@@ -1,0 +1,152 @@
+$actor: Character
+
+name:
+  :doc: Your hero's name, as sung by bards.
+  :param: true
+  :type: string
+
+xp:
+  :doc: Experience points earned in play.
+  :param: true
+  :type: integer
+  :default: 0
+
+level: '$.level.level_for(.xp)'
+
+# How the six scores start; the method mixed in below adds its choice to
+# each ability.
+ability_method:
+  :label: Ability Score Method
+  :doc: 'point_buy: spend 27 points on scores from 8 to 15. standard_array: assign 15, 14, 13, 12, 10 and 8. roll: roll 4d6 per ability, dropping the lowest die. roll_assign: roll six scores that way, then assign each to an ability.'
+  :param: true
+  :type: string
+  :options: [point_buy, standard_array, roll, roll_assign]
+
+# Pick lists filled by the features that grant them; an ability counts its own
+# name across all of them, so twice is +2 and once each is +1 apiece.
+improvements:
+  :label: Ability Score Improvements
+  :doc: Choices made at the levels that grant an improvement.
+
+abilities:
+  strength: "$.ability.entry('strength', 'Strength')"
+  dexterity: "$.ability.entry('dexterity', 'Dexterity')"
+  constitution: "$.ability.entry('constitution', 'Constitution')"
+  intelligence: "$.ability.entry('intelligence', 'Intelligence')"
+  wisdom: "$.ability.entry('wisdom', 'Wisdom')"
+  charisma: "$.ability.entry('charisma', 'Charisma')"
+
+# Every method mixes in; each gates on `ability_method`, so only the chosen one
+# adds anything. After `abilities`, whose entries the methods merge into.
+_ability_methods:
+  point_buy: $mixin('ability/point_buy.yaml')
+  standard_array: $mixin('ability/standard_array.yaml')
+  roll: $mixin('ability/roll.yaml')
+  roll_assign: $mixin('ability/roll_assign.yaml')
+
+proficiency_bonus: '$.level.proficiency_for(.level)'
+
+armor_class: '10 + .abilities.dexterity.modifier'
+speed: 30
+attacks: 1
+# The lowest d20 roll that scores a critical hit; a Champion widens it.
+critical_hit: 20
+
+initiative:
+  base: '@.abilities.dexterity.modifier'
+  'roll()': 1d20 + .base
+
+hit_die:
+  :doc: Hit die granted by your class; the adopted class patch fills this slot.
+  :type: die
+hit_points:
+  '!validate':
+    - .current >= 0
+    - .current <= .max
+  current: 8
+  max: 8
+
+features: {}
+actions:
+  unarmed_strike:
+    :label: Unarmed Strike
+    die: d4
+    type: action
+proficiencies:
+  armor: []
+  weapon: []
+  saving_throws: []
+# Expendable uses: each entry has `current`, `max` and `recover` — `short`
+# (back on any rest) or `long` (back only on a long rest).
+resources: {}
+
+species:
+  :label: Species
+  :doc: Choose a species for your character.
+  :param: true
+  :type: string
+  :options:
+    - aasimar
+    - dragonborn
+    - dwarf
+    - elf
+    - gnome
+    - goliath
+    - halfling
+    - human
+    - orc
+    - tiefling
+
+_species:
+  aasimar: $mixin('species/aasimar/aasimar.yaml')
+  dragonborn: $mixin('species/dragonborn/dragonborn.yaml')
+  dwarf: $mixin('species/dwarf/dwarf.yaml')
+  elf: $mixin('species/elf/elf.yaml')
+  gnome: $mixin('species/gnome/gnome.yaml')
+  goliath: $mixin('species/goliath/goliath.yaml')
+  halfling: $mixin('species/halfling/halfling.yaml')
+  human: $mixin('species/human/human.yaml')
+  orc: $mixin('species/orc/orc.yaml')
+  tiefling: $mixin('species/tiefling/tiefling.yaml')
+
+class:
+  :label: Class
+  :doc: Choose a class for your character.
+  :param: true
+  :type: string
+  :options:
+    - barbarian
+    - bard
+    - cleric
+    - druid
+    - fighter
+    - monk
+    - paladin
+    - ranger
+    - rogue
+    - sorcerer
+    - warlock
+    - wizard
+
+_classes:
+  barbarian: $mixin('class/barbarian/barbarian.yaml')
+  bard: $mixin('class/bard/bard.yaml')
+  cleric: $mixin('class/cleric/cleric.yaml')
+  druid: $mixin('class/druid/druid.yaml')
+  fighter: $mixin('class/fighter/fighter.yaml')
+  monk: $mixin('class/monk/monk.yaml')
+  paladin: $mixin('class/paladin/paladin.yaml')
+  ranger: $mixin('class/ranger/ranger.yaml')
+  rogue: $mixin('class/rogue/rogue.yaml')
+  sorcerer: $mixin('class/sorcerer/sorcerer.yaml')
+  warlock: $mixin('class/warlock/warlock.yaml')
+  wizard: $mixin('class/wizard/wizard.yaml')
+
+# A short rest refills the `short` resources; a long rest refills everything.
+rest:
+  'short()': |
+    @.hit_points.current = $lib.math.min(@.hit_points.current + @.hit_die, @.hit_points.max)
+    @.resources.{.recover == 'short'}.current = .max
+  'long()': |
+    @.hit_points.current = @.hit_points.max
+    @.resources.*.current = .max

@@ -1,0 +1,51 @@
+# Ability score helpers, attached as `$.ability` by 5e/main.yaml: the shape of
+# one ability entry (5e/character.yaml) and the per-ability choice each
+# starting method adds (5e/ability/point_buy.yaml, 5e/ability/standard_array.yaml,
+# 5e/ability/roll.yaml, 5e/ability/roll_assign.yaml).
+
+# Points bought above 8: each costs one, the sixth and seventh (14, 15) two.
+'point_cost(bought)': bought + (bought >= 6) + (bought >= 7)
+
+# One ability: its starting score, plus the improvements that named it.
+'modifier(x)': $lib.math.floor((x - 10) / 2)
+
+'entry(ability, label)':
+  start:
+    :doc: Starting {label} score, filled in by the chosen ability score method.
+  base: .start + $lib.list.count(@.improvements, ability)
+  modifier: '#.modifier(.base)'
+
+# Point buy: 8, plus the points bought for it.
+'bought(label)':
+  bought:
+    :label: '{label}'
+    :doc: Points bought for {label} above its base 8, 0 to 7 (a score of 8 to 15).
+    :param: true
+    :type: integer
+    :min: 0
+    :max: 7
+  start: 8 + .bought
+
+# Standard array: one of the six preset scores, each used once.
+'assigned(label)':
+  assigned:
+    :label: '{label}'
+    :doc: The standard array score you assign to {label}.
+    :param: true
+    :type: integer
+    :options: [15, 14, 13, 12, 10, 8]
+  start: .assigned
+
+# Roll: 4d6, dropping the lowest die — fresh on every resolve.
+'rolled()':
+  start: $lib.dice.keep_highest(4, 6, 3)
+
+# Roll and assign: one of the six pooled rolls, each used once.
+'assigned_roll(label)':
+  roll:
+    :label: '{label}'
+    :doc: Which of your six rolls (1 to 6) becomes your {label} score.
+    :param: true
+    :type: integer
+    :options: [1, 2, 3, 4, 5, 6]
+  start: '@.roll_assign.rolls[.roll - 1]'

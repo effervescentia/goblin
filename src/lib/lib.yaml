@@ -1,0 +1,2 @@
+# Yaml half of `$lib` (see engine.ensureLib). The natives beside it win on a
+# name clash; project helpers belong in documents, so this stays minimal.

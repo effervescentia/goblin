@@ -1,0 +1,10 @@
+# Actor namespaces: a second `$tmpl` argument names the actor it pulls in.
+# Its params are asked for as `bree.name` instead of `party.guide.name`, and
+# `--param` / `--set` accept either key (`--set bree.speed=20` holds back the
+# boon, like `party.guide.speed=20`). Each namespace names one actor: reusing
+# 'bree' on another `$tmpl` throws.
+
+party:
+  scout: $tmpl('15-nested-hero.yaml')
+  guide: $tmpl('15-nested-hero.yaml', 'bree')
+guide_pace: $.party.guide.pace # → 40, or 20 with --set bree.speed=20

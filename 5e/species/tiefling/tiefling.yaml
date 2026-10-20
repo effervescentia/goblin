@@ -1,0 +1,11 @@
+'@': Character
+$if: "@.species == 'tiefling'"
+
+'@.size': medium
+'@.speed': 30
+
+'@.features':
+  +darkvision:
+    :label: Darkvision
+  +otherworldly_presence:
+    :label: Otherworldly Presence

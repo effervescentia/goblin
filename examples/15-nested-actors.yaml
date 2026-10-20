@@ -1,0 +1,11 @@
+# Nested actors: a document's root is its data, and an actor document pulled
+# in anywhere below it (here with `$tmpl`) is a separate actor. Its params are
+# asked for by their path from the root (`party.scout.name`), and `--set`
+# reaches it the same way (`--set party.guide.speed=20` lands before its
+# mixin gates on it, so that boon never applies). Reading into one from
+# outside evaluates it as itself: `pace` is `@.speed`, the scout's speed.
+
+party:
+  scout: $tmpl('15-nested-hero.yaml')
+  guide: $tmpl('15-nested-hero.yaml')
+lead_pace: $.party.scout.pace # → 40

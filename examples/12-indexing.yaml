@@ -1,0 +1,15 @@
+# Indexing: `list[index]` picks one item, counting from 0. Negative counts
+# from the end; past either end is null. The index is any expression.
+
+ranked: [gold, silver, bronze]
+place: 2
+
+first: '#.ranked[0]' # → gold
+last: '#.ranked[-1]' # → bronze
+placed: '#.ranked[#.place - 1]' # → silver
+missing: '#.ranked[5]' # → null
+grid: [[1, 2], [3, 4]]
+corner: '#.grid[1][0]' # → 3
+# A record takes a string key: the field it names, or null.
+medals: { gold: 3, silver: 1 }
+golds: '#.medals[#.ranked[0]]' # → 3

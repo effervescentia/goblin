@@ -1,0 +1,78 @@
+'@': Character
+$if: "@.class == 'warlock'"
+
+'@.hit_die': d8
+'@.hit_points':
+  max: 8 + @.abilities.constitution.modifier
+  current: '@.hit_points.max'
+'@.proficiencies.weapon':
+  - simple_weapons
+'@.proficiencies.armor':
+  - light_armor
+'@.proficiencies.saving_throws':
+  - wisdom
+  - charisma
+'@.skills.trained':
+  :label: Skill Proficiencies
+  :doc: 'Choose two proficient skills.'
+  :param: true
+  :type: array
+  :options:
+    - arcana
+    - deception
+    - history
+    - intimidation
+    - investigation
+    - nature
+    - religion
+  :count: 2
+  :unique: true
+'@.features':
+  +eldritch_invocations:
+    :label: Eldritch Invocations
+  +pact_magic:
+    :label: Pact Magic
+  +magical_cunning:
+    $if: '@.level >= 2'
+    :label: Magical Cunning
+  +ability_score_improvement_1:
+    $if: '@.level >= 4'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_4': '$.feature.ability_improvement(4)'
+  +ability_score_improvement_2:
+    $if: '@.level >= 8'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_8': '$.feature.ability_improvement(8)'
+  +contact_patron:
+    $if: '@.level >= 9'
+    :label: Contact Patron
+  +mystic_arcanum_1:
+    $if: '@.level >= 11'
+    :label: Mystic Arcanum
+  +ability_score_improvement_3:
+    $if: '@.level >= 12'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_12': '$.feature.ability_improvement(12)'
+  +mystic_arcanum_2:
+    $if: '@.level >= 13'
+    :label: Mystic Arcanum
+  +mystic_arcanum_3:
+    $if: '@.level >= 15'
+    :label: Mystic Arcanum
+  +ability_score_improvement_4:
+    $if: '@.level >= 16'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_16': '$.feature.ability_improvement(16)'
+  +mystic_arcanum_4:
+    $if: '@.level >= 17'
+    :label: Mystic Arcanum
+  +epic_boon:
+    $if: '@.level >= 19'
+    :label: Epic Boon
+  +eldritch_master:
+    $if: '@.level >= 20'
+    :label: Eldritch Master

@@ -1,0 +1,13 @@
+import { Die } from '../nodes/die';
+
+/** `$lib.dice` — rolls that read each die, which inline `NdM` (a plain sum)
+ * cannot. Takes counts and sides, since inline dice roll before a call sees them. */
+export const DICE_LIB: Record<string, (...args: number[]) => number> = {
+  /** Roll `count`d`sides` and sum the `keep` highest: 4d6 drop lowest is (4, 6, 3). */
+  keep_highest: (count: number, sides: number, keep: number) =>
+    new Die(count, sides)
+      .rolls()
+      .sort((a, b) => b - a)
+      .slice(0, keep)
+      .reduce((total, face) => total + face, 0),
+};

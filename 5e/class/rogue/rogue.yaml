@@ -1,0 +1,106 @@
+'@': Character
+$if: "@.class == 'rogue'"
+
+'@.hit_die': d8
+'@.hit_points':
+  max: 8 + @.abilities.constitution.modifier
+  current: '@.hit_points.max'
+'@.proficiencies.weapon':
+  - simple_weapons
+  - finesse_or_light_martial_weapons
+'@.proficiencies.armor':
+  - light_armor
+'@.proficiencies.saving_throws':
+  - dexterity
+  - intelligence
+'@.skills.trained':
+  :label: Skill Proficiencies
+  :doc: 'Choose four proficient skills.'
+  :param: true
+  :type: array
+  :options:
+    - acrobatics
+    - athletics
+    - deception
+    - insight
+    - intimidation
+    - investigation
+    - perception
+    - persuasion
+    - sleight_of_hand
+    - stealth
+  :count: 4
+  :unique: true
+'@.features':
+  +expertise_1:
+    :label: Expertise
+  +sneak_attack:
+    :label: Sneak Attack
+  +thieves_cant:
+    :label: Thieves' Cant
+  +weapon_mastery:
+    :label: Weapon Mastery
+  +cunning_action:
+    $if: '@.level >= 2'
+    :label: Cunning Action
+  +steady_aim:
+    $if: '@.level >= 3'
+    :label: Steady Aim
+  +ability_score_improvement_1:
+    $if: '@.level >= 4'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_4': '$.feature.ability_improvement(4)'
+  +cunning_strike:
+    $if: '@.level >= 5'
+    :label: Cunning Strike
+  +uncanny_dodge:
+    $if: '@.level >= 5'
+    :label: Uncanny Dodge
+  +expertise_2:
+    $if: '@.level >= 6'
+    :label: Expertise
+  +evasion:
+    $if: '@.level >= 7'
+    :label: Evasion
+  +reliable_talent:
+    $if: '@.level >= 7'
+    :label: Reliable Talent
+  +ability_score_improvement_2:
+    $if: '@.level >= 8'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_8': '$.feature.ability_improvement(8)'
+  +ability_score_improvement_3:
+    $if: '@.level >= 10'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_10': '$.feature.ability_improvement(10)'
+  +improved_cunning_strike:
+    $if: '@.level >= 11'
+    :label: Improved Cunning Strike
+  +ability_score_improvement_4:
+    $if: '@.level >= 12'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_12': '$.feature.ability_improvement(12)'
+  +devious_strikes:
+    $if: '@.level >= 14'
+    :label: Devious Strikes
+  +slippery_mind:
+    $if: '@.level >= 15'
+    :label: Slippery Mind
+  +ability_score_improvement_5:
+    $if: '@.level >= 16'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_16': '$.feature.ability_improvement(16)'
+  +elusive:
+    $if: '@.level >= 18'
+    :label: Elusive
+  +epic_boon:
+    $if: '@.level >= 19'
+    :label: Epic Boon
+  +stroke_of_luck:
+    $if: '@.level >= 20'
+    :label: Stroke of Luck

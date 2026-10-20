@@ -1,1 +1,4 @@
 node_modules
+build
+*.bun-build
+scratch

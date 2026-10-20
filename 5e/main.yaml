@@ -1,0 +1,28 @@
+# 5e/main.yaml — root entry: the whole tree resolves as { data }, with each
+# character a nested Character actor under `party`, named for its params.
+#
+# Each character mixes in the class it picks. Template paths resolve
+# relative to their own file.
+#
+# Play: P=aria
+#       goblin 5e/main.yaml --param $P.name=Aria --param $P.xp=6500 \
+#         --param $P.class=fighter --param $P.species=dwarf \
+#         --param $P.ability_method=point_buy \
+#         --param $P.abilities.strength.bought=7 … (points over 8, 27 total) \
+#         --param $P.features.fighting_style=dueling \
+#         --param $P.features.martial_archetype=champion \
+#         --param $P.skills.trained='["athletics", "perception"]' \
+#         --param $P.improvements.level_4='["strength", "strength"]'
+#   (or ability_method=standard_array with abilities.<name>.assigned=15 …,
+#    or ability_method=roll to roll 4d6 drop lowest for each,
+#    or ability_method=roll_assign with abilities.<name>.roll=1..6)
+# Missing choices come back as { query }; a full tree as { data }.
+
+level: $tmpl('level.yaml')
+feature: $tmpl('feature.yaml')
+ability: $tmpl('ability/ability.yaml')
+
+party:
+  aria: $tmpl('character.yaml', 'aria')
+
+'recruit(name)': $.party[name] = $tmpl('character.yaml', name)

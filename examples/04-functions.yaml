@@ -1,0 +1,25 @@
+# Functions: `name()` / `name(params)` keys define callables.
+# A string body evaluates per call (`.` is the enclosing record); a record
+# body is a definition the call hands back a fresh copy of.
+
+utils:
+  'ability_modifier(x)': $lib.math.floor((x - 10) / 2)
+  'double(x)': x * 2
+
+strength:
+  base: 15
+  modifier: '#.utils.ability_modifier(.base)' # → 2
+
+doubled: '#.utils.double(21)' # → 42
+floored: $lib.math.floor(2.9) # → 2
+'lucky()': 1d20 # zero-arg callable
+
+# A record body: the call hands back a fresh copy of the node itself.
+# Parameters bind in — `{name}` reaches metadata, a bare `bonus` is a value
+# wherever the engine evaluates (a string with no ref is plain data).
+base_armor: 10
+'shield(name, bonus)':
+  :label: '{name}'
+  :doc: A sturdy board of wood and iron.
+  armor_class: '#.base_armor + bonus'
+off_hand: "#.shield('Heater Shield', 2)"

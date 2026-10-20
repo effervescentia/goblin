@@ -1,0 +1,14 @@
+'@': Character
+$if: "@.species == 'goliath'"
+
+'@.size': medium
+'@.speed': 35
+
+'@.features':
+  +giant_ancestry:
+    :label: Giant Ancestry
+  +large_form:
+    $if: '@.level >= 5'
+    :label: Large Form
+  +powerful_build:
+    :label: Powerful Build

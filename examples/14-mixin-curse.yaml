@@ -1,0 +1,7 @@
+# A second mixin for 14-mixin-actor.yaml whose root `$if` fails: the whole
+# document applies nothing, so the actor never loses its gold.
+
+'@': Adventurer
+$if: '@.gold < 0'
+
+'@.gold': 0

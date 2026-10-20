@@ -1,0 +1,13 @@
+'@': Character
+$if: "@.species == 'orc'"
+
+'@.size': medium
+'@.speed': 30
+
+'@.features':
+  +adrenaline_rush:
+    :label: Adrenaline Rush
+  +darkvision:
+    :label: Darkvision
+  +relentless_endurance:
+    :label: Relentless Endurance

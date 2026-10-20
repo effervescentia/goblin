@@ -1,0 +1,75 @@
+'@': Character
+$if: "@.class == 'sorcerer'"
+
+'@.hit_die': d6
+'@.hit_points':
+  max: 6 + @.abilities.constitution.modifier
+  current: '@.hit_points.max'
+'@.proficiencies.weapon':
+  - simple_weapons
+'@.proficiencies.saving_throws':
+  - constitution
+  - charisma
+'@.skills.trained':
+  :label: Skill Proficiencies
+  :doc: 'Choose two proficient skills.'
+  :param: true
+  :type: array
+  :options:
+    - arcana
+    - deception
+    - insight
+    - intimidation
+    - persuasion
+    - religion
+  :count: 2
+  :unique: true
+'@.features':
+  +spellcasting:
+    :label: Spellcasting
+  +innate_sorcery:
+    :label: Innate Sorcery
+  +font_of_magic:
+    $if: '@.level >= 2'
+    :label: Font of Magic
+  +metamagic_1:
+    $if: '@.level >= 2'
+    :label: Metamagic
+  +ability_score_improvement_1:
+    $if: '@.level >= 4'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_4': '$.feature.ability_improvement(4)'
+  +sorcerous_restoration:
+    $if: '@.level >= 5'
+    :label: Sorcerous Restoration
+  +sorcery_incarnate:
+    $if: '@.level >= 7'
+    :label: Sorcery Incarnate
+  +ability_score_improvement_2:
+    $if: '@.level >= 8'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_8': '$.feature.ability_improvement(8)'
+  +metamagic_2:
+    $if: '@.level >= 10'
+    :label: Metamagic
+  +ability_score_improvement_3:
+    $if: '@.level >= 12'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_12': '$.feature.ability_improvement(12)'
+  +ability_score_improvement_4:
+    $if: '@.level >= 16'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_16': '$.feature.ability_improvement(16)'
+  +metamagic_3:
+    $if: '@.level >= 17'
+    :label: Metamagic
+  +epic_boon:
+    $if: '@.level >= 19'
+    :label: Epic Boon
+  +arcane_apotheosis:
+    $if: '@.level >= 20'
+    :label: Arcane Apotheosis

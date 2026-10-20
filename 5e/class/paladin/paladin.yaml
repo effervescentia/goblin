@@ -1,0 +1,93 @@
+'@': Character
+$if: "@.class == 'paladin'"
+
+'@.hit_die': d10
+'@.hit_points':
+  max: 10 + @.abilities.constitution.modifier
+  current: '@.hit_points.max'
+'@.proficiencies.weapon':
+  - simple_weapons
+  - martial_weapons
+'@.proficiencies.armor':
+  - all_armor
+  - shields
+'@.proficiencies.saving_throws':
+  - wisdom
+  - charisma
+'@.skills.trained':
+  :label: Skill Proficiencies
+  :doc: 'Choose two proficient skills.'
+  :param: true
+  :type: array
+  :options:
+    - athletics
+    - insight
+    - intimidation
+    - medicine
+    - persuasion
+    - religion
+  :count: 2
+  :unique: true
+'@.features':
+  +lay_on_hands:
+    :label: Lay On Hands
+  +spellcasting:
+    :label: Spellcasting
+  +weapon_mastery:
+    :label: Weapon Mastery
+  +fighting_style:
+    $if: '@.level >= 2'
+    :label: Fighting Style
+  +paladinss_smite:
+    $if: '@.level >= 2'
+    :label: Paladin's Smite
+  +channel_divinity:
+    $if: '@.level >= 3'
+    :label: Channel Divinity
+  +ability_score_improvement_1:
+    $if: '@.level >= 4'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_4': '$.feature.ability_improvement(4)'
+  +extra_attack:
+    $if: '@.level >= 5'
+    :label: Extra Attack
+  +faithful_steed:
+    $if: '@.level >= 5'
+    :label: Faithful Steed
+  +aura_of_protection:
+    $if: '@.level >= 6'
+    :label: Aura of Protection
+  +ability_score_improvement_2:
+    $if: '@.level >= 8'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_8': '$.feature.ability_improvement(8)'
+  +abjure_foes:
+    $if: '@.level >= 9'
+    :label: Abjure Foes
+  +aura_of_courage:
+    $if: '@.level >= 10'
+    :label: Aura of Courage
+  +radiant_strikes:
+    $if: '@.level >= 11'
+    :label: Radiant Strikes
+  +ability_score_improvement_3:
+    $if: '@.level >= 12'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_12': '$.feature.ability_improvement(12)'
+  +restoring_touch:
+    $if: '@.level >= 14'
+    :label: Restoring Touch
+  +ability_score_improvement_4:
+    $if: '@.level >= 16'
+    :label: Ability Score Improvement
+    :doc: Add +2 to one ability score or +1 to two (or take a feat).
+    '@.improvements.level_16': '$.feature.ability_improvement(16)'
+  +aura_expansion:
+    $if: '@.level >= 18'
+    :label: Aura Expansion
+  +epic_boon:
+    $if: '@.level >= 19'
+    :label: Epic Boon
