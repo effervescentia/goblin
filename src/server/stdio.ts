@@ -3,6 +3,7 @@
  * item. CBOR items are self-delimiting, so the stream needs no other framing.
  */
 import { Decoder, Encoder } from 'cbor-x';
+import { z } from 'zod';
 
 export const PARSE_ERROR = -32700;
 export const INVALID_REQUEST = -32600;
@@ -30,6 +31,14 @@ export type Methods = Record<string, (params: unknown) => unknown>;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
+
+// A present `id` must be a string, number or null; an absent one makes the request a notification.
+const RequestSchema = z.object({
+  jsonrpc: z.literal('2.0'),
+  method: z.string(),
+  id: z.union([z.string(), z.number(), z.null()]).exactOptional(),
+  params: z.union([z.record(z.string(), z.unknown()), z.array(z.unknown()), z.null()]).optional(),
+});
 
 const failure = (id: Id, code: number, message: string): StdioResponse => ({
   jsonrpc: '2.0',
@@ -94,21 +103,16 @@ export class StdioServer {
   private async call(request: unknown): Promise<StdioResponse | undefined> {
     const id =
       isRecord(request) && (typeof request.id === 'string' || typeof request.id === 'number') ? request.id : null;
-    if (
-      !isRecord(request) ||
-      request.jsonrpc !== '2.0' ||
-      typeof request.method !== 'string' ||
-      ('id' in request && request.id !== null && typeof request.id !== 'string' && typeof request.id !== 'number') ||
-      (request.params !== undefined && typeof request.params !== 'object')
-    )
-      return failure(id, INVALID_REQUEST, 'expected { jsonrpc: "2.0", method, params?, id? }');
-    const notification = !('id' in request);
-    const method = Object.hasOwn(this.methods, request.method) ? this.methods[request.method] : undefined;
+    const parsed = RequestSchema.safeParse(request);
+    if (!parsed.success) return failure(id, INVALID_REQUEST, 'expected { jsonrpc: "2.0", method, params?, id? }');
+    const { method: name, params } = parsed.data;
+    const notification = !('id' in parsed.data);
+    const method = Object.hasOwn(this.methods, name) ? this.methods[name] : undefined;
     if (method === undefined)
-      return notification ? undefined : failure(id, METHOD_NOT_FOUND, `no such method: ${request.method}`);
+      return notification ? undefined : failure(id, METHOD_NOT_FOUND, `no such method: ${name}`);
     try {
       // A JSON round trip keeps results to what the CLI would print (and hash): no undefined, no class instances.
-      const result = JSON.parse(JSON.stringify((await method(request.params)) ?? null));
+      const result = JSON.parse(JSON.stringify((await method(params)) ?? null));
       return notification ? undefined : { jsonrpc: '2.0', id, result };
     } catch (err) {
       if (notification) return undefined;

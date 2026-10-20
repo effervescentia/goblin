@@ -47,6 +47,8 @@ describe('StdioServer.handle', () => {
     expect(await error({ jsonrpc: '2.0', id: 1, method: 'reject' })).toBe(INVALID_PARAMS);
     expect(await error({ id: 1, method: 'echo' })).toBe(INVALID_REQUEST);
     expect(await error({ jsonrpc: '2.0', id: {}, method: 'echo' })).toBe(INVALID_REQUEST);
+    expect(await error({ jsonrpc: '2.0', id: 1, method: 'echo', params: 'x' })).toBe(INVALID_REQUEST);
+    expect(await error({ jsonrpc: '2.0', id: undefined, method: 'echo' })).toBe(INVALID_REQUEST);
     expect(await error([])).toBe(INVALID_REQUEST);
   });
 

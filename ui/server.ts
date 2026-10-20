@@ -5,6 +5,7 @@
  *   bun run ui            # http://localhost:3000
  */
 import { resolve as resolvePath } from 'node:path';
+import { z } from 'zod';
 import { resolveApp } from '../src/cli';
 import { override, parameter } from '../src/inputs';
 import { inspect } from '../src/inspect';
@@ -19,11 +20,11 @@ async function entries(): Promise<string[]> {
   return found.sort();
 }
 
-interface ResolveRequest {
-  entry: string;
-  params?: Record<string, unknown>;
-  overrides?: Record<string, unknown>;
-}
+const ResolveRequestSchema = z.object({
+  entry: z.string(),
+  params: z.record(z.string(), z.unknown()).default({}),
+  overrides: z.record(z.string(), z.unknown()).default({}),
+});
 
 const server = Bun.serve({
   port: Number(process.env.PORT ?? 3000),
@@ -46,8 +47,10 @@ const server = Bun.serve({
     },
     '/api/resolve': {
       POST: async (req) => {
-        const { entry, params = {}, overrides = {} } = (await req.json()) as ResolveRequest;
         try {
+          const parsed = ResolveRequestSchema.safeParse(await req.json());
+          if (!parsed.success) throw new Error(`invalid resolve request: ${z.prettifyError(parsed.error)}`);
+          const { entry, params, overrides } = parsed.data;
           const inputs = [
             ...Object.entries(params).map(([path, value]) => parameter(path, value)),
             ...Object.entries(overrides).map(([path, value]) => override(path, value)),

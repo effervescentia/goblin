@@ -449,6 +449,30 @@ describe('cli', () => {
     }
   });
 
+  it('defaults .goblin.yaml root to cwd', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'goblin-cli-'));
+    writeFileSync(join(cwd, '.goblin.yaml'), 'main: actor.yaml\n');
+    writeFileSync(join(cwd, 'actor.yaml'), 'name: Rootless\n');
+    try {
+      const stdout = execFileSync('bun', [join(root, 'src/cli.ts')], { cwd, encoding: 'utf8' });
+      expect(JSON.parse(stdout)).toMatchObject({ data: { name: 'Rootless' } });
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('errors on a .goblin.yaml missing main', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'goblin-cli-'));
+    writeFileSync(join(cwd, '.goblin.yaml'), 'root: docs\n');
+    try {
+      expect(() =>
+        execFileSync('bun', [join(root, 'src/cli.ts')], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }),
+      ).toThrow(/invalid \.goblin\.yaml[\s\S]*main/);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('errors when no entry or .goblin.yaml is available', () => {
     const res = runCli();
     expect(res.status).toBe(1);

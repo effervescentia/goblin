@@ -239,6 +239,8 @@ export async function resolveAppState(cwd: string, entry?: string, inputs: State
   return (await resolveApp(cwd, entry, inputs)).state;
 }
 
+const ConfigSchema = z.object({ root: z.string().default('.'), main: z.string() });
+
 /** `resolveAppState`, plus the merged raw actor it resolved — what the
  * inspector reads expressions and dependencies from. */
 export async function resolveApp(
@@ -253,7 +255,9 @@ export async function resolveApp(
   if (main === undefined) {
     const config = Bun.file(`${cwd}/.goblin.yaml`);
     if (await config.exists()) {
-      const opts = YAML.parse(await config.text()) as { root: string; main: string };
+      const parsed = ConfigSchema.safeParse(YAML.parse(await config.text()));
+      if (!parsed.success) throw new Error(`invalid .goblin.yaml: ${z.prettifyError(parsed.error)}`);
+      const opts = parsed.data;
       root = `${cwd}/${opts.root}`;
       main = opts.main;
     } else {
