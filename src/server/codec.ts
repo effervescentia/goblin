@@ -11,8 +11,12 @@ export type Frame = { message: unknown } | { error: string };
 export interface Codec {
   readonly name: string;
   readonly contentType: string;
+  /** Whether a message travels as a WebSocket text frame rather than a binary one. */
+  readonly text: boolean;
   encode(message: unknown): Uint8Array<ArrayBuffer>;
-  /** Decode one whole message (an HTTP body); throws on malformed input. */
+  /** Encode one message as a whole WebSocket frame, which needs no delimiter. */
+  frame(message: unknown): string | Uint8Array<ArrayBuffer>;
+  /** Decode one whole message (an HTTP body or WebSocket frame); throws on malformed input. */
   decode(bytes: Uint8Array): unknown;
   /** Read every whole message off a stream buffer, returning the torn tail to wait on; `final` when no more bytes come. */
   frames(pending: Uint8Array<ArrayBuffer>, final: boolean): { frames: Frame[]; rest: Uint8Array<ArrayBuffer> };
@@ -25,11 +29,16 @@ const EMPTY = new Uint8Array(0);
 class CborCodec implements Codec {
   readonly name = 'CBOR';
   readonly contentType = 'application/cbor';
+  readonly text = false;
   private readonly decoder = new Decoder({ mapsAsObjects: true, useRecords: false });
   private readonly encoder = new Encoder({ mapsAsObjects: true, useRecords: false });
 
   encode(message: unknown): Uint8Array<ArrayBuffer> {
     return new Uint8Array(this.encoder.encode(message));
+  }
+
+  frame(message: unknown): Uint8Array<ArrayBuffer> {
+    return this.encode(message);
   }
 
   decode(bytes: Uint8Array): unknown {
@@ -58,11 +67,16 @@ const NEWLINE = 0x0a;
 class JsonCodec implements Codec {
   readonly name = 'JSON';
   readonly contentType = 'application/json';
+  readonly text = true;
   private readonly encoder = new TextEncoder();
   private readonly decoder = new TextDecoder();
 
   encode(message: unknown): Uint8Array<ArrayBuffer> {
     return this.encoder.encode(`${JSON.stringify(message)}\n`);
+  }
+
+  frame(message: unknown): string {
+    return JSON.stringify(message);
   }
 
   decode(bytes: Uint8Array): unknown {

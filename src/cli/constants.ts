@@ -1,4 +1,4 @@
-export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server stdio|http] [--format cbor|json] [--port n] [--help]
+export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--format cbor|json] [--port n] [--help]
 
 Resolves a goblin document and prints the result as JSON: either
 { "hash", "version", "events", "data" } when all :param values are
@@ -50,6 +50,10 @@ Arguments:
                 stdin. http answers requests (or batches) POSTed to / on
                 127.0.0.1 — 200 with the response, 204 when all were
                 notifications — until killed, logging its URL to stderr.
+                websocket accepts upgrades at / on 127.0.0.1 (refusing
+                browser pages from other origins) and answers each message
+                frame with one, in order per connection, until killed,
+                logging its ws:// URL to stderr.
                 Method "resolve" takes { entry?, in?, inputs?, stripMetadata? }
                 — in is a prior envelope, inputs a list of { type:
                 "parameter" | "override" | "invoke", path, value } — and
@@ -58,12 +62,15 @@ Arguments:
                 --strip-metadata or --compact.
   --format      Wire format for --server requests and responses: cbor
                 (default; one CBOR item per message, application/cbor over
-                http) or json (one line per message over stdio,
-                application/json over http).
-  --port        Port for --server http (default 8080; 0 picks a free one).
+                http, binary frames over websocket) or json (one line per
+                message over stdio, application/json over http, text frames
+                over websocket). A frame of the other kind closes the
+                socket (1003).
+  --port        Port for --server http or websocket (default 8080; 0 picks
+                a free one).
   --help, -h    Show this help.`;
 
-/** `--server http` listens here unless `--port` says otherwise. */
+/** `--server http|websocket` listens here unless `--port` says otherwise. */
 export const DEFAULT_PORT = 8080;
 
 export const INVOKE_ALONE =

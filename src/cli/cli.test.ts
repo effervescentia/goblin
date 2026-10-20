@@ -1,4 +1,4 @@
-import { execFileSync, spawn } from 'node:child_process';
+import { type ChildProcessWithoutNullStreams, execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -193,19 +193,20 @@ describe('parseArgs --server', () => {
     });
   });
 
-  it('accepts --server http with a --port', () => {
-    expect(parseArgs(['--server', 'http']).port).toBeUndefined();
-    expect(parseArgs(['--port', '0', '--server', 'http'])).toMatchObject({ server: 'http', port: 0 });
+  it.each(['http', 'websocket'])('accepts --server %s with a --port', (mode) => {
+    expect(parseArgs(['--server', mode]).port).toBeUndefined();
+    expect(parseArgs(['--port', '0', '--server', mode])).toMatchObject({ server: mode, port: 0 });
   });
 
   it.each([[], ['tcp'], ['a.yaml']])('rejects --server %s', (...mode) => {
-    expect(() => parseArgs(['--server', ...mode])).toThrow('--server expects stdio or http');
+    expect(() => parseArgs(['--server', ...mode])).toThrow('--server expects stdio, http or websocket');
   });
 
   it('accepts --format with either server, leaving the default to the transport', () => {
     expect(parseArgs(['--server', 'stdio']).format).toBeUndefined();
     expect(parseArgs(['--server', 'stdio', '--format', 'json']).format).toBe('json');
     expect(parseArgs(['--format', 'cbor', '--server', 'http']).format).toBe('cbor');
+    expect(parseArgs(['--server', 'websocket', '--format', 'json']).format).toBe('json');
   });
 
   it('rejects a bad --format, or one without --server', () => {
@@ -214,12 +215,12 @@ describe('parseArgs --server', () => {
     expect(() => parseArgs(['--format', 'json'])).toThrow('--format needs --server');
   });
 
-  it('rejects a bad --port, or one without --server http', () => {
+  it('rejects a bad --port, or one without --server http or websocket', () => {
     expect(() => parseArgs(['--server', 'http', '--port'])).toThrow('--port expects a port number');
     expect(() => parseArgs(['--server', 'http', '--port', '-1'])).toThrow('--port expects a port number');
     expect(() => parseArgs(['--server', 'http', '--port', '65536'])).toThrow('--port expects a port number');
-    expect(() => parseArgs(['--server', 'stdio', '--port', '80'])).toThrow('--port needs --server http');
-    expect(() => parseArgs(['--port', '80'])).toThrow('--port needs --server http');
+    expect(() => parseArgs(['--server', 'stdio', '--port', '80'])).toThrow('--port needs --server http or websocket');
+    expect(() => parseArgs(['--port', '80'])).toThrow('--port needs --server http or websocket');
   });
 
   it.each([
@@ -420,7 +421,7 @@ describe('rehydrate', () => {
 describe('USAGE', () => {
   it('documents the CLI', () => {
     expect(USAGE).toContain(
-      'goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server stdio|http] [--format cbor|json] [--port n] [--help]',
+      'goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--format cbor|json] [--port n] [--help]',
     );
     expect(USAGE).toContain('--out');
     expect(USAGE).toContain('--in');
@@ -858,21 +859,25 @@ const WIRES: [string, Wire][] = [
   ],
 ];
 
+/** The URL a spawned server logs once it is up. */
+const listening = (child: ChildProcessWithoutNullStreams) =>
+  new Promise<string>((resolve, reject) => {
+    let stderr = '';
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+      const [, found] = stderr.match(/listening on (\S+)/) ?? [];
+      if (found !== undefined) resolve(found);
+    });
+    child.on('exit', (code) => reject(new Error(`server exited (${code}): ${stderr}`)));
+  });
+
 describe('cli --server http', () => {
   it.each(WIRES)(
     'answers posted %s resolve turns with the envelope a run prints, logging its URL',
     async (_, { flags, type, write, read }) => {
       const child = spawn('bun', ['src/cli/cli.ts', '--server', 'http', '--port', '0', ...flags], { cwd: root });
       try {
-        const url = await new Promise<string>((resolve, reject) => {
-          let stderr = '';
-          child.stderr.on('data', (chunk) => {
-            stderr += chunk;
-            const [, found] = stderr.match(/listening on (\S+)/) ?? [];
-            if (found !== undefined) resolve(found);
-          });
-          child.on('exit', (code) => reject(new Error(`server exited (${code}): ${stderr}`)));
-        });
+        const url = await listening(child);
         expect(new URL(url).hostname).toBe('127.0.0.1');
         const entry = 'examples/08-parameters.yaml';
         const res = await fetch(url, {
@@ -892,4 +897,52 @@ describe('cli --server http', () => {
       }
     },
   );
+});
+
+describe('cli --server websocket', () => {
+  it.each([
+    [
+      'cbor',
+      [],
+      (message: unknown) => new Uint8Array(encode(message)),
+      (data: unknown) => decode(new Uint8Array(data as ArrayBuffer)),
+    ],
+    [
+      'json',
+      ['--format', 'json'],
+      (message: unknown) => JSON.stringify(message),
+      (data: unknown) => JSON.parse(data as string),
+    ],
+  ])('answers %s resolve frames with the envelope a run prints, logging its URL', async (_, flags, write, read) => {
+    const child = spawn('bun', ['src/cli/cli.ts', '--server', 'websocket', '--port', '0', ...flags], { cwd: root });
+    try {
+      const url = new URL(await listening(child));
+      expect(url.protocol).toBe('ws:');
+      expect(url.hostname).toBe('127.0.0.1');
+      const ws = new WebSocket(url);
+      ws.binaryType = 'arraybuffer';
+      const answers: unknown[] = [];
+      const done = new Promise<void>((resolve, reject) => {
+        ws.onmessage = (event) => {
+          answers.push(read(event.data));
+          if (answers.length === 2) resolve();
+        };
+        ws.onerror = () => reject(new Error('socket failed'));
+      });
+      await new Promise((resolve) => {
+        ws.onopen = resolve;
+      });
+      const entry = 'examples/08-parameters.yaml';
+      ws.send(write({ jsonrpc: '2.0', id: 1, method: 'resolve', params: { entry } }));
+      ws.send(write({ jsonrpc: '2.0', id: 2, method: 'resolve', params: { entry: 'nope.yaml' } }));
+      await done;
+      ws.close();
+      const [asking, missing] = answers as [{ result: unknown }, unknown];
+      expect(asking).toMatchObject({ id: 1 });
+      expect(asking.result).toEqual(JSON.parse(runCli(entry).stdout));
+      expect(missing).toMatchObject({ id: 2, error: { code: -32000 } });
+    } finally {
+      child.kill();
+    }
+  });
 });
