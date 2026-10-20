@@ -2,6 +2,10 @@ import z from 'zod';
 import { InputSchema } from '@/dtos';
 import { INVOKE_ALONE } from './constants';
 
+export const ServerModeSchema = z.enum(['stdio', 'http']);
+
+export type ServerMode = z.infer<typeof ServerModeSchema>;
+
 export const ConfigSchema = z.object({ root: z.string().default('.'), main: z.string() });
 
 /**

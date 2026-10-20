@@ -51,14 +51,16 @@ apart. Treat a missing spec update as an incomplete change.
   The final evaluated state always logs; diagnostics need `--debug`
   (validation failures always log as errors).
 - `bun run build` compiles `src/cli/cli.ts` to a `build/goblin` binary
-  (`goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--in state.json|-] [--out file.json] [--server] [--help]`) that prints
+  (`goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--in state.json|-] [--out file.json] [--server stdio|http] [--port n] [--help]`) that prints
   the resolution envelope (`{ hash, version, events, result?, data }` — a run counter, the append-only stream of every `--param`/`--set`/`--invoke` given (as `parameter`/`override`/`invoke` events) with the engine's `set`/`add`/`subtract` writes and every die `roll` woven in (`weave`, in the order made), and the return value of this run's `--invoke`, with `hash` a `sha256:` of the compact JSON of the rest — `{ hash, version, events, query }` when params are outstanding, or `{ errors }` for failing `!validate` rules) as JSON to stdout, also writing it to `--out` unless it is `{ errors }`. `--invoke` only runs on a stable state: never alongside `--param`/`--set`, and only on an `--in` state (or bare entry) that resolves to `{ data }`. `--in` replays all of a prior output's `events` — inputs re-make the writes, recorded rolls replay as a tape (`Die.within` frames), and invoke-made writes keep their values — appends this run's, and bumps its `version` (`-` reads stdin). Keep serialized key order deterministic (same input → same order) — the
   `hash` is over `JSON.stringify`, so unstable ordering silently changes it. `src/cli/cli.ts` is Bun-only; keep `parseArgs` pure
   so `src/cli/cli.test.ts` stays runtime-agnostic.
-- `--server` keeps the CLI up as a JSON-RPC 2.0 server over stdio, each message
-  one CBOR item (`src/server/stdio.ts`, transport only). Its `resolve` method calls the
-  same `run` as a one-shot invocation, so its result is the exact envelope
-  (and `hash`) the CLI prints; add methods in `src/cli/cli.ts`, not the transport.
+- `--server stdio|http` keeps the CLI up as a JSON-RPC 2.0 server. Dispatch lives in
+  `src/server/rpc.ts`; the transports only frame it — `stdio` one CBOR item per message
+  (`src/server/stdio.ts`), `http` one JSON body per `POST /` on 127.0.0.1, `--port`
+  (`src/server/http.ts`, a web-standard `fetch` handler so tests need no Bun). Its `resolve`
+  method calls the same `run` as a one-shot invocation, so its result is the exact envelope
+  (and `hash`) the CLI prints; add methods to `serverMethods` in `src/cli/cli.ts`, not a transport.
 - `bun run ui` serves the inspector (`ui/`, Bun-only) at localhost:3000: it
   resolves an entry via `resolveApp` in `src/cli/cli.ts`, answers `{ query }`
   turns with a form, and renders `inspect()` (`src/inspect.ts`, pure) —

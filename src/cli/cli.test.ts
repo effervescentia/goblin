@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -19,7 +19,6 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
-      server: false,
       events: [],
     });
   });
@@ -30,7 +29,6 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
-      server: false,
       events: [],
     });
   });
@@ -41,7 +39,6 @@ describe('parseArgs', () => {
       compact: true,
       stripMetadata: false,
       help: false,
-      server: false,
       events: [],
     });
     expect(parseArgs(['main.yaml', '--compact'])).toEqual({
@@ -49,7 +46,6 @@ describe('parseArgs', () => {
       compact: true,
       stripMetadata: false,
       help: false,
-      server: false,
       events: [],
     });
   });
@@ -60,7 +56,6 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: true,
       help: false,
-      server: false,
       events: [],
     });
     expect(parseArgs(['main.yaml', '--compact', '--strip-metadata'])).toEqual({
@@ -68,7 +63,6 @@ describe('parseArgs', () => {
       compact: true,
       stripMetadata: true,
       help: false,
-      server: false,
       events: [],
     });
   });
@@ -79,7 +73,6 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: true,
-      server: false,
       events: [],
     });
     expect(parseArgs(['-h'])).toEqual({
@@ -87,7 +80,6 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: true,
-      server: false,
       events: [],
     });
   });
@@ -98,7 +90,6 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
-      server: false,
       events: [{ type: 'parameter', path: 'hero_name', value: 'Aria' }],
     });
     expect(parseArgs(['--param', 'level=3', '--param', 'name=Aria'])).toEqual({
@@ -106,7 +97,6 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
-      server: false,
       events: [
         { type: 'parameter', path: 'level', value: 3 },
         { type: 'parameter', path: 'name', value: 'Aria' },
@@ -120,7 +110,6 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
-      server: false,
       events: [{ type: 'parameter', path: 'skills.trained', value: ['athletics', 'perception'] }],
     });
   });
@@ -141,7 +130,6 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
-      server: false,
       events: [{ type: 'override', path: 'level', value: 5 }],
     });
     expect(
@@ -197,12 +185,29 @@ describe('parseArgs', () => {
 });
 
 describe('parseArgs --server', () => {
-  it('accepts --server with an entry and --in', () => {
-    expect(parseArgs(['--server', 'a.yaml', '--in', 'state.json'])).toMatchObject({
-      server: true,
+  it('accepts --server stdio with an entry and --in', () => {
+    expect(parseArgs(['--server', 'stdio', 'a.yaml', '--in', 'state.json'])).toMatchObject({
+      server: 'stdio',
       entry: 'a.yaml',
       in: 'state.json',
     });
+  });
+
+  it('accepts --server http with a --port', () => {
+    expect(parseArgs(['--server', 'http']).port).toBeUndefined();
+    expect(parseArgs(['--port', '0', '--server', 'http'])).toMatchObject({ server: 'http', port: 0 });
+  });
+
+  it.each([[], ['tcp'], ['a.yaml']])('rejects --server %s', (...mode) => {
+    expect(() => parseArgs(['--server', ...mode])).toThrow('--server expects stdio or http');
+  });
+
+  it('rejects a bad --port, or one without --server http', () => {
+    expect(() => parseArgs(['--server', 'http', '--port'])).toThrow('--port expects a port number');
+    expect(() => parseArgs(['--server', 'http', '--port', '-1'])).toThrow('--port expects a port number');
+    expect(() => parseArgs(['--server', 'http', '--port', '65536'])).toThrow('--port expects a port number');
+    expect(() => parseArgs(['--server', 'stdio', '--port', '80'])).toThrow('--port needs --server http');
+    expect(() => parseArgs(['--port', '80'])).toThrow('--port needs --server http');
   });
 
   it.each([
@@ -213,8 +218,8 @@ describe('parseArgs --server', () => {
     ['--strip-metadata'],
     ['--compact'],
   ])('rejects %s alongside --server', (...flag) => {
-    expect(() => parseArgs(['--server', ...flag])).toThrow(`--server cannot be combined with ${flag[0]}`);
-    expect(() => parseArgs([...flag, '--server'])).toThrow(`--server cannot be combined with ${flag[0]}`);
+    expect(() => parseArgs(['--server', 'stdio', ...flag])).toThrow(`--server cannot be combined with ${flag[0]}`);
+    expect(() => parseArgs([...flag, '--server', 'http'])).toThrow(`--server cannot be combined with ${flag[0]}`);
   });
 });
 
@@ -403,7 +408,7 @@ describe('rehydrate', () => {
 describe('USAGE', () => {
   it('documents the CLI', () => {
     expect(USAGE).toContain(
-      'goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server] [--help]',
+      'goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server stdio|http] [--port n] [--help]',
     );
     expect(USAGE).toContain('--out');
     expect(USAGE).toContain('--in');
@@ -761,10 +766,10 @@ describe('cli', () => {
   });
 });
 
-describe('cli --server', () => {
+describe('cli --server stdio', () => {
   const server = (...messages: unknown[]): unknown[] => {
     const input = Buffer.concat(messages.map((message) => encode(message)));
-    const stdout = execFileSync('bun', ['src/cli/cli.ts', '--server'], { cwd: root, input });
+    const stdout = execFileSync('bun', ['src/cli/cli.ts', '--server', 'stdio'], { cwd: root, input });
     return decodeMultiple(stdout) ?? [];
   };
 
@@ -795,5 +800,37 @@ describe('cli --server', () => {
     expect(answered).toMatchObject({ id: 2, result: { version: 2 } });
     expect((answered as { result: { data: unknown } }).result.data).toEqual(JSON.parse(cli.stdout).data);
     expect(missing).toMatchObject({ id: 3, error: { code: -32000 } });
+  });
+});
+
+describe('cli --server http', () => {
+  it('answers posted resolve turns with the envelope a run prints, logging its URL', async () => {
+    const child = spawn('bun', ['src/cli/cli.ts', '--server', 'http', '--port', '0'], { cwd: root });
+    try {
+      const url = await new Promise<string>((resolve, reject) => {
+        let stderr = '';
+        child.stderr.on('data', (chunk) => {
+          stderr += chunk;
+          const [, found] = stderr.match(/listening on (\S+)/) ?? [];
+          if (found !== undefined) resolve(found);
+        });
+        child.on('exit', (code) => reject(new Error(`server exited (${code}): ${stderr}`)));
+      });
+      expect(new URL(url).hostname).toBe('127.0.0.1');
+      const entry = 'examples/08-parameters.yaml';
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify([
+          { jsonrpc: '2.0', id: 1, method: 'resolve', params: { entry } },
+          { jsonrpc: '2.0', id: 2, method: 'resolve', params: { entry: 'nope.yaml' } },
+        ]),
+      });
+      const [asking, missing] = (await res.json()) as [{ result: unknown }, unknown];
+      expect(asking.result).toEqual(JSON.parse(runCli(entry).stdout));
+      expect(missing).toMatchObject({ id: 2, error: { code: -32000 } });
+    } finally {
+      child.kill();
+    }
   });
 });

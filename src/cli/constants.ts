@@ -1,4 +1,4 @@
-export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server] [--help]
+export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server stdio|http] [--port n] [--help]
 
 Resolves a goblin document and prints the result as JSON: either
 { "hash", "version", "events", "data" } when all :param values are
@@ -44,15 +44,23 @@ Arguments:
   --out         Also write the JSON to this file (replacing it) when the
                 document resolves to { "data": … } or asks with
                 { "query": … }; an { "errors" } result leaves it untouched.
-  --server      Stay up as a server: read JSON-RPC 2.0 requests from stdin
-                and write responses to stdout, each message one CBOR item.
+  --server      Stay up as a JSON-RPC 2.0 server instead of resolving once.
+                stdio reads requests from stdin and writes responses to
+                stdout, each message one CBOR item; it exits at end of stdin.
+                http answers JSON requests (or batches) POSTed to / on
+                127.0.0.1 — 200 with the response, 204 when all were
+                notifications — until killed, logging its URL to stderr.
                 Method "resolve" takes { entry?, in?, inputs?, stripMetadata? }
                 — in is a prior envelope, inputs a list of { type:
                 "parameter" | "override" | "invoke", path, value } — and
-                answers the envelope a run would print. Exits at end of stdin.
+                answers the envelope a run would print.
                 Cannot be combined with --param, --set, --invoke, --out,
                 --strip-metadata or --compact.
+  --port        Port for --server http (default 8080; 0 picks a free one).
   --help, -h    Show this help.`;
+
+/** `--server http` listens here unless `--port` says otherwise. */
+export const DEFAULT_PORT = 8080;
 
 export const INVOKE_ALONE =
   '--invoke cannot be combined with --param or --set: invoke on a stable state, answer in another run';
