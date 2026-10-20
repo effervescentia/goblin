@@ -1,6 +1,6 @@
-import { SIGIL_REF } from '../constants';
-import type { GoblinEngine } from '../engine';
-import type { EvalRoots } from '../utils';
+import { SIGIL_REF } from '@/constants';
+import type { GoblinEngine } from '@/core/engine';
+import type { EvalRoots } from '@/utils';
 import { DieNode } from './die';
 import { Node } from './node';
 

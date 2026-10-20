@@ -2,10 +2,10 @@
  * Where raw trees came from: side tables keyed by the records and lists the
  * engine holds, so provenance survives without touching the documents.
  */
-import { ACTOR_KEY, NAMESPACE } from './constants';
+import { ACTOR_KEY, NAMESPACE } from '@/constants';
+import { Die } from '@/nodes/die';
+import { deepClone } from '@/utils';
 import { copyLocations, type Location, type Locations } from './locations';
-import { Die } from './nodes/die';
-import { deepClone } from './utils';
 
 export class Provenance {
   /** Source document of a raw tree: loaded documents and `$tmpl('…')` clones. */

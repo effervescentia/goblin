@@ -15,7 +15,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PC = 'aria';
 
 function run(entry: string, ...extra: string[]): unknown {
-  const out = execFileSync('bun', ['src/cli.ts', entry, '--compact', ...extra], {
+  const out = execFileSync('bun', ['src/cli/cli.ts', entry, '--compact', ...extra], {
     cwd: root,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -47,9 +47,9 @@ function cliFails(entry: string, ...extra: string[]): string {
 }
 
 const script = `
-  import { GoblinEngine } from './src/engine.ts';
-  import { parameter } from './src/inputs.ts';
-  import { RecordNode } from './src/nodes/record.ts';
+  import { GoblinEngine } from '@/core/engine';
+  import { parameter } from '@/inputs';
+  import { RecordNode } from '@/nodes/record';
   const e = new GoblinEngine('5e');
   const params = (values) => Object.entries(values).map(([path, value]) => parameter(path, value));
   // Fields a patch wrote print as { :value, :events } — read the value.

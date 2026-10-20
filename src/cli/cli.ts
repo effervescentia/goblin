@@ -3,7 +3,7 @@
  * Goblin CLI — resolves the application state and prints it as JSON.
  *
  * Usage:
- *   goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--in state.json|-] [--out file.json] [--help]
+ *   goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--in state.json|-] [--out file.json] [--server] [--help]
  *
  * With no entry file, `.goblin.yaml` in the current directory is required.
  * An entry containing a directory (`examples/foo.yaml`) is resolved with
@@ -12,64 +12,23 @@
  * with a non-zero exit code.
  */
 import { createHash } from 'node:crypto';
-import { GoblinEngine } from './engine';
-import { type InputEvent, parseDice, type RollEvent, type StateEvent, type WriteEvent } from './inputs';
-import type { EngineEvent } from './journal';
-import { print } from './nodes/serialize';
-
-export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--help]
-
-Resolves a goblin document and prints the result as JSON: either
-{ "hash", "version", "events", "data" } when all :param values are
-satisfied (version counts runs since the first, bumped by each --in; events
-is the stream of every --param/--set/--invoke given so far, in order, each
-as { version, type: "parameter" | "override" | "invoke", path, value }, with the
-engine's writes woven in as { version, type: "set" | "add" | "subtract",
-path, value, rolled, source, line, column } and every roll as
-{ version, type: "roll", path, dice: "XdY", value: [faces] } — in the order
-made, an invoke's right after it; hash is a sha256 over the compact JSON of
-the rest, plus "result" under --invoke), or
-{ "hash", "version", "events", "query": […] } listing the outstanding
-parameters. A resolved sheet must also pass its !validate rules; failing
-rules print as { "errors": […] }.
-
-Arguments:
-  entry.yaml    Entry document (default: main from .goblin.yaml).
-                If it contains a directory, $tmpl('…') resolves relative to it.
-  --compact     Single-line JSON output (default: pretty-printed).
-  --param       Provide a :param value (repeatable). Values parse as JSON,
-                falling back to strings: --param level=3 --param name=Aria
-  --set         Override any value by path (repeatable, applied after
-                patches): --set level=5. Overridden originals are ignored,
-                even missing paths; :param records keep their :type contract.
-  --invoke      Call a function on the resolved document (once per run), by
-                path with JSON arguments: --invoke rest.short or
-                --invoke 'heal(5)'. Its writes land in "data" and its return
-                value prints as "result"; the call is saved as an event, so
-                --in replays its writes (a later --set still wins). It needs a
-                stable state: no --param or --set in the same run, and an
-                --in state (or, without one, the entry) that resolves to
-                "data". An invoke that brings in new params answers
-                { "query" }; save it and answer with --param.
-  --strip-metadata  Drop metadata keys (:doc, :type, !validate, …) from the
-                printed data, leaving plain values only. Functions print as
-                their source expression; records left empty collapse to null.
-  --in          Rehydrate from a prior { "data": … } or { "query": … }
-                output (a file, or - for stdin): all its events replay. Inputs apply in order
-                (later wins) and make the writes again; every recorded roll
-                lands as it did, and an invoke's writes keep their values. This
-                run's --param/--set/--invoke are appended as events of the
-                incremented version. A hash must match the rest of the state.
-  --out         Also write the JSON to this file (replacing it) when the
-                document resolves to { "data": … } or asks with
-                { "query": … }; an { "errors" } result leaves it untouched.
-  --help, -h    Show this help.`;
+import z from 'zod';
+import { GoblinEngine } from '@/core/engine';
+import type { EngineEvent } from '@/core/journal';
+import { StateEventSchema, VersionSchema } from '@/dtos';
+import { type InputEvent, isInputEvent, type StateEvent } from '@/inputs';
+import { print } from '@/nodes/serialize';
+import { INVALID_PARAMS, StdioError, StdioServer } from '@/server/stdio';
+import { INVOKE_ALONE, ONE_SHOT, USAGE } from './constants';
+import { ConfigSchema, ResolveParamsSchema } from './dtos';
 
 export interface CliArgs {
   entry?: string;
   compact: boolean;
   stripMetadata: boolean;
   help: boolean;
+  /** Serve CBOR-encoded JSON-RPC over stdio instead of resolving once. */
+  server: boolean;
   in?: string;
   out?: string;
   /** Every --param / --set / --invoke in the order given; the run stamps their version. */
@@ -104,20 +63,21 @@ function parseInvoke(target: string | undefined): [string, unknown[]] {
   }
 }
 
-const INVOKE_ALONE =
-  '--invoke cannot be combined with --param or --set: invoke on a stable state, answer in another run';
-
 /** Pure argv parsing (excludes node/bun binary and script name). */
 export function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { compact: false, stripMetadata: false, help: false, events: [] };
+  const args: CliArgs = { compact: false, stripMetadata: false, help: false, server: false, events: [] };
+  const oneShot: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
+    if (ONE_SHOT.has(arg)) oneShot.push(arg);
     if (arg === '--compact') {
       args.compact = true;
     } else if (arg === '--strip-metadata') {
       args.stripMetadata = true;
     } else if (arg === '--help' || arg === '-h') {
       args.help = true;
+    } else if (arg === '--server') {
+      args.server = true;
     } else if (arg === '--out') {
       const path = argv[++i];
       if (path === undefined || path.startsWith('-'))
@@ -143,6 +103,7 @@ export function parseArgs(argv: string[]): CliArgs {
       throw new Error(`unexpected argument: ${arg}`);
     }
   }
+  if (args.server && oneShot.length > 0) throw new Error(`--server cannot be combined with ${oneShot[0]}`);
   return args;
 }
 
@@ -170,44 +131,6 @@ function hashOf(body: unknown): string {
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
-const isVersion = (value: unknown): value is number => Number.isInteger(value) && (value as number) >= 0;
-
-function isInput(event: unknown): event is InputEvent {
-  return (
-    isRecord(event) &&
-    isVersion(event.version) &&
-    (event.type === 'parameter' ||
-      event.type === 'override' ||
-      (event.type === 'invoke' && Array.isArray(event.value))) &&
-    typeof event.path === 'string' &&
-    event.path !== '' &&
-    'value' in event
-  );
-}
-
-function isWrite(event: unknown): event is WriteEvent {
-  return (
-    isRecord(event) &&
-    isVersion(event.version) &&
-    (event.type === 'set' || event.type === 'add' || event.type === 'subtract') &&
-    typeof event.path === 'string' &&
-    'value' in event &&
-    (event.rolled === undefined || typeof event.rolled === 'boolean')
-  );
-}
-
-function isRoll(event: unknown): event is RollEvent {
-  if (!isRecord(event) || !isVersion(event.version) || event.type !== 'roll' || typeof event.path !== 'string')
-    return false;
-  const [count, sides] = (typeof event.dice === 'string' && parseDice(event.dice)) || [];
-  const faces = event.value;
-  return (
-    sides !== undefined &&
-    Array.isArray(faces) &&
-    faces.length === count &&
-    faces.every((face) => Number.isInteger(face) && face >= 1 && face <= sides)
-  );
-}
 
 /** Thread the engine's writes and rolls into the input stream in the order
  * made: those from resolving ahead of the first invoke (or last, with none),
@@ -237,15 +160,17 @@ export function rehydrate(state: unknown): { version: number; events: StateEvent
     throw new Error('--in expects a { "data": … } or { "query": … } envelope');
   const { hash, version, events = [], result, data, query } = state;
   const stable = 'data' in state;
-  if (version !== undefined && !isVersion(version)) throw new Error('--in version must be a non-negative integer');
-  if (!Array.isArray(events) || !events.every((event) => isInput(event) || isWrite(event) || isRoll(event)))
+  if (version !== undefined && !VersionSchema.safeParse(version).success)
+    throw new Error('--in version must be a non-negative integer');
+  // Validate only: the raw events keep their key order, which the hash below covers.
+  if (!z.array(StateEventSchema).safeParse(events).success)
     throw new Error(
       '--in events must be { version, type, path, value } objects of type parameter, override, invoke, set, add, subtract or roll (with dice)',
     );
   // Stringify drops an undefined version or result, so states without them still verify.
   const body = stable ? { version, events, result, data } : { version, events, query };
   if (hash !== undefined && hash !== hashOf(body)) throw new Error('--in state hash does not match its contents');
-  return { version: version ?? 0, events, stable };
+  return { version: (version as number | undefined) ?? 0, events: events as StateEvent[], stable };
 }
 
 /** Resolution envelope plus `{ errors }` for sheets failing `!validate`. */
@@ -269,7 +194,9 @@ export async function resolveApp(
   if (main === undefined) {
     const config = Bun.file(`${cwd}/.goblin.yaml`);
     if (await config.exists()) {
-      const opts = YAML.parse(await config.text()) as { root: string; main: string };
+      const parsed = ConfigSchema.safeParse(YAML.parse(await config.text()));
+      if (!parsed.success) throw new Error(`invalid .goblin.yaml: ${z.prettifyError(parsed.error)}`);
+      const opts = parsed.data;
       root = `${cwd}/${opts.root}`;
       main = opts.main;
     } else {
@@ -297,6 +224,55 @@ export async function resolveApp(
   return { state, actor, engine };
 }
 
+/** One resolution turn: replay a prior envelope (`--in`), append these inputs
+ * as its next version, and answer with the envelope the CLI prints. */
+export async function run(
+  cwd: string,
+  { entry, prior: saved, inputs, stripMetadata = false }: RunRequest,
+): Promise<unknown> {
+  const prior = saved === undefined ? { version: 0, events: [], stable: true } : rehydrate(saved);
+  // An invoke acts on a settled sheet: a saved one, or an entry that needs no input.
+  const invoked = inputs.some((event) => event.type === 'invoke');
+  if (invoked && inputs.length > 1) throw new Error(INVOKE_ALONE);
+  if (invoked && !prior.stable) throw new Error('--invoke needs a stable state: --in still asks for params');
+  if (invoked && saved === undefined && !('data' in (await resolveAppState(cwd, entry))))
+    throw new Error('--invoke needs a stable state: the entry asks for params or fails validation');
+  const version = prior.version + 1;
+  const events: StateEvent[] = [...prior.events, ...inputs.map((event) => ({ version, ...event }))];
+  const { state, actor, engine } = await resolveApp(cwd, entry, events);
+  // Only this run's invoke answers with a result; earlier ones just replay their writes.
+  const show = stripMetadata ? print : (value: unknown) => value;
+  const shown =
+    'data' in state
+      ? { ...(invoked && 'result' in state ? { result: show(state.result) } : {}), data: show(state.data) }
+      : state;
+  const made = 'errors' in state ? [] : engine.events(actor, 'data' in state ? state.data : undefined);
+  const stream = weave(
+    events.filter(isInputEvent),
+    made.map((entry) => ({ ...entry, event: { ...entry.event, value: show(entry.event.value) } }) as EngineEvent),
+    version,
+  );
+  return withHash(shown, stream, version);
+}
+
+export interface RunRequest {
+  entry?: string;
+  /** A prior `{ data }` / `{ query }` envelope to replay, as `--in` reads it. */
+  prior?: unknown;
+  inputs: Omit<InputEvent, 'version'>[];
+  stripMetadata?: boolean;
+}
+
+const RESOLVE_PARAMS = 'resolve expects { entry?, in?, inputs?: [{ type, path, value }], stripMetadata? }';
+
+/** Check `--server` `resolve` params. */
+export function parseRunParams(params: unknown = {}): RunRequest {
+  const parsed = ResolveParamsSchema.safeParse(params);
+  if (!parsed.success) throw new StdioError(INVALID_PARAMS, `${RESOLVE_PARAMS}\n${z.prettifyError(parsed.error)}`);
+  const { entry, in: prior, inputs, stripMetadata } = parsed.data;
+  return { entry, prior, inputs, stripMetadata };
+}
+
 // Entry point only — no-op when imported (e.g. by tests).
 if (import.meta.main) {
   try {
@@ -305,34 +281,26 @@ if (import.meta.main) {
       process.stdout.write(`${USAGE}\n`);
       process.exit(0);
     }
+    if (args.server) {
+      const cwd = process.cwd();
+      const server = new StdioServer({ resolve: (params) => run(cwd, parseRunParams(params)) });
+      await server.serve(process.stdin, (bytes) => process.stdout.write(bytes));
+      process.exit(0);
+    }
     const prior =
       args.in === undefined
-        ? { version: 0, events: [], stable: true }
-        : rehydrate(JSON.parse(args.in === '-' ? await Bun.stdin.text() : await Bun.file(args.in).text()));
-    // An invoke acts on a settled sheet: a saved one, or an entry that needs no input.
-    const invoked = args.events.some((event) => event.type === 'invoke');
-    if (invoked && !prior.stable) throw new Error('--invoke needs a stable state: --in still asks for params');
-    if (invoked && args.in === undefined && !('data' in (await resolveAppState(process.cwd(), args.entry))))
-      throw new Error('--invoke needs a stable state: the entry asks for params or fails validation');
-    const version = prior.version + 1;
-    const events: StateEvent[] = [...prior.events, ...args.events.map((event) => ({ version, ...event }))];
-    const { state, actor, engine } = await resolveApp(process.cwd(), args.entry, events);
-    // Only this run's invoke answers with a result; earlier ones just replay their writes.
-    const show = args.stripMetadata ? print : (value: unknown) => value;
-    const shown =
-      'data' in state
-        ? { ...(invoked && 'result' in state ? { result: show(state.result) } : {}), data: show(state.data) }
-        : state;
-    const made = 'errors' in state ? [] : engine.events(actor, 'data' in state ? state.data : undefined);
-    const stream = weave(
-      events.filter(isInput),
-      made.map((entry) => ({ ...entry, event: { ...entry.event, value: show(entry.event.value) } }) as EngineEvent),
-      version,
-    );
-    const out = withHash(shown, stream, version);
+        ? undefined
+        : JSON.parse(args.in === '-' ? await Bun.stdin.text() : await Bun.file(args.in).text());
+    const out = await run(process.cwd(), {
+      entry: args.entry,
+      prior,
+      inputs: args.events,
+      stripMetadata: args.stripMetadata,
+    });
     const json = `${JSON.stringify(out, null, args.compact ? 0 : 2)}\n`;
     // A state that resolves or asks can be saved; Bun.write replaces the file.
-    if (args.out !== undefined && !('errors' in state)) await Bun.write(args.out, json);
+    if (args.out !== undefined && !(out !== null && typeof out === 'object' && 'errors' in out))
+      await Bun.write(args.out, json);
     process.stdout.write(json);
   } catch (err) {
     console.error(err instanceof Error ? err.message : err);

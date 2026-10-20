@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GoblinEngine } from './engine';
+import { GoblinEngine } from '@/core/engine';
 import { parameter } from './inputs';
 import { inspect } from './inspect';
 

@@ -1,4 +1,10 @@
 {
   "$schema": "https://www.schemastore.org/tsconfig",
-  "extends": ["@tsconfig/bun/tsconfig.json"]
+  "extends": ["@tsconfig/bun/tsconfig.json"],
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"],
+      "@test/*": ["./test/*"]
+    }
+  }
 }

@@ -1,8 +1,8 @@
 # Goblin Syntax
 
-Goblin documents are `.yaml` files evaluated by `src/engine.ts`. Each
+Goblin documents are `.yaml` files evaluated by `src/core/engine.ts`. Each
 `examples/NN-*.yaml` file demonstrates one section of this spec and is kept
-runnable by `src/examples.test.ts`.
+runnable by `test/examples.test.ts`.
 
 ## Addressability
 

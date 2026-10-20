@@ -14,14 +14,11 @@ import {
   SET_KEY,
   TEMPLATE_CALL,
   THEN_KEY,
-} from './constants';
-import type { GoblinEngine } from './engine';
-import type { InputEvent } from './inputs';
-import type { Journal } from './journal';
-import { Die } from './nodes/die';
-import { FunctionNode } from './nodes/function';
-import { RecordNode } from './nodes/record';
-import type { Provenance } from './provenance';
+} from '@/constants';
+import type { InputEvent } from '@/inputs';
+import { Die } from '@/nodes/die';
+import { FunctionNode } from '@/nodes/function';
+import { RecordNode } from '@/nodes/record';
 import {
   deepClone,
   type EvalRoots,
@@ -35,7 +32,10 @@ import {
   rootFor,
   setPath,
   stripPlus,
-} from './utils';
+} from '@/utils';
+import type { GoblinEngine } from './engine';
+import type { Journal } from './journal';
+import type { Provenance } from './provenance';
 
 /** `+field` on a scalar: two numbers sum, anything else composes an
  * expression so an added expression stays lazy. */

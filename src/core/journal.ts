@@ -15,7 +15,7 @@ import {
   SOURCE_KEY,
   SUBTRACT_KEY,
   VERSION_KEY,
-} from './constants';
+} from '@/constants';
 import {
   type InputEvent,
   isRollEvent,
@@ -24,11 +24,11 @@ import {
   type RollEvent,
   type StateEvent,
   type WriteEvent,
-} from './inputs';
+} from '@/inputs';
+import { Die, type RollFrame } from '@/nodes/die';
+import { deepClone, getChild, sameValue } from '@/utils';
 import type { Location } from './locations';
-import { Die, type RollFrame } from './nodes/die';
 import type { Provenance } from './provenance';
-import { deepClone, getChild, sameValue } from './utils';
 
 /** A write as the engine logged it (see `record`). */
 interface LoggedWrite {

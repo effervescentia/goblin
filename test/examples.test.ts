@@ -14,7 +14,7 @@ const files = readdirSync(join(root, 'examples'))
   .sort();
 
 function cli(entry: string, ...extra: string[]): unknown {
-  const out = execFileSync('bun', ['src/cli.ts', entry, '--compact', ...extra], {
+  const out = execFileSync('bun', ['src/cli/cli.ts', entry, '--compact', ...extra], {
     cwd: root,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -228,7 +228,7 @@ describe('examples', () => {
     const state = cli('examples/13-wildcards.yaml', '--strip-metadata') as { data: Record<string, unknown> };
     expect(state.data).toMatchObject({ maxes: [2, 3], pools: 2, short_maxes: [2] });
     const script = `
-      import { GoblinEngine } from './src/engine.ts';
+      import { GoblinEngine } from '@/core/engine';
       const e = new GoblinEngine('examples');
       await e.loadFile('13-wildcards.yaml');
       const doc = e.docs.get('13-wildcards.yaml');
@@ -258,8 +258,8 @@ describe('examples', () => {
 
   it('applies 07-class.yaml to 07-actor.yaml with $if gating', () => {
     const script = `
-      import { GoblinEngine } from './src/engine.ts';
-      import { debug } from './src/nodes/serialize.ts';
+      import { GoblinEngine } from '@/core/engine';
+      import { debug } from '@/nodes/serialize';
       const e = new GoblinEngine('examples');
       // Fields a patch wrote print as { :value, :events } — read the value.
       const val = (v) => (v && typeof v === 'object' && ':value' in v ? v[':value'] : v);

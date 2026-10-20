@@ -1,4 +1,4 @@
-import { DIE_LITERAL } from '../constants';
+import { DIE_LITERAL } from '@/constants';
 import { Node } from './node';
 
 /** Where dice are rolled: it may hand back recorded faces instead of fresh ones. */

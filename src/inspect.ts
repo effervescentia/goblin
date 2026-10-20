@@ -4,6 +4,11 @@
  * `:events` that produced it. Pure — the UI server feeds it the merged raw
  * actor and the `{ data }` the engine printed for it.
  */
+
+import { Die } from '@/nodes/die';
+import { ExpressionNode } from '@/nodes/expression';
+import { FunctionNode } from '@/nodes/function';
+import { RecordNode } from '@/nodes/record';
 import {
   ACTOR_KEY,
   ASSIGN_OP,
@@ -16,10 +21,6 @@ import {
   THEN_KEY,
   VALIDATE_KEY,
 } from './constants';
-import { Die } from './nodes/die';
-import { ExpressionNode } from './nodes/expression';
-import { FunctionNode } from './nodes/function';
-import { RecordNode } from './nodes/record';
 import { isBareSigil, isMetaKey, isPathKey, isPrivateKey, isValidateKey } from './utils';
 
 export type InspectKind = 'record' | 'list' | 'param' | 'expression' | 'function' | 'value';

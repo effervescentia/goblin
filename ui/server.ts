@@ -5,9 +5,11 @@
  *   bun run ui            # http://localhost:3000
  */
 import { resolve as resolvePath } from 'node:path';
-import { resolveApp } from '../src/cli';
-import { override, parameter } from '../src/inputs';
-import { inspect } from '../src/inspect';
+import z from 'zod';
+import { resolveApp } from '@/cli/cli';
+import { override, parameter } from '@/inputs';
+import { inspect } from '@/inspect';
+import { ResolveRequestSchema } from './dtos';
 import index from './index.html';
 
 const root = `${import.meta.dir}/..`;
@@ -17,12 +19,6 @@ async function entries(): Promise<string[]> {
   const found: string[] = [];
   for await (const file of new Bun.Glob('{5e,examples,wip}/**/*.yaml').scan(root)) found.push(file);
   return found.sort();
-}
-
-interface ResolveRequest {
-  entry: string;
-  params?: Record<string, unknown>;
-  overrides?: Record<string, unknown>;
 }
 
 const server = Bun.serve({
@@ -46,8 +42,10 @@ const server = Bun.serve({
     },
     '/api/resolve': {
       POST: async (req) => {
-        const { entry, params = {}, overrides = {} } = (await req.json()) as ResolveRequest;
         try {
+          const parsed = ResolveRequestSchema.safeParse(await req.json());
+          if (!parsed.success) throw new Error(`invalid resolve request: ${z.prettifyError(parsed.error)}`);
+          const { entry, params, overrides } = parsed.data;
           const inputs = [
             ...Object.entries(params).map(([path, value]) => parameter(path, value)),
             ...Object.entries(overrides).map(([path, value]) => override(path, value)),

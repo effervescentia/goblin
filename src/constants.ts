@@ -3,7 +3,7 @@
  * place. Predicates and behavior built on these live in `./utils`.
  */
 
-// -- addressibility sigils (see SYNTAX.md) ------------------------------------
+// -- addressability sigils (see SYNTAX.md) ------------------------------------
 
 /** Current node. */
 export const CURRENT = '.';

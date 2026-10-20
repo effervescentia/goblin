@@ -18,11 +18,11 @@ import {
   UNIQUE_KEY,
   VALIDATE_KEY,
   VALUE_KEY,
-} from '../constants';
-import type { GoblinEngine } from '../engine';
-import { type InputEvent, paramValue } from '../inputs';
-import type { EvalRoots } from '../utils';
-import { isBareSigil, isMetaKey, isPathKey, isPrivateKey, isValidateKey, stripPlus } from '../utils';
+} from '@/constants';
+import type { GoblinEngine } from '@/core/engine';
+import { type InputEvent, paramValue } from '@/inputs';
+import type { EvalRoots } from '@/utils';
+import { isBareSigil, isMetaKey, isPathKey, isPrivateKey, isValidateKey, stripPlus } from '@/utils';
 import { Die } from './die';
 import { FunctionNode } from './function';
 import { Node } from './node';

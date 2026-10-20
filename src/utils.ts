@@ -1,6 +1,8 @@
 /** Goblin — refs, paths, and expression compilation. Node-specific helpers
  * live on their node class in `./nodes`; nothing here imports `engine.ts`. */
 
+import type { Location } from '@/core/locations';
+import { Die } from '@/nodes/die';
 import {
   ACTOR,
   APP,
@@ -18,8 +20,6 @@ import {
   WILDCARD,
 } from './constants';
 import type { InputEvent } from './inputs';
-import type { Location } from './locations';
-import { Die } from './nodes/die';
 
 export interface EvalRoots {
   /** `#` — top of the current document. */

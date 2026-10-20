@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { BooleanNode } from './nodes/boolean';
-import { Die, DieNode } from './nodes/die';
-import { ExpressionNode } from './nodes/expression';
-import { FunctionNode } from './nodes/function';
-import { ListNode } from './nodes/list';
-import { NullNode } from './nodes/null';
-import { NumberNode } from './nodes/number';
-import { parse } from './nodes/parse';
-import { RecordNode } from './nodes/record';
-import { debug, print } from './nodes/serialize';
-import { StringNode } from './nodes/string';
-import { UnexpectedNode } from './nodes/unexpected';
+import { BooleanNode } from './boolean';
+import { Die, DieNode } from './die';
+import { ExpressionNode } from './expression';
+import { FunctionNode } from './function';
+import { ListNode } from './list';
+import { NullNode } from './null';
+import { NumberNode } from './number';
+import { parse } from './parse';
+import { RecordNode } from './record';
+import { debug, print } from './serialize';
+import { StringNode } from './string';
+import { UnexpectedNode } from './unexpected';
 
 describe('parse', () => {
   it('classifies scalars', () => {

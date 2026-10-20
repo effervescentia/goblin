@@ -1,4 +1,4 @@
-import { PARAM_VALUE_KEY } from '../constants';
+import { PARAM_VALUE_KEY } from '@/constants';
 
 /** The picks a value holds — a `:param` record's `:value`, never its
  * `:options`, which are offered rather than taken. */

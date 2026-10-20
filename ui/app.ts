@@ -4,8 +4,8 @@
  * `{ query }` turn by turn, and renders the resolved app — every field, the
  * fields each one reads (and is read by), and the `:events` behind it.
  */
-import type { InspectNode } from '../src/inspect';
-import type { MissingParam } from '../src/nodes/record';
+import type { InspectNode } from '@/inspect';
+import type { MissingParam } from '@/nodes/record';
 
 type GoblinEvent = Record<string, unknown>;
 
