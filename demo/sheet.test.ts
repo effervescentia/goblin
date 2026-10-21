@@ -5,6 +5,7 @@ import {
   at,
   combatOf,
   describeEvent,
+  docOf,
   eventsAt,
   expressionsOf,
   fields,
@@ -13,6 +14,7 @@ import {
   labelOf,
   parseParam,
   picksAny,
+  plainStep,
   readParam,
   type Segment,
   signed,
@@ -75,6 +77,21 @@ describe('sheet', () => {
     });
     expect(formulaAt(sheet, 'speed')).toBeUndefined();
     expect(formulaAt(sheet, 'hit_points.current')).toBeUndefined();
+  });
+
+  it('reads one level of a record as plain values, functions as their signature', () => {
+    expect(plainStep(sheet.name)).toBe('Aria');
+    expect(plainStep(sheet.armor_class)).toBe(12);
+    expect(plainStep(sheet.hit_points)).toEqual({ current: sheet.hit_points.current, max: 11 });
+    expect(plainStep({ ':type': 'function', ':params': [], ':source': '…' })).toBe('ƒ()');
+    expect(plainStep({ ':type': 'function', ':params': ['target', 'amount'] })).toBe('ƒ(target, amount)');
+    expect(plainStep({ ':value': { ':value': [1] } })).toEqual([1]);
+  });
+
+  it('reads a field’s `:doc`', () => {
+    expect(docOf(sheet.features)).toBe('all of them');
+    expect(docOf(sheet.speed)).toBeUndefined();
+    expect(docOf('a string')).toBeUndefined();
   });
 
   it('reads the unlabelled refs in a formula: beside the field, or on the character', () => {

@@ -18,6 +18,7 @@ import {
   CHARACTER,
   combatOf,
   describeEvent,
+  docOf,
   ENTRY,
   eventsAt,
   expressionsOf,
@@ -28,6 +29,7 @@ import {
   humanize,
   labelOf,
   picksAny,
+  plainStep,
   readParam,
   type Segment,
   signed,
@@ -56,6 +58,8 @@ function App() {
   const busy = useRef(false);
   const [answer, setAnswer] = useState<Answer>();
   const [status, setStatus] = useState('connecting…');
+  const [view, setView] = useState<'sheet' | 'json'>('sheet');
+  const resolved = answer !== undefined && 'data' in answer;
   const [sessionID, setSessionID] = useState<string>();
   const [expressions, setExpressions] = useState(new Map<string, string>());
 
@@ -97,6 +101,21 @@ function App() {
             session <code>{sessionID}</code>
           </span>
         ) : null}
+        {resolved ? (
+          <nav class="views">
+            {(['sheet', 'json'] as const).map((name) => (
+              <button
+                key={name}
+                type="button"
+                class={view === name ? undefined : 'quiet'}
+                aria-pressed={view === name}
+                onClick={() => setView(name)}
+              >
+                {name === 'sheet' ? 'Sheet' : 'JSON'}
+              </button>
+            ))}
+          </nav>
+        ) : null}
       </header>
       <main>
         {answer === undefined ? null : 'errors' in answer ? (
@@ -108,6 +127,8 @@ function App() {
         ) : 'query' in answer ? (
           // Keyed by version so each turn's form starts blank.
           <Query key={answer.version} query={answer.query} turn={turn} />
+        ) : view === 'json' ? (
+          <Json actor={at(answer.data, CHARACTER)} />
         ) : (
           <Sheet data={answer.data} events={answer.events} expressions={expressions} turn={turn} />
         )}
@@ -532,6 +553,117 @@ function Sheet({
         </dl>
       </Section>
     </article>
+  );
+}
+
+// -- the actor as JSON ---------------------------------------------------------
+
+/** The resolved actor behind the sheet: plain values, or as the engine sends it, metadata and all. */
+function Json({ actor }: { actor: unknown }) {
+  const [metadata, setMetadata] = useState(false);
+  // Expanding or collapsing everything remounts the tree, since each node's `open` is the DOM's after a click.
+  const [fold, setFold] = useState({ depth: 2, generation: 0 });
+  const unfold = (depth: number) => setFold(({ generation }) => ({ depth, generation: generation + 1 }));
+  return (
+    <section class="panel json">
+      <div class="json-tools">
+        <label class="check">
+          <input type="checkbox" checked={metadata} onChange={(event) => setMetadata(event.currentTarget.checked)} />
+          Show metadata (<code>:value</code>, <code>:events</code>, <code>:formula</code>, …)
+        </label>
+        <button type="button" class="quiet" onClick={() => unfold(Number.POSITIVE_INFINITY)}>
+          Expand all
+        </button>
+        <button type="button" class="quiet" onClick={() => unfold(1)}>
+          Collapse all
+        </button>
+      </div>
+      <div class="tree" key={fold.generation}>
+        <JsonNode node={actor} metadata={metadata} depth={0} open={fold.depth} />
+      </div>
+    </section>
+  );
+}
+
+interface JsonNodeProps {
+  name?: string;
+  node: unknown;
+  metadata: boolean;
+  depth: number;
+  open: number;
+}
+
+/**
+ * One value in the tree: a record or array folds open to its entries, opening by default above depth `open`.
+ * Without `metadata`, the node shows as its plain value, with its `:doc` as a tooltip on its key.
+ */
+function JsonNode({ name, node, metadata, depth, open }: JsonNodeProps) {
+  const value = metadata ? node : plainStep(node);
+  const doc = metadata ? undefined : docOf(node);
+  const key = name === undefined ? null : <JsonKey name={name} doc={doc} />;
+  if (value === null || typeof value !== 'object') {
+    return (
+      <div>
+        {key}
+        <span class={`literal ${value === null ? 'null' : typeof value}`}>{JSON.stringify(value)}</span>
+      </div>
+    );
+  }
+  const list = Array.isArray(value);
+  const entries: [string | undefined, unknown][] = list
+    ? value.map((item) => [undefined, item])
+    : Object.entries(value as Record<string, unknown>);
+  const [start, end] = list ? ['[', ']'] : ['{', '}'];
+  if (entries.length === 0) {
+    return (
+      <div>
+        {key}
+        {start}
+        {end}
+      </div>
+    );
+  }
+  return (
+    <details open={depth < open}>
+      <summary>
+        {key}
+        {start}
+        <span class="folded">
+          … {end}{' '}
+          <span class="muted">
+            {entries.length} {list ? 'item' : 'key'}
+            {entries.length === 1 ? '' : 's'}
+          </span>
+        </span>
+      </summary>
+      <div class="entries">
+        {entries.map(([child, item], i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: entries are positional
+          <JsonNode key={i} name={child} node={item} metadata={metadata} depth={depth + 1} open={open} />
+        ))}
+      </div>
+      {end}
+    </details>
+  );
+}
+
+function JsonKey({ name, doc }: { name: string; doc?: string }) {
+  const key = <span class="key">{JSON.stringify(name)}</span>;
+  return (
+    <>
+      {doc ? (
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: focus shows the tooltip to keyboard users
+        <span class="history" tabIndex={0}>
+          {key}
+          <span class="tooltip" role="tooltip">
+            {doc}
+          </span>
+        </span>
+      ) : (
+        key
+      )}
+      {': '}
+    </>
   );
 }
 
