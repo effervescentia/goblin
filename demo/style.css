@@ -179,10 +179,6 @@ main {
   color: var(--muted);
 }
 
-.stat .formula {
-  font-size: 11px;
-}
-
 .stat .value {
   font-size: 22px;
   font-weight: 600;
@@ -242,6 +238,41 @@ main {
 .panel h3 {
   font-size: 14px;
   color: var(--muted);
+}
+
+button.quiet {
+  background: transparent;
+  color: var(--accent);
+}
+
+.check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.check input {
+  width: auto;
+}
+
+.order {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.order li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  padding: 4px 8px;
+  border-top: 1px solid var(--line);
+}
+
+.order li.current {
+  background: var(--accent-soft);
+  border-radius: 6px;
+  font-weight: 600;
 }
 
 .rests {

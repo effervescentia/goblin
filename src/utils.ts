@@ -252,9 +252,9 @@ function transpileStatement(stmt: string): { code: string; isAssign: boolean } {
     // `ref[key]…` writes the field each key names, computed per call.
     const indexed = splitIndexes(lhs);
     if (indexed) {
-      const keys = indexed.keys.map((key) => rewriteExpr(rewriteIndexing(key), unmark));
+      const keys = indexed.keys.map((key) => rewriteExpr(rewriteIndexing(key, literals), unmark));
       const target = `__at(${JSON.stringify(indexed.ref)}, ${keys.join(', ')})`;
-      const code = `__assign(${target}, (${rewriteExpr(rewriteIndexing(rhs), unmark)}), ${op})`;
+      const code = `__assign(${target}, (${rewriteExpr(rewriteIndexing(rhs, literals), unmark)}), ${op})`;
       return { code: restoreLiterals(code, literals), isAssign: true };
     }
     SIGIL_REF.lastIndex = 0;
@@ -268,11 +268,11 @@ function transpileStatement(stmt: string): { code: string; isAssign: boolean } {
           isAssign: true,
         };
       }
-      const code = `__assign(${JSON.stringify(lhs)}, (${rewriteExpr(rewriteIndexing(rhs), unmark)}), ${op})`;
+      const code = `__assign(${JSON.stringify(lhs)}, (${rewriteExpr(rewriteIndexing(rhs, literals), unmark)}), ${op})`;
       return { code: restoreLiterals(code, literals), isAssign: true };
     }
   }
-  return { code: restoreLiterals(rewriteExpr(rewriteIndexing(marked), unmark), literals), isAssign: false };
+  return { code: restoreLiterals(rewriteExpr(rewriteIndexing(marked, literals), unmark), literals), isAssign: false };
 }
 
 function rewriteExpr(code: string, unmark: (ref: string) => string): string {
@@ -323,15 +323,33 @@ export function parseWildcard(segment: string): { predicate?: string } | null {
 }
 
 /** `x[i]` → `__index(x, i)`, leftmost first so chains (`x[0][1]`) nest. A `[`
- * right after `)`, `]` or a name indexes; anywhere else it opens a list. */
-function rewriteIndexing(code: string): string {
+ * right after `)`, `]` or a name indexes; anywhere else it opens a list.
+ * A ref whose indexes a path continues (`$.party[name].level`) reads the ref
+ * the keys spell instead, so its target evaluates lazily, as itself. Its
+ * texts go to `literals`, out of reach of the ref rewriting that follows. */
+function rewriteIndexing(code: string, literals: string[]): string {
   for (let i = 0; i < code.length; i++) {
     if (code[i] !== '[' || !/[\w)\]]/.test(code[i - 1] ?? '')) continue;
     const close = matchBracket(code, i, 1);
     const start = operandStart(code, i - 1);
-    const inner = rewriteIndexing(code.slice(i + 1, close));
-    const rewritten = `__index(${code.slice(start, i)}, ${inner})`;
-    return rewriteIndexing(code.slice(0, start) + rewritten + code.slice(close + 1));
+    const operand = code.slice(start, i);
+    const keys = [rewriteIndexing(code.slice(i + 1, close), literals)];
+    let end = close + 1;
+    while (code[end] === '[') {
+      const next = matchBracket(code, end, 1);
+      keys.push(rewriteIndexing(code.slice(end + 1, next), literals));
+      end = next + 1;
+    }
+    const rest = code.slice(end).match(/^(\.[A-Za-z_]\w*)+/)?.[0];
+    SIGIL_REF.lastIndex = 0;
+    if (rest !== undefined && !operand.includes('__each') && operand.replace(SIGIL_REF, '') === '') {
+      literals.push(JSON.stringify(operand), JSON.stringify(rest));
+      const [ref, path] = [literals.length - 2, literals.length - 1];
+      const rewritten = `__path(__STR${ref}__, __STR${path}__, ${keys.join(', ')})`;
+      return rewriteIndexing(code.slice(0, start) + rewritten + code.slice(end + rest.length), literals);
+    }
+    const rewritten = `__index(${operand}, ${keys[0]})`;
+    return rewriteIndexing(code.slice(0, start) + rewritten + code.slice(close + 1), literals);
   }
   return code;
 }
@@ -395,14 +413,19 @@ function splitIndexes(lhs: string): { ref: string; keys: string[] } | null {
   return { ref, keys };
 }
 
-/** The ref an indexed assignment writes: each key one path segment. */
-function refAt(ref: string, ...keys: unknown[]): string {
+/** The ref `keys` spell under `ref`: each key one path segment. */
+function refPath(ref: string, keys: unknown[], what: string): string {
   const segments = keys.map((key) => {
     if (typeof key === 'number' && Number.isInteger(key) && key >= 0) return String(key);
     if (typeof key === 'string' && /^[A-Za-z_]\w*$/.test(key)) return key;
-    throw new Error(`invalid assignment key ${JSON.stringify(key)} for ${ref}`);
+    throw new Error(`invalid ${what} key ${JSON.stringify(key)} for ${ref}`);
   });
   return `${ref.endsWith('.') ? ref : `${ref}.`}${segments.join('.')}`;
+}
+
+/** The ref an indexed assignment writes. */
+function refAt(ref: string, ...keys: unknown[]): string {
+  return refPath(ref, keys, 'assignment');
 }
 
 /** `$tmpl(file, name?)` inside an expression is the call itself, as text: it
@@ -492,6 +515,7 @@ export function compileBody(body: string, paramNames: string[] = []) {
     '__roll',
     '__index',
     '__at',
+    '__path',
     '__tmpl',
     '__label',
     ...paramNames,
@@ -507,6 +531,7 @@ export function compileBody(body: string, paramNames: string[] = []) {
       roll,
       indexValue,
       refAt,
+      (ref: string, path: string, ...keys: unknown[]) => hooks.resolve(`${refPath(ref, keys, 'path')}${path}`),
       templateCall,
       hooks.label,
       ...paramNames.map((p) => params[p]),

@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   at,
+  combatOf,
   fields,
   formulaAt,
   humanize,
   labelOf,
   parseParam,
+  picksAny,
   readParam,
   signed,
   slotsOf,
@@ -88,5 +90,34 @@ describe('sheet', () => {
       { type: 'parameter', path: 'aria.class', value: 'fighter' },
       { type: 'parameter', path: 'aria.skills.trained', value: ['athletics'] },
     ]);
+  });
+
+  it('reads a choice of any distinct options as checked boxes', () => {
+    const members = { path: 'combat.members', type: 'array', options: ['aria', 'bram'], unique: true };
+    expect(picksAny(members)).toBe(true);
+    expect(picksAny({ ...members, count: 2 })).toBe(false);
+    expect(readParam(members, [])).toBeUndefined();
+    expect(readParam(members, ['', '1'])).toEqual(['bram']);
+    expect(readParam(members, ['1', '1'])).toEqual(['aria', 'bram']);
+  });
+
+  it('reads the fight in turn order, or null between fights', () => {
+    expect(combatOf({ combat: { ':value': null, ':events': [] } })).toBeNull();
+    const data = {
+      combat: {
+        initiative: { aria: 14, bram: 17 },
+        order: ['bram', 'aria'],
+        current: 'aria',
+        round: { ':value': 2, ':events': [] },
+      },
+    };
+    expect(combatOf(data)).toEqual({
+      round: 2,
+      current: 'aria',
+      order: [
+        { key: 'bram', initiative: 17 },
+        { key: 'aria', initiative: 14 },
+      ],
+    });
   });
 });

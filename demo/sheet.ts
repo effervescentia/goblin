@@ -64,6 +64,10 @@ export function parseParam(param: MissingParam, raw: string): unknown {
   return raw;
 }
 
+/** A choice of any distinct options (combat's members): one checkbox per option rather than a select per pick. */
+export const picksAny = (param: MissingParam) =>
+  Boolean(param.options && param.type === 'array' && param.unique && param.count === undefined);
+
 /** How many controls `param` takes: an exact count may repeat a pick (the same ability twice), so one select each. */
 export const slotsOf = (param: MissingParam) =>
   param.options && param.type === 'array' ? (param.count ?? param.options.length) : 1;
@@ -72,6 +76,10 @@ export const slotsOf = (param: MissingParam) =>
 export function readParam(param: MissingParam, raw: (string | undefined)[]): unknown {
   const { options } = param;
   if (!options) return parseParam(param, raw[0] ?? '');
+  if (picksAny(param)) {
+    const checked = options.filter((_, i) => raw[i]);
+    return checked.length > 0 ? checked : undefined;
+  }
   const picks = Array.from({ length: slotsOf(param) }, (_, i) => raw[i] || undefined);
   if (picks.some((pick) => pick === undefined)) return undefined;
   const values = picks.map((pick) => options[Number(pick)]);
@@ -127,3 +135,29 @@ export const TEMPLATES: Template[] = [
 /** A template's params as the inputs a `resolve` sends. */
 export const templateInputs = ({ params }: Template) =>
   Object.entries(params).map(([path, value]) => ({ type: 'parameter' as const, path: `${PARAMS}.${path}`, value }));
+
+interface Combatant {
+  key: string;
+  initiative: unknown;
+}
+
+export interface Combat {
+  round: unknown;
+  current: unknown;
+  order: Combatant[];
+}
+
+/** The fight in progress at `data.combat`, in turn order; null between fights. */
+export function combatOf(data: unknown): Combat | null {
+  const combat = at(data, 'combat');
+  if (!isRecord(combat)) return null;
+  const order = at(combat, 'order');
+  return {
+    round: at(combat, 'round'),
+    current: at(combat, 'current'),
+    order: (Array.isArray(order) ? order : []).map((key) => ({
+      key: String(key),
+      initiative: at(combat, `initiative.${key}`),
+    })),
+  };
+}

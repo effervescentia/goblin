@@ -1,0 +1,34 @@
+# 5e/combat.yaml — a fight between some of the party, written in at `combat`
+# by `game.start_combat()` in 5e/main.yaml and cleared by `game.end_combat()`.
+#
+# Members are party keys, offered from whoever is in the party when asked;
+# each rolls initiative once, and turns go highest first (Dexterity breaks ties).
+
+$actor: Combat
+
+members:
+  :label: Combatants
+  :doc: The party members in this fight.
+  :param: true
+  :type: array
+  :unique: true
+  :options: $lib.record.keys($.party)
+  '!validate':
+    - $lib.list.size(.) > 0
+
+'roll(name)': $.party[name].initiative.roll()
+initiative: $lib.record.from(@.members, .roll)
+# Tied initiative goes to the higher Dexterity score.
+'_dexterity_of(name)': $.party[name].abilities.dexterity.base
+_dexterity: $lib.record.from(@.members, ._dexterity_of)
+order: $lib.record.rank(.initiative, ._dexterity)
+
+round: 1
+# Index into `order` of whoever is acting.
+turn: 0
+current: '.order[.turn]'
+
+# Wrapping past the last combatant starts the next round.
+'end_turn()': |
+  @.round += $lib.math.floor((@.turn + 1) / $lib.list.size(@.order))
+  @.turn = (@.turn + 1) % $lib.list.size(@.order)

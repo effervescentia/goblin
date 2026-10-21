@@ -101,10 +101,15 @@ export class RecordNode extends Node<Record<string, unknown>> {
    * items each); `:unique: true` requires distinct array items; `:count`
    * requires an exact array length. Malformed declarations throw even when
    * the value is absent; bounds skip non-numbers, `:unique`/`:count` non-arrays.
+   * Computed `:options` (an expression) check only once a caller resolves them.
    */
-  static checkParamConstraints(record: Record<string, unknown>, value: unknown, path: string): void {
-    const options = record[OPTIONS_KEY];
-    if (options !== undefined && !Array.isArray(options)) {
+  static checkParamConstraints(
+    record: Record<string, unknown>,
+    value: unknown,
+    path: string,
+    options: unknown = record[OPTIONS_KEY],
+  ): void {
+    if (options !== undefined && !Array.isArray(options) && !RecordNode.computesOptions(options)) {
       throw new Error(`invalid :options for ${path}: expected array, got ${describeValue(options)}`);
     }
     const count = record[COUNT_KEY];
@@ -157,18 +162,25 @@ export class RecordNode extends Node<Record<string, unknown>> {
     }
   }
 
+  /** Whether `:options` is an expression, resolved where the param lives. */
+  static computesOptions(options: unknown): options is string {
+    return typeof options === 'string';
+  }
+
   /** Every `:param` record in a raw tree, as `[{ path, doc?, type?, … }]`.
    * A namespaced actor's params report under its namespace (`aria.name`);
-   * params an `inputs` parameter event fills by either key are left out. */
+   * params an `inputs` parameter event fills by either key are left out.
+   * `optionsAt` resolves computed `:options` from the param's tree path. */
   static collectParams(
     raw: unknown,
     namespaceOf?: (record: object) => string | undefined,
     inputs: readonly InputEvent[] = [],
+    optionsAt?: (at: string[]) => unknown,
   ): MissingParam[] {
     const missing: MissingParam[] = [];
     eachParamRecord(
       raw,
-      (record, key, full) => {
+      (record, key, full, at) => {
         const def = record[DEFAULT_KEY];
         if (def !== undefined && def !== null) return; // satisfied by default
         if (paramValue(inputs, key, full) !== undefined) return;
@@ -182,7 +194,8 @@ export class RecordNode extends Node<Record<string, unknown>> {
           assertKnownParamType(type, key);
           entry.type = type;
         }
-        const options = record[OPTIONS_KEY];
+        const declared = record[OPTIONS_KEY];
+        const options = RecordNode.computesOptions(declared) ? optionsAt?.(at) : declared;
         if (Array.isArray(options)) entry.options = [...options];
         const min = record[MIN_KEY];
         if (typeof min === 'number') entry.min = min;
@@ -326,7 +339,7 @@ function formatOption(value: unknown): string {
  */
 function eachParamRecord(
   raw: unknown,
-  visit: (record: Record<string, unknown>, key: string, full: string) => void,
+  visit: (record: Record<string, unknown>, key: string, full: string, at: string[]) => void,
   namespaceOf?: (record: object) => string | undefined,
 ): void {
   // `path` restarts at each namespaced actor below the root; `full` never does.
@@ -342,7 +355,7 @@ function eachParamRecord(
     const marker = record[PARAM_KEY];
     if (marker) {
       const alias = typeof marker === 'string' && marker ? marker : undefined;
-      visit(record, alias ?? path.join('.'), alias ?? full.join('.'));
+      visit(record, alias ?? path.join('.'), alias ?? full.join('.'), full);
     }
     for (const [key, value] of Object.entries(record)) {
       if (
@@ -377,6 +390,9 @@ function fillParam(engine: GoblinEngine, record: Record<string, unknown>, scope:
   for (const [key, value] of Object.entries(record)) {
     if (isMetaKey(key) || isValidateKey(key)) out[key] = value;
   }
+  const declared = record[OPTIONS_KEY];
+  const options = RecordNode.computesOptions(declared) ? engine.evalExpr(declared, scope) : declared;
+  if (options !== undefined) out[OPTIONS_KEY] = options;
   const provided = paramValue(scope.inputs, paramKey);
   const def = record[DEFAULT_KEY];
   if (provided === undefined && (def === undefined || def === null)) {
@@ -386,7 +402,7 @@ function fillParam(engine: GoblinEngine, record: Record<string, unknown>, scope:
   const filled = engine.evaluate(provided !== undefined ? provided : def, scope);
   const type = record[TYPE_KEY];
   if (typeof type === 'string' && type) RecordNode.checkParamType(type, filled, paramKey);
-  RecordNode.checkParamConstraints(record, filled, paramKey);
+  RecordNode.checkParamConstraints(record, filled, paramKey, options);
   out[PARAM_VALUE_KEY] = filled;
   return out;
 }

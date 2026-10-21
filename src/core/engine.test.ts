@@ -289,10 +289,51 @@ describe('indexing', () => {
     expect(engine.evalExpr('[#.place, 5][1]', scopeOf(doc))).toBe(5);
   });
 
+  it('reads the ref its keys spell when a path continues past them', () => {
+    const engine = new GoblinEngine('.');
+    const podium = { ...doc, medals: { gold: { name: 'Ash', 'shout()': '.name' } } };
+    expect(engine.evalExpr('#.medals[#.ranked[0]].name', scopeOf(podium))).toBe('Ash');
+    expect(engine.evalExpr("#.medals['gold'].shout()", scopeOf(podium))).toBe('Ash');
+    expect(engine.evalExpr('#.grid[1][0]', scopeOf(podium))).toBe(3);
+    expect(() => engine.evalExpr("#.medals['a.b'].name", scopeOf(podium))).toThrow(
+      'invalid path key "a.b" for #.medals',
+    );
+  });
+
   it('refuses non-lists and non-integer indexes', () => {
     const engine = new GoblinEngine('.');
     expect(() => engine.evalExpr('#.name[0]', scopeOf(doc))).toThrow('cannot index string: not a list or record');
     expect(() => engine.evalExpr('#.ranked[0.5]', scopeOf(doc))).toThrow('list index must be an integer, got 0.5');
+  });
+});
+
+describe('$lib.record', () => {
+  it('lists keys, ranks them by value, and builds a record from a function', () => {
+    const engine = new GoblinEngine('.');
+    const doc = { scores: { ash: 12, bree: 17, cade: 12 }, 'doubled(name)': '#.scores[name] * 2' };
+    const scope: EvalRoots = { doc, actor: doc, app: {}, current: doc };
+    expect(engine.evalExpr('$lib.record.keys(#.scores)', scope)).toEqual(['ash', 'bree', 'cade']);
+    expect(engine.evalExpr('$lib.record.rank(#.scores)', scope)).toEqual(['bree', 'ash', 'cade']);
+    // Each tiebreak settles what the ones before left tied; then key order holds.
+    const ties = { ...doc, speed: { ash: 2, bree: 0, cade: 2 }, grit: { ash: 1, cade: 4 } };
+    const tied: EvalRoots = { doc: ties, actor: ties, app: {}, current: ties };
+    expect(engine.evalExpr('$lib.record.rank(#.scores, #.speed)', tied)).toEqual(['bree', 'ash', 'cade']);
+    expect(engine.evalExpr('$lib.record.rank(#.scores, #.speed, #.grit)', tied)).toEqual(['bree', 'cade', 'ash']);
+    expect(engine.evalExpr("$lib.record.from(['ash', 'cade'], #.doubled)", scope)).toEqual({ ash: 24, cade: 24 });
+    expect(() => engine.evalExpr("$lib.record.from(['ash'], #.scores)", scope)).toThrow(
+      '$lib.record.from: expected a function',
+    );
+  });
+
+  it('stays lazy as a document value, following the params it reads', () => {
+    const engine = new GoblinEngine('.');
+    engine.docs.set('pick.yaml', {
+      picks: { ':param': true, ':type': 'array' },
+      'shout(name)': "name + '!'",
+      shouts: '$lib.record.from(#.picks, #.shout)',
+    });
+    const state = engine.resolve('pick.yaml', [parameter('picks', ['a', 'b'])]) as { data: Record<string, unknown> };
+    expect(state.data.shouts).toEqual({ a: 'a!', b: 'b!' });
   });
 });
 
@@ -714,6 +755,48 @@ describe('nested actors', () => {
     const later = recruiting().resolve('party.yaml', [...recruited, written, override('dorn.gold', 9)]) as typeof state;
     expect(fieldValue(later.data.party.dorn?.gold)).toBe(9);
     expect(fieldValue(later.data.party.scout?.gold)).toBe(6); // no perk: not Dorn
+  });
+
+  it('invokes into an actor an earlier invoke wrote in, reading its choices', () => {
+    const engine = recruiting();
+    const root = engine.docs.get('party.yaml') as Record<string, unknown>;
+    root.slot = null;
+    root['enlist()'] = "#.slot = $tmpl('hero.yaml')";
+    (engine.docs.get('hero.yaml') as Record<string, unknown>)['hail()'] = '@.name';
+    const state = engine.resolve('party.yaml', [
+      ...named,
+      invoke('enlist', [], 2),
+      parameter('slot.name', 'Dorn', 3),
+      invoke('slot.hail', [], 4),
+    ]) as { result: unknown };
+    expect(state.result).toBe('Dorn');
+  });
+
+  it('starts an actor written in afresh: earlier choices and rolls were for what it replaced', () => {
+    const lucky = () => {
+      const engine = recruiting();
+      (engine.docs.get('hero.yaml') as Record<string, unknown>).luck = '5d20 + @.gold * 0';
+      return engine;
+    };
+    const first = [...named, invoke('recruit', ['dorn'], 2), parameter('dorn.name', 'Dorn', 3)];
+    // Every face a 20: a fresh 5d20 lands on 100 once in 3.2 million.
+    const roll: StateEvent = {
+      version: 3,
+      type: 'roll',
+      path: 'party.dorn.luck',
+      dice: '5d20',
+      value: [20, 20, 20, 20, 20],
+    };
+    type Party = { data: { party: Record<string, Record<string, unknown>> } } & { query?: Array<{ path: string }> };
+    const kept = lucky().resolve('party.yaml', [...first, roll]) as Party;
+    expect(fieldValue(kept.data.party.dorn?.luck)).toBe(100);
+
+    const again = [...first, roll, invoke('recruit', ['dorn'], 4)];
+    expect((lucky().resolve('party.yaml', again) as Party).query?.map((param) => param.path)).toEqual(['dorn.name']);
+    const fresh = lucky().resolve('party.yaml', [...again, parameter('dorn.name', 'Dara', 5)]) as Party;
+    expect(fieldValue(fresh.data.party.dorn?.name)).toBe('Dara');
+    expect(fieldValue(fresh.data.party.dorn?.luck)).not.toBe(100);
+    expect(fieldValue(fresh.data.party.dorn?.gold)).toBe(6); // no perk: not Dorn
   });
 
   it('rejects an indexed assignment key that is not one path segment', () => {
@@ -1726,6 +1809,39 @@ describe('parameters', () => {
     ).toThrow('param options mismatch: skills[1] expected one of ["arcana", "history"], got "sneak"');
   });
 
+  it('computes :options from an expression where the param lives', () => {
+    const engine = new GoblinEngine('.');
+    engine.register('hero.yaml', {
+      $actor: 'Hero',
+      packs: { light: 1, heavy: 2 },
+      pack: { ':param': true, ':type': 'string', ':options': '$lib.record.keys(@.packs)' },
+    });
+    engine.register('camp.yaml', {
+      stable: { pony: 1, warhorse: 3 },
+      mount: { ':param': true, ':type': 'string', ':options': '$lib.record.keys(#.stable)' },
+      hero: "$tmpl('hero.yaml')",
+    });
+    // Each reads its own actor: the hero's `@` is the hero, not the camp.
+    expect(engine.resolve('camp.yaml')).toEqual({
+      query: [
+        { path: 'mount', type: 'string', options: ['pony', 'warhorse'] },
+        { path: 'hero.pack', type: 'string', options: ['light', 'heavy'] },
+      ],
+    });
+    expect(engine.missingParams('camp.yaml').map((param) => param.options)).toEqual([
+      ['pony', 'warhorse'],
+      ['light', 'heavy'],
+    ]);
+    const state = engine.resolve('camp.yaml', [parameter('mount', 'pony'), parameter('hero.pack', 'heavy')]) as {
+      data: Record<string, Record<string, unknown>>;
+    };
+    // The evaluated param prints the list it offered, not the expression.
+    expect(state.data.mount?.[':options']).toEqual(['pony', 'warhorse']);
+    expect(() => engine.resolve('camp.yaml', [parameter('mount', 'mule'), parameter('hero.pack', 'heavy')])).toThrow(
+      'param options mismatch: mount expected one of ["pony", "warhorse"], got "mule"',
+    );
+  });
+
   it('enforces :unique distinctness and :count length on arrays', () => {
     const engine = new GoblinEngine('.');
     engine.docs.set('skills.yaml', {
@@ -1779,8 +1895,13 @@ describe('parameters', () => {
   });
 
   it('validates constraint declarations and default values', () => {
-    expect(() => RecordNode.checkParamConstraints({ ':options': 'nope' }, 'x', 'x')).toThrow(
-      'invalid :options for x: expected array, got string',
+    expect(() => RecordNode.checkParamConstraints({ ':options': 3 }, 'x', 'x')).toThrow(
+      'invalid :options for x: expected array, got number',
+    );
+    // A string is an expression, checked once resolved.
+    expect(() => RecordNode.checkParamConstraints({ ':options': '$.picks' }, 'x', 'x')).not.toThrow();
+    expect(() => RecordNode.checkParamConstraints({ ':options': '$.picks' }, 'x', 'x', ['y'])).toThrow(
+      'param options mismatch: x expected one of ["y"], got "x"',
     );
     expect(() => RecordNode.checkParamConstraints({ ':count': 'two' }, ['a'], 'x')).toThrow(
       'invalid :count for x: expected non-negative integer, got string',

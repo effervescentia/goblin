@@ -14,6 +14,7 @@ import {
   SET_KEY,
   SOURCE_KEY,
   SUBTRACT_KEY,
+  TEMPLATE_CALL,
   VERSION_KEY,
 } from '@/constants';
 import {
@@ -299,6 +300,32 @@ export class Journal {
       }
       // Everything rolled in here now belongs to this field, as far as outer ones can tell.
       this.attributedRolls = mark.attributed + (Die.rolled - mark.rolled);
+    }
+  }
+
+  /** Where `cause`'s call wrote an actor in (`#.combat = $tmpl(…)`): each
+   * path from the entry root, with the namespace the call gave it. */
+  writtenActors(cause: InputEvent): { path: string; namespace?: string }[] {
+    const paths = this.treePaths();
+    return this.writeLog.flatMap(({ record, key, kind, event, cause: by }) => {
+      const call = event[kind];
+      const at = paths.get(record);
+      const tmpl = typeof call === 'string' ? call.trim().match(TEMPLATE_CALL) : null;
+      if (by !== cause || kind !== SET_KEY || tmpl === null || at === undefined) return [];
+      return [{ path: [...at, key].join('.'), namespace: tmpl[2] }];
+    });
+  }
+
+  /** Drop the field rolls recorded under `path` before `version`: they
+   * belong to whatever an actor written in there since replaced. */
+  forgetRolls(path: string, version: number): void {
+    for (const [context, rolls] of this.tape) {
+      const at = context.slice('field:'.length);
+      if (!context.startsWith('field:') || (at !== path && !at.startsWith(`${path}.`))) continue;
+      this.tape.set(
+        context,
+        rolls.filter((roll) => roll.version === undefined || roll.version >= version),
+      );
     }
   }
 

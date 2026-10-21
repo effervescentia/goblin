@@ -150,6 +150,15 @@ another index is indexing; anywhere else it opens a list literal
 5e's roll-and-assign picks a pooled roll with
 `'@.roll_assign.rolls[.roll - 1]'` (quoted: YAML reserves a leading `@`).
 
+A path that goes on past the indexes of a plain ref (`$.party[name].level`)
+reads the ref its keys spell (`$.party.aria.level`), so the target evaluates
+lazily, as itself: inside a nested actor, `@` and `#` are that actor and its
+functions are callable (`$.party[name].initiative.roll()`, as 5e's combat
+rolls). Each key names one segment, as for an indexed assignment (see
+Statements and assignment): an identifier string or a non-negative integer,
+else it throws (`invalid path key "a.b" for $.party`). A key naming nothing
+is an unresolvable reference.
+
 ```yaml
 # Examples (examples/12-indexing.yaml)
 ranked: [gold, silver, bronze]
@@ -159,6 +168,8 @@ placed: '#.ranked[#.place - 1]'   # → silver
 missing: '#.ranked[5]'            # → null
 medals: { gold: 3, silver: 1 }
 golds: '#.medals[#.ranked[0]]'    # → 3
+podium: { gold: { name: Ash } }
+champion: '#.podium[#.ranked[0]].name' # → Ash
 ```
 
 ## Labelled expressions
@@ -266,7 +277,10 @@ A call written as a plain document value expands where it stands, so the
 `:param` nodes it brings are part of the tree before the query looks for
 them. The same holds in patches (`5e/feature.yaml` keeps the ability score
 improvement that way, and each granting feature calls it); a call that yields
-anything but a record stays as written, and stays lazy.
+anything but a record stays as written, and stays lazy. So does a call to a
+native `$lib` function: it computes a value, so a record it returns
+(`$lib.record.from(…)`) is data that follows the params it reads, never a
+definition to inline.
 
 The stdlib lives under `$lib`, implicitly loaded by the engine, merged with
 `src/lib/lib.yaml` when present. A document defining its own top-level `lib`
@@ -285,6 +299,15 @@ table takes precedence for `$lib.…` refs. Native namespaces:
   counts its own name across them (`10 + $lib.list.count(@.improvements,
   'strength')`), so the same ability twice is +2 and two abilities once each
   is +1 apiece.
+- `record`: records as tables keyed by name. `keys(record)` lists its data
+  keys (never metadata), in order; `rank(record, ...tiebreaks)` the keys,
+  highest value first, a tie going to the higher value in each `tiebreaks`
+  record (keyed the same) in turn, then keeping its order; `from(keys, fn)` builds a record holding
+  `fn(key)` for each key. A function is passed by its ref, uncalled
+  (`$lib.record.from(@.members, .roll)`), and keeps its own `#` and `@`.
+  5e's combat rolls initiative this way (`5e/combat.yaml`), offers the
+  party's keys as its members' `:options` with `keys`, and orders turns
+  with `rank`, Dexterity breaking initiative ties.
 - `set`: lists as sets, reading picks the way `list` does. `union(a, b)`,
   `intersection(a, b)` and `difference(a, b)` (in `a`, not in `b`) return
   lists without repeats, in order of first appearance; `subset(a, b)` is 1
@@ -299,6 +322,8 @@ floored: $lib.math.floor(2.9)                 # → 2
 smallest: $lib.math.min(3, 9)                 # → 3
 ability_roll: $lib.dice.keep_highest(4, 6, 3) # → 3..18
 athletics_picks: $lib.list.count(@.picks, 'athletics')
+ranking: $lib.record.rank(@.scores)           # { ash: 12, bree: 17 } → [bree, ash]
+doubles: "$lib.record.from(['ash'], #.doubled)" # → { ash: 24 }
 ```
 
 ```yaml
@@ -377,7 +402,8 @@ heft: '#.weapon.heft(2)' # → 8: `heft(n)` reads `#.weight` from 05-greeting.ya
 ## Metadata
 
 Any `:`-prefixed key (`:label`, `:doc`, …) is documentation: copied verbatim,
-never evaluated — even if its text contains refs. `:label` is the node's
+never evaluated — even if its text contains refs. The exception is a
+`:param`'s `:options`, which may be an expression (see Parameters). `:label` is the node's
 display name, for UIs that list nodes by something friendlier than their key;
 `:doc` is the longer description.
 
@@ -679,12 +705,44 @@ namespace `dorn`.
 - The namespace rules hold as for any `$tmpl`: one that shadows a top-level
   key of the entry throws. Writing over a key that already holds an actor
   replaces it.
+- An actor written in starts fresh. The `parameter` and `override` events
+  given for its path (or namespace) before the write, and the field rolls
+  recorded under its path before it, belonged to whatever it replaced: it
+  asks for its choices again and rolls its own dice, on replay too. So 5e's
+  `game.start_combat()` always opens a new fight, even over one still running.
+- Its functions can be invoked once it has its choices: a later invoke
+  (`combat.end_turn()`) reads its params as answered.
 
 ```yaml
 # Examples (examples/17-recruit.yaml)
 party:
   scout: $tmpl('15-nested-hero.yaml')
 'recruit(name)': $.party[name] = $tmpl('15-nested-hero.yaml', name) # → party.cade as `cade`
+```
+
+5e models a fight this way. `5e/main.yaml` writes a `Combat` actor
+(`5e/combat.yaml`) in at `combat`, through `#`: `$` shares the entry's
+top-level records (see Nested actors), and `combat` starts as `null`. Its `members` choice
+offers the party's keys; each member rolls initiative once, and
+`end_turn()` walks the order round by round:
+
+```yaml
+# 5e/main.yaml
+combat: null
+game:
+  'start_combat()': "#.combat = $tmpl('combat.yaml')" # → { query: [combat.members] }
+  'end_combat()': '#.combat = null'
+
+# 5e/combat.yaml
+members:
+  :param: true
+  :type: array
+  :options: $lib.record.keys($.party)
+'roll(name)': $.party[name].initiative.roll()
+initiative: $lib.record.from(@.members, .roll) # → { aria: 14, bram: 9 }
+'_dexterity_of(name)': $.party[name].abilities.dexterity.base
+_dexterity: $lib.record.from(@.members, ._dexterity_of) # → { aria: 14, bram: 13 }
+order: $lib.record.rank(.initiative, ._dexterity)      # → [aria, bram]; a tie → higher Dexterity
 ```
 
 ## Mixins
@@ -756,8 +814,14 @@ constraints, so a UI can prompt with a display name rather than a path.
   type: …`). Untyped params accept anything. The type is included in the
   `missingParams` report.
 - `:options` lists the allowed values: a scalar must equal one entry, every
-  array item must equal one (`param options mismatch: …`). Anything but an
-  array throws (`invalid :options for …`).
+  array item must equal one (`param options mismatch: …`). A string is an
+  expression, the one metadata value that evaluates: it is computed where
+  the param lives (`.` the record holding it, `@`/`#` its actor), for the
+  `{ query }` report and the evaluated `:param` record alike, so the choices
+  follow the tree. 5e's combat offers the party as it stands
+  (`:options: $lib.record.keys($.party)`). An `override` (`--set`) skips a
+  computed list. Anything but an array or a string throws
+  (`invalid :options for …`).
 - `:min` / `:max` bound a number inclusively — every item, for an array
   (`param range mismatch: …`); either may stand alone. Non-numeric values
   skip the check (pair with `:type`); a non-number bound throws
