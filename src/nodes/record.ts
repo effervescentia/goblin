@@ -12,6 +12,7 @@ import {
   OPTIONS_KEY,
   PARAM_KEY,
   PARAM_VALUE_KEY,
+  PARTS_KEY,
   SOURCE_KEY,
   THEN_KEY,
   TYPE_KEY,
@@ -49,19 +50,23 @@ export interface MissingParam {
 }
 
 export class RecordNode extends Node<Record<string, unknown>> {
-  /** A field printed with its change history: `{ :value, :events }`. */
-  static isEvented(node: unknown): node is Record<string, unknown> {
-    return typeof node === 'object' && node !== null && EVENTS_KEY in node && PARAM_VALUE_KEY in node;
+  /** A field printed with its labelled parts or change history: `{ :value, :formula?, :parts?, :events? }`. */
+  static isAnnotated(node: unknown): node is Record<string, unknown> {
+    return (
+      typeof node === 'object' && node !== null && PARAM_VALUE_KEY in node && (EVENTS_KEY in node || PARTS_KEY in node)
+    );
   }
 
-  /** Attach the writes that produced a value: a record takes `:events` in
-   * place, everything else pairs up as `{ :value, :events }`. */
-  static withEvents(value: unknown, events: unknown[] | undefined): unknown {
-    if (events === undefined) return value;
+  /** Attach a field's `labels` (`{ :formula, :parts }`) and the writes that
+   * produced it: a record takes them in place, everything else pairs up as
+   * `{ :value, … }`. */
+  static annotate(value: unknown, labels: Record<string, unknown> | undefined, events: unknown[] | undefined): unknown {
+    if (labels === undefined && events === undefined) return value;
+    const notes = { ...labels, ...(events === undefined ? {} : { [EVENTS_KEY]: events }) };
     if (value !== null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Die)) {
-      return { ...(value as Record<string, unknown>), [EVENTS_KEY]: events };
+      return { ...(value as Record<string, unknown>), ...notes };
     }
-    return { [PARAM_VALUE_KEY]: value, [EVENTS_KEY]: events };
+    return { [PARAM_VALUE_KEY]: value, ...notes };
   }
 
   /** A record declaring a user-provided value (`:param` marker present). */
@@ -224,7 +229,7 @@ export class RecordNode extends Node<Record<string, unknown>> {
 
   override print(each: (value: unknown) => unknown): unknown {
     const record = this.raw;
-    if (RecordNode.isParam(record) || RecordNode.isEvented(record)) {
+    if (RecordNode.isParam(record) || RecordNode.isAnnotated(record)) {
       return each(record[PARAM_VALUE_KEY] ?? null);
     }
     if (record[TYPE_KEY] === 'function' && typeof record[SOURCE_KEY] === 'string') return record[SOURCE_KEY];
@@ -271,8 +276,12 @@ export class RecordNode extends Node<Record<string, unknown>> {
       }
       const fieldScope = { ...scope, current: record, path: [...base, key] };
       const evaluated = engine.evaluateField(record, key, value, fieldScope);
-      // A field a patch wrote prints with its history, each write resolved.
-      out[key] = RecordNode.withEvents(evaluated, engine.resolvedEventsFor(record, key, evaluated, fieldScope));
+      // A labelled field prints its parts; one a patch wrote, its history, each write resolved.
+      out[key] = RecordNode.annotate(
+        evaluated,
+        engine.labelsFor(record, key, value),
+        engine.resolvedEventsFor(record, key, evaluated, fieldScope),
+      );
     }
     return out;
   }

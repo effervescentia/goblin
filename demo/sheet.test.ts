@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { at, fields, humanize, labelOf, parseParam, readParam, signed, slotsOf, unwrap } from './sheet';
+import { at, fields, formulaAt, humanize, labelOf, parseParam, readParam, signed, slotsOf, unwrap } from './sheet';
 
 describe('sheet', () => {
   const sheet = {
     name: { ':param': true, ':value': 'Aria' },
     speed: { ':value': 30, ':events': [] },
+    armor_class: {
+      ':value': 12,
+      ':formula': '10 + Dexterity',
+      ':parts': [{ ':label': 'Dexterity', ':value': 2 }],
+    },
     hit_points: { '!validate': ['.current >= 0'], current: { ':value': 11, ':events': [] }, max: 11 },
     features: { ':doc': 'all of them', _hidden: 1, darkvision: { ':label': 'Darkvision' }, extra_attack: {} },
   };
@@ -27,6 +32,12 @@ describe('sheet', () => {
     expect(labelOf(sheet.features.darkvision, 'darkvision')).toBe('Darkvision');
     expect(labelOf(sheet.features.extra_attack, 'extra_attack')).toBe('Extra attack');
     expect(humanize('all_armor')).toBe('All armor');
+  });
+
+  it('reads a labelled field’s formula and parts', () => {
+    expect(formulaAt(sheet, 'armor_class')).toEqual({ formula: '10 + Dexterity', parts: ['Dexterity +2'] });
+    expect(formulaAt(sheet, 'speed')).toBeUndefined();
+    expect(formulaAt(sheet, 'hit_points.current')).toBeUndefined();
   });
 
   it('signs modifiers', () => {

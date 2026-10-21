@@ -11,7 +11,7 @@ $if: "@.level >= 3 && @.features.martial_archetype == 'battle_master'"
     :doc: >-
       Learn maneuvers and spend superiority dice to use them. Creatures resist
       a maneuver's effect against your maneuver save DC.
-    save_dc: 8 + @.proficiency_bonus + $lib.math.max(@.abilities.strength.modifier, @.abilities.dexterity.modifier)
+    save_dc: 8 + [Proficiency](@.proficiency_bonus) + [STR or DEX]($lib.math.max(@.abilities.strength.modifier, @.abilities.dexterity.modifier))
     '@.resources':
       +superiority_dice:
         :label: Superiority Dice

@@ -161,6 +161,39 @@ medals: { gold: 3, silver: 1 }
 golds: '#.medals[#.ranked[0]]'    # → 3
 ```
 
+## Labelled expressions
+
+`[Label](expr)` names part of an expression for display. It evaluates to
+`expr` unchanged, so it can wrap any operand: a ref, a call, dice, or a
+parenthesized sum, nested or not. It is told apart from a list the same way
+indexing is: a `[` that does not follow a ref, call or index, whose `]` is
+directly followed by `(` (a list is never called). The label is plain text,
+never evaluated, and may not be empty or contain unbalanced brackets.
+
+A field whose expression has labels prints as
+`{ :value, :formula, :parts }` (a record value takes the two keys in place):
+
+- `:formula` is the expression with each outermost tag read as its label
+  (`10 + [Dexterity](@.dex)` → `10 + Dexterity`); unlabelled parts stay
+  as written.
+- `:parts` lists `{ :label, :value }` for each tag the evaluation reached,
+  in the order each finished (an inner tag before the one around it). A tag
+  a conditional skipped has no part.
+
+Parts belong to the field whose own expression holds the tags: a labelled
+field another one reads, or a labelled function body it calls, keeps its
+parts to itself. References see through the wrapper (`@.armor_class` reads
+the number), `:events` sit beside the parts when a patch wrote the field,
+and `--strip-metadata` collapses it to the value. A `+@.path` addition
+composes labelled expressions like any other (`(10) + (Dexterity)`).
+
+```yaml
+# Examples (examples/18-labels.yaml)
+armor_class: '10 + [Dexterity](#.dexterity)'
+# → { ":value": 12, ":formula": "10 + Dexterity",
+#     ":parts": [{ ":label": "Dexterity", ":value": 2 }] }
+```
+
 ## Dice
 
 `dN` / `NdM` (`d6`, `2d6`, `1d20`) are dice.
@@ -491,6 +524,8 @@ patch touched print bare, as before.
   or assignment landed, so a history reads base-then-patch. A field a patch
   creates has no such origin event.
 - Metadata (`:doc`, `:label`, …) and function definitions are never wrapped.
+- A labelled field (see Labelled expressions) keeps its `:formula` and
+  `:parts` before `:events`.
 
 ```ts
 // 5e/main.yaml: characters.character_1, a fighter
@@ -939,3 +974,4 @@ engine.resolve('04-functions.yaml', [invoke('utils.double', [21])]);
   Numeric literals are safe: no digit follows the `.` in a ref, so `2.5`
   never parses as one.
 - `!validate` must be quoted (`'!validate'`) so YAML does not parse `!` as a tag.
+- **Quote a leading label**: `'[Base](10) + …'` unquoted is a YAML flow list.

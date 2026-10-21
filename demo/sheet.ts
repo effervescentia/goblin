@@ -40,6 +40,19 @@ export const humanize = (name: string) => {
 export const labelOf = (node: unknown, key: string) =>
   isRecord(node) && typeof node[':label'] === 'string' ? node[':label'] : humanize(key);
 
+/** A labelled field's `:formula`, and each `[Label](…)` part's value (`Dexterity +2`). */
+export function formulaAt(node: unknown, path: string): { formula: string; parts: string[] } | undefined {
+  const keys = path.split('.');
+  const parent = keys.length > 1 ? at(node, keys.slice(0, -1).join('.')) : node;
+  const field = isRecord(parent) ? parent[keys.at(-1) ?? ''] : undefined;
+  if (!isRecord(field) || typeof field[':formula'] !== 'string') return undefined;
+  const parts = Array.isArray(field[':parts']) ? field[':parts'] : [];
+  return {
+    formula: field[':formula'],
+    parts: parts.filter(isRecord).map((part) => `${String(part[':label'])} ${signed(part[':value'])}`),
+  };
+}
+
 export const signed = (n: unknown) => (typeof n === 'number' && n >= 0 ? `+${n}` : String(n));
 
 /** What a form control's raw text means for `param`; undefined while it is left blank. */

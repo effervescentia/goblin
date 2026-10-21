@@ -48,6 +48,9 @@ export interface EvalRoots {
   /** `#` for an expression written in another document than `doc` (a
    * definition's body, or a call's copy); unset, `#` is `doc`. */
   home?: unknown;
+  /** Where the field being evaluated collects its `[Label](…)` parts; only
+   * its own expression reads it, not the fields or functions that one reaches. */
+  labels?: Record<string, unknown>[];
 }
 
 /** A `_` key is private to the document that wrote it. */
@@ -222,11 +225,11 @@ function transpileStatement(stmt: string): { code: string; isAssign: boolean } {
     libRefs.push(m);
     return `__LIB${libRefs.length - 1}__`;
   };
-  const protected_ = stmt
-    .replace(STRING_LITERAL, (m) => {
-      literals.push(m);
-      return `__STR${literals.length - 1}__`;
-    })
+  const quoted = stmt.replace(STRING_LITERAL, (m) => {
+    literals.push(m);
+    return `__STR${literals.length - 1}__`;
+  });
+  const protected_ = rewriteLabels(quoted, literals)
     // `$tmpl(…)` is a call, not an app ref (must come before DOTLESS_SIGIL).
     .replace(/[$]tmpl\(/g, '__tmpl(')
     // Protect $lib refs (must come before DOTLESS_SIGIL).
@@ -333,6 +336,47 @@ function rewriteIndexing(code: string): string {
   return code;
 }
 
+/** Each `[Label](…)` tag in `code`: a `[` that cannot index (see
+ * `rewriteIndexing`) whose `]` is followed by `(` — a list is never called. */
+function labelTags(code: string): { open: number; close: number; end: number }[] {
+  const tags: { open: number; close: number; end: number }[] = [];
+  for (let i = 0; i < code.length; i++) {
+    if (code[i] !== '[' || /[\w)\]]/.test(code[i - 1] ?? '')) continue;
+    const close = matchBracket(code, i, 1);
+    if (code[close + 1] === '(') tags.push({ open: i, close, end: matchBracket(code, close + 1, 1) });
+  }
+  return tags;
+}
+
+/** `[Label](expr)` → `__label('Label', expr)`; the label text joins `literals`
+ * so no later rewrite reads it as refs or dice. */
+function rewriteLabels(code: string, literals: string[]): string {
+  // Right to left: an inner tag sits after its outer one's `[…]`, so earlier offsets hold.
+  return labelTags(code).reduceRight((out, { open, close }) => {
+    const label = restoreLiterals(out.slice(open + 1, close), literals).trim();
+    if (label === '') throw new Error(`empty label in expression: ${restoreLiterals(code, literals)}`);
+    literals.push(JSON.stringify(label));
+    return `${out.slice(0, open)}__label(__STR${literals.length - 1}__, ${out.slice(close + 2)}`;
+  }, code);
+}
+
+/** `expr` with each outermost `[Label](…)` tag read as its label
+ * (`10 + [Dexterity](@.dex)` → `10 + Dexterity`); undefined when it has none. */
+export function formulaOf(expr: string): string | undefined {
+  const literals: string[] = [];
+  const code = expr.trim().replace(STRING_LITERAL, (m) => {
+    literals.push(m);
+    return `__STR${literals.length - 1}__`;
+  });
+  const outer = labelTags(code).filter((tag, i, tags) => !tags.slice(0, i).some((o) => tag.open < o.end));
+  if (outer.length === 0) return undefined;
+  const formula = outer.reduceRight(
+    (out, { open, close, end }) => `${out.slice(0, open)}${out.slice(open + 1, close).trim()}${out.slice(end + 1)}`,
+    code,
+  );
+  return restoreLiterals(formula, literals);
+}
+
 /** An assignment target `ref[a][b]`: one plain (non-wildcard) ref, then
  * only indexes; null for anything else. */
 function splitIndexes(lhs: string): { ref: string; keys: string[] } | null {
@@ -420,6 +464,8 @@ export interface ResolveHooks {
   assign: (ref: string, value: unknown, op: AssignOp) => unknown;
   /** Assign every match of a wildcard ref, evaluating `expr` with `.` bound to each match's record. */
   assignEach: (ref: string, expr: string, op: AssignOp) => void;
+  /** A `[label](…)` part's value, passed through unchanged. */
+  label: (label: string, value: unknown) => unknown;
 }
 
 /**
@@ -447,6 +493,7 @@ export function compileBody(body: string, paramNames: string[] = []) {
     '__index',
     '__at',
     '__tmpl',
+    '__label',
     ...paramNames,
     js,
   ) as (...args: unknown[]) => unknown;
@@ -461,6 +508,7 @@ export function compileBody(body: string, paramNames: string[] = []) {
       indexValue,
       refAt,
       templateCall,
+      hooks.label,
       ...paramNames.map((p) => params[p]),
     ];
     return fn(...args);

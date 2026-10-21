@@ -20,10 +20,13 @@ import {
   APP,
   CURRENT,
   DIE_LITERAL,
+  FORMULA_KEY,
   IF_KEY,
+  LABEL_KEY,
   OVERRIDE_SOURCE,
   PARAM_KEY,
   PARAM_VALUE_KEY,
+  PARTS_KEY,
   SET_KEY,
   SOURCE_KEY,
   SUBTRACT_KEY,
@@ -45,6 +48,7 @@ import {
   compileBody,
   deepClone,
   type EvalRoots,
+  formulaOf,
   getChild,
   getChildEntry,
   getPath,
@@ -82,6 +86,8 @@ export class GoblinEngine {
   /** Resolved-value cache + cycle guard for lazy references. */
   private readonly cache = new Map<string, unknown>();
   private readonly resolving: string[] = [];
+  /** The `[Label](…)` parts each expression field evaluated, from its latest evaluation. */
+  private readonly parts = new WeakMap<object, Map<string, Record<string, unknown>[]>>();
   private readonly objIds = new WeakMap<object, number>();
   private nextId = 1;
 
@@ -246,7 +252,7 @@ export class GoblinEngine {
       const slot = rawTarget[VALUE_KEY] !== undefined ? rawTarget[VALUE_KEY] : rawTarget[PARAM_VALUE_KEY];
       return slot !== undefined ? slot : null;
     }
-    if (RecordNode.isEvented(rawTarget)) return rawTarget[PARAM_VALUE_KEY];
+    if (RecordNode.isAnnotated(rawTarget)) return rawTarget[PARAM_VALUE_KEY];
     return rawTarget;
   }
 
@@ -279,7 +285,7 @@ export class GoblinEngine {
     return entry;
   }
 
-  private hooks(scope: EvalRoots): ResolveHooks {
+  private hooks(scope: EvalRoots, labels?: Record<string, unknown>[]): ResolveHooks {
     // Each statement's value is computed just before its assign: rolls since
     // the last one are that value's.
     let mark = this.journal.mark();
@@ -307,6 +313,10 @@ export class GoblinEngine {
           this.write(base, root, target, value, op, scope, this.journal.rolledSince(before));
         }
         mark = this.journal.mark();
+      },
+      label: (label: string, value: unknown) => {
+        labels?.push({ [LABEL_KEY]: label, [PARAM_VALUE_KEY]: value });
+        return value;
       },
     };
   }
@@ -371,8 +381,9 @@ export class GoblinEngine {
       }
       return this.provenance.claim(clone, file);
     }
-    const run = compileBody(trimmed, Object.keys(scope.params ?? {}));
-    return run(this.hooks(scope), scope.params ?? {});
+    const { labels, ...inner } = scope;
+    const run = compileBody(trimmed, Object.keys(inner.params ?? {}));
+    return run(this.hooks(inner, labels), inner.params ?? {});
   }
 
   // -- deep evaluation ------------------------------------------------------
@@ -402,14 +413,31 @@ export class GoblinEngine {
     // copy keeps the `#` it was written against.
     const homed = { ...fieldScope, home: this.provenance.homes.get(record) };
     const scope = Array.isArray(record) ? homed : { ...homed, source: this.fieldSource(record, key) };
-    const memoizable =
-      typeof raw === 'string' && ExpressionNode.matches(raw) && Object.keys(scope.params ?? {}).length === 0;
-    if (!memoizable) return this.evaluate(raw, scope);
+    if (typeof raw !== 'string' || !ExpressionNode.matches(raw)) return this.evaluate(raw, scope);
+    if (Object.keys(scope.params ?? {}).length > 0) return this.evaluateLabelled(record, key, raw, scope);
     const memo = `field|${this.idOf(scope.home ?? scope.doc)}|${this.idOf(scope.actor)}|${this.idOf(record)}|${key}`;
     if (this.cache.has(memo)) return this.cache.get(memo);
-    const value = this.journal.evaluating(record, key, () => this.evaluate(raw, scope));
+    const value = this.journal.evaluating(record, key, () => this.evaluateLabelled(record, key, raw, scope));
     this.cache.set(memo, value);
     return value;
+  }
+
+  /** Evaluate an expression field, keeping the `[Label](…)` parts it evaluated. */
+  private evaluateLabelled(record: object, key: string, raw: string, scope: EvalRoots): unknown {
+    const labels: Record<string, unknown>[] = [];
+    const value = this.evaluate(raw, { ...scope, labels });
+    const fields = this.parts.get(record) ?? new Map<string, Record<string, unknown>[]>();
+    fields.set(key, labels);
+    this.parts.set(record, fields);
+    return value;
+  }
+
+  /** `{ :formula, :parts }` for an expression field with `[Label](…)` tags,
+   * else undefined. A tag its expression skipped (`a ? [X](b) : c`) has no part. */
+  labelsFor(record: object, key: string, raw: unknown): Record<string, unknown> | undefined {
+    const formula = typeof raw === 'string' && ExpressionNode.matches(raw) ? formulaOf(raw) : undefined;
+    if (formula === undefined) return undefined;
+    return { [FORMULA_KEY]: formula, [PARTS_KEY]: this.parts.get(record)?.get(key) ?? [] };
   }
 
   /** The document that wrote `record[key]`: its latest write's `:source`,
