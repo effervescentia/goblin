@@ -28,13 +28,17 @@ $if: "@.class == 'wizard'"
 '@.features':
   +spellcasting:
     :label: Spellcasting
+    :doc: Cast Wizard spells from your spellbook using Intelligence; cantrips, prepared spells, and slots increase with wizard level. Slots restore on a long rest.
   +ritual_adept:
     :label: Ritual Adept
+    :doc: Cast any Ritual spell in your spellbook as a Ritual without preparing it.
   +arcane_recovery:
     :label: Arcane Recovery
+    :doc: After a short rest, recover spell slots with a combined level up to half your wizard level (none level 6 or higher). Restores on a long rest.
   +scholar:
     $if: '@.level >= 2'
     :label: Scholar
+    :doc: Gain Expertise in Arcana, History, Investigation, Medicine, Nature, or Religion if you're proficient in it.
   +ability_score_improvement_1:
     $if: '@.level >= 4'
     :label: Ability Score Improvement
@@ -43,6 +47,7 @@ $if: "@.class == 'wizard'"
   +memorize_spell:
     $if: '@.level >= 5'
     :label: Memorize Spell
+    :doc: On a short rest, swap one prepared Wizard spell for another in your spellbook.
   +ability_score_improvement_2:
     $if: '@.level >= 8'
     :label: Ability Score Improvement
@@ -61,9 +66,12 @@ $if: "@.class == 'wizard'"
   +spell_mastery:
     $if: '@.level >= 18'
     :label: Spell Mastery
+    :doc: Choose a level 1 and a level 2 spell from your spellbook to cast at their lowest level without a spell slot.
   +epic_boon:
     $if: '@.level >= 19'
     :label: Epic Boon
+    :doc: Gain an Epic Boon feat or another feat for which you qualify.
   +signature_spells:
     $if: '@.level >= 20'
     :label: Signature Spells
+    :doc: Two level 3 spells from your spellbook are always prepared, each castable once without a spell slot. Restores on a short or long rest.
