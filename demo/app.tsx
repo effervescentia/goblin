@@ -2,7 +2,7 @@
 /**
  * Character sheet demo: resolves `aria` from `5e/main.yaml` over a WebSocket
  * `goblin/client`, asks for each missing param with a form, and binds the
- * resolved fields to a sheet. The server is stateful, so each turn sends only
+ * resolved fields to a sheet with a combat panel for the party. The server is stateful, so each turn sends only
  * its new inputs and a reload picks up where the session left off.
  */
 import type { ComponentChildren } from 'preact';
@@ -14,11 +14,13 @@ import type { MissingParam } from '@/nodes/record';
 import {
   at,
   CHARACTER,
+  combatOf,
   ENTRY,
   fields,
   formulaAt,
   humanize,
   labelOf,
+  picksAny,
   readParam,
   signed,
   slotsOf,
@@ -32,6 +34,9 @@ type Input = NonNullable<ResolveParams['inputs']>[number];
 type Turn = (inputs?: Input[]) => void;
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+/** A call to the function at `path` (full, from the root), with no arguments. */
+const call = (path: string): Input => ({ type: 'invoke', path, value: [] });
 
 function App() {
   const client = useRef<GoblinClient>(undefined);
@@ -80,7 +85,7 @@ function App() {
           // Keyed by version so each turn's form starts blank.
           <Query key={answer.version} query={answer.query} turn={turn} />
         ) : (
-          <Sheet sheet={at(answer.data, CHARACTER)} turn={turn} />
+          <Sheet data={answer.data} turn={turn} />
         )}
       </main>
     </>
@@ -124,15 +129,26 @@ function Query({ query, turn }: { query: MissingParam[]; turn: Turn }) {
             <legend>{param.label ?? humanize(param.path.split('.').at(-1) ?? param.path)}</legend>
             {param.doc ? <p class="doc">{param.doc}</p> : null}
             <div class="picks">
-              {Array.from({ length: slotsOf(param) }, (_, slot) => (
-                <Control
-                  // biome-ignore lint/suspicious/noArrayIndexKey: slots are positional
-                  key={slot}
-                  param={param}
-                  value={raw[param.path]?.[slot] ?? ''}
-                  onChange={(value) => set(param.path, slot, value)}
-                />
-              ))}
+              {picksAny(param)
+                ? param.options?.map((option, i) => (
+                    <label key={String(option)} class="check">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(raw[param.path]?.[i])}
+                        onChange={(event) => set(param.path, i, event.currentTarget.checked ? '1' : '')}
+                      />
+                      {humanize(String(option))}
+                    </label>
+                  ))
+                : Array.from({ length: slotsOf(param) }, (_, slot) => (
+                    <Control
+                      // biome-ignore lint/suspicious/noArrayIndexKey: slots are positional
+                      key={slot}
+                      param={param}
+                      value={raw[param.path]?.[slot] ?? ''}
+                      onChange={(value) => set(param.path, slot, value)}
+                    />
+                  ))}
             </div>
           </fieldset>
         ))}
@@ -205,9 +221,47 @@ function Tags({ items }: { items: unknown }) {
   );
 }
 
-function Sheet({ sheet, turn }: { sheet: unknown; turn: Turn }) {
+/** The fight in progress, in initiative order, or a button to start one. */
+function Combat({ data, turn }: { data: unknown; turn: Turn }) {
+  const combat = combatOf(data);
+  const invoke = (path: string) => () => turn([call(path)]);
+  if (!combat) {
+    return (
+      <Section title="Combat">
+        <div class="rests">
+          <button type="button" onClick={invoke('game.start_combat')}>
+            Start combat
+          </button>
+        </div>
+      </Section>
+    );
+  }
+  return (
+    <Section title={`Combat · Round ${String(combat.round)}`}>
+      <ol class="order">
+        {combat.order.map(({ key, initiative }) => (
+          <li key={key} class={key === combat.current ? 'current' : undefined}>
+            <span>{String(at(data, `party.${key}.name`) ?? humanize(key))}</span>
+            <span class="muted">initiative {String(initiative)}</span>
+          </li>
+        ))}
+      </ol>
+      <div class="rests">
+        <button type="button" onClick={invoke('combat.end_turn')}>
+          End turn
+        </button>
+        <button type="button" class="quiet" onClick={invoke('game.end_combat')}>
+          End combat
+        </button>
+      </div>
+    </Section>
+  );
+}
+
+function Sheet({ data, turn }: { data: unknown; turn: Turn }) {
+  const sheet = at(data, CHARACTER);
   const get = (path: string) => at(sheet, path);
-  const invoke = (path: string) => () => turn([{ type: 'invoke', path: `${CHARACTER}.${path}`, value: [] }]);
+  const invoke = (path: string) => () => turn([call(`${CHARACTER}.${path}`)]);
   const saves = (get('proficiencies.saving_throws') as string[] | undefined) ?? [];
 
   return (
@@ -219,6 +273,8 @@ function Sheet({ sheet, turn }: { sheet: unknown; turn: Turn }) {
           {String(get('xp'))} XP
         </p>
       </header>
+
+      <Combat data={data} turn={turn} />
 
       <div class="stats">
         <Stat label="Armor Class" formula={formulaAt(sheet, 'armor_class')}>
