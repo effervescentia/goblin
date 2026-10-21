@@ -63,6 +63,8 @@ const script = `
   const BOUGHT = {
     class: 'fighter',
     species: 'dwarf',
+    background: 'acolyte',
+    'improvements.background': ['intelligence', 'wisdom', 'charisma'],
     ability_method: 'point_buy',
     'abilities.strength.bought': 7,
     'abilities.dexterity.bought': 6,
@@ -174,12 +176,22 @@ const script = `
   }));
 `;
 
+// Acolyte's +1s land on int/wis/cha, leaving every modifier these tests read as it was.
+const BACKGROUND = [
+  '--param',
+  'background=acolyte',
+  '--param',
+  'improvements.background=["intelligence","wisdom","charisma"]',
+];
+const BACKGROUND_BONUS = (ability: string) => (['intelligence', 'wisdom', 'charisma'].includes(ability) ? 1 : 0);
+
 // The classic 15/14/13/10/10/8 spread: 25 of the 27 points.
 const BOUGHT = [
   '--param',
   'class=fighter',
   '--param',
   'species=dwarf',
+  ...BACKGROUND,
   '--param',
   'ability_method=point_buy',
   '--param',
@@ -201,7 +213,7 @@ describe('5e', () => {
     const out = execFileSync('bun', ['-e', script], { cwd: root, encoding: 'utf8' });
     expect(JSON.parse(out)).toEqual({
       // Each ability's choice waits on its method; class features wait on the class.
-      baseMissing: ['ability_method', 'class', 'name', 'species'],
+      baseMissing: ['ability_method', 'background', 'class', 'name', 'species'],
       mergedMissing: [
         'abilities.charisma.bought',
         'abilities.constitution.bought',
@@ -210,6 +222,7 @@ describe('5e', () => {
         'abilities.strength.bought',
         'abilities.wisdom.bought',
         'ability_method',
+        'background',
         'class',
         'features.fighting_style',
         'features.martial_archetype',
@@ -257,7 +270,13 @@ describe('5e', () => {
   it('serves the composed fighter through the root entry', () => {
     // Method, species and class come first: neither abilities nor class features ask until chosen.
     const query = cli('5e/main.yaml') as { query: Array<{ path: string }> };
-    expect(query.query.map((param) => param.path).sort()).toEqual(['ability_method', 'class', 'name', 'species']);
+    expect(query.query.map((param) => param.path).sort()).toEqual([
+      'ability_method',
+      'background',
+      'class',
+      'name',
+      'species',
+    ]);
 
     const data = cli(
       '5e/main.yaml',
@@ -372,6 +391,7 @@ describe('5e', () => {
       'class=fighter',
       '--param',
       'species=dwarf',
+      ...BACKGROUND,
       '--param',
       'ability_method=point_buy',
       ...['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma'].flatMap((ability, i) => [
@@ -423,6 +443,7 @@ describe('5e', () => {
       'class=fighter',
       '--param',
       'species=dwarf',
+      ...BACKGROUND,
       '--param',
       'ability_method=standard_array',
       '--param',
@@ -483,6 +504,7 @@ describe('5e', () => {
       'class=fighter',
       '--param',
       'species=dwarf',
+      ...BACKGROUND,
       '--param',
       'ability_method=roll',
       '--param',
@@ -497,12 +519,12 @@ describe('5e', () => {
           armor_class: number;
         };
       };
-      for (const ability of Object.values(data.data.abilities)) {
+      for (const [name, ability] of Object.entries(data.data.abilities)) {
         expect(ability.start).toBeGreaterThanOrEqual(3);
         expect(ability.start).toBeLessThanOrEqual(18);
-        // One roll per score: everything derived reads the same number.
-        expect(ability.base).toBe(ability.start);
-        expect(ability.modifier).toBe(Math.floor((ability.start - 10) / 2));
+        // One roll per score: everything derived reads the same number, past the background's +1.
+        expect(ability.base).toBe(ability.start + BACKGROUND_BONUS(name));
+        expect(ability.modifier).toBe(Math.floor((ability.base - 10) / 2));
       }
       expect(data.data.armor_class).toBe(10 + (data.data.abilities.dexterity?.modifier ?? 0));
       expect(data.data.point_buy).toBeUndefined();
@@ -520,6 +542,7 @@ describe('5e', () => {
       'class=fighter',
       '--param',
       'species=dwarf',
+      ...BACKGROUND,
       '--param',
       'ability_method=roll_assign',
       '--param',
@@ -552,9 +575,9 @@ describe('5e', () => {
       expect(roll).toBeLessThanOrEqual(18);
     }
     // Each ability starts at the pooled roll it took — the same roll the pool shows.
-    for (const entry of Object.values(data.data.abilities)) {
+    for (const [name, entry] of Object.entries(data.data.abilities)) {
       expect(entry.start).toBe(rolls[entry.roll - 1]);
-      expect(entry.base).toBe(entry.start);
+      expect(entry.base).toBe(entry.start + BACKGROUND_BONUS(name));
     }
     expect(data.data.point_buy).toBeUndefined();
     expect(data.data.standard_array).toBeUndefined();
@@ -577,6 +600,7 @@ describe('5e', () => {
       'class=fighter',
       '--param',
       'species=dwarf',
+      ...BACKGROUND,
       '--param',
       'ability_method=roll',
       '--param',
@@ -687,6 +711,7 @@ describe('5e', () => {
       'class=fighter',
       '--param',
       'species=dwarf',
+      ...BACKGROUND,
       '--param',
       'ability_method=point_buy',
     ) as {
