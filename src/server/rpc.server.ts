@@ -2,6 +2,7 @@
  * JSON-RPC 2.0 dispatch, shared by every transport: decoded messages in,
  * responses out. Framing and encoding belong to the transport.
  */
+import { RpcError } from '@/errors';
 import { IdSchema, RequestSchema } from './dtos';
 
 export const PARSE_ERROR = -32700;
@@ -10,15 +11,6 @@ export const METHOD_NOT_FOUND = -32601;
 export const INVALID_PARAMS = -32602;
 /** Anything a method throws that is not an `RpcError`: the engine refused. */
 export const SERVER_ERROR = -32000;
-
-export class RpcError extends Error {
-  constructor(
-    readonly code: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
 
 type Id = string | number | null;
 
