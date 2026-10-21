@@ -167,6 +167,8 @@ describe('examples', () => {
         unique: true,
       },
       { path: 'score', doc: 'Point-buy score.', type: 'integer', min: 8, max: 15 },
+      // Computed from the stable it reads.
+      { path: 'mount', doc: 'Pick a mount from the stable.', type: 'string', options: ['pony', 'warhorse'] },
     ]);
 
     const data = cli(
@@ -177,6 +179,8 @@ describe('examples', () => {
       'trained=["arcana","stealth"]',
       '--param',
       'score=15',
+      '--param',
+      'mount=pony',
     ) as { data: Record<string, Record<string, unknown>> };
     expect(data.data.style).toEqual({
       ':label': 'Fighting Style',
@@ -188,6 +192,7 @@ describe('examples', () => {
     });
     expect(data.data.trained?.[':value']).toEqual(['arcana', 'stealth']);
     expect(data.data.score?.[':value']).toBe(15);
+    expect(data.data.mount?.[':options']).toEqual(['pony', 'warhorse']);
   });
 
   it('09-stdlib.yaml resolves $lib with no attaching', () => {
@@ -211,6 +216,14 @@ describe('examples', () => {
       melee_only: ['intimidation'],
       melee_is_scouting: 0,
       picked_athletics: 1,
+      scores: { ash: 12, bree: 17, cade: 9 },
+      names: ['ash', 'bree', 'cade'],
+      ranking: ['bree', 'ash', 'cade'],
+      rivals: { ash: 12, dov: 12 },
+      speed: { ash: 2, dov: 5 },
+      photo_finish: ['dov', 'ash'],
+      doubled: '#.scores[name] * 2',
+      doubles: { ash: 24, cade: 18 },
     });
   });
 
@@ -248,6 +261,7 @@ describe('examples', () => {
       missing: null,
       corner: 3,
       golds: 3,
+      champion: 'Ash',
     });
   });
 

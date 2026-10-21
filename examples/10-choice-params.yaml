@@ -4,7 +4,8 @@
 # `:count` requires an exact array length;
 # `:unique: true` requires distinct array items. Violations throw instead of
 # resolving; the `{ query }` report carries the constraints — and the node's
-# `:label`, so a UI can title the prompt.
+# `:label`, so a UI can title the prompt. `:options` may be an expression,
+# computed where the param lives, so the choices follow the tree.
 
 style:
   :label: Fighting Style
@@ -27,3 +28,10 @@ score:
   :type: integer
   :min: 8
   :max: 15
+
+stable: { pony: 1, warhorse: 3 }
+mount:
+  :doc: Pick a mount from the stable.
+  :param: true
+  :type: string
+  :options: $lib.record.keys(#.stable) # → [pony, warhorse]

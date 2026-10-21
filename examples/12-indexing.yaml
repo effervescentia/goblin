@@ -1,5 +1,6 @@
 # Indexing: `list[index]` picks one item, counting from 0. Negative counts
-# from the end; past either end is null. The index is any expression.
+# from the end; past either end is null. The index is any expression. A path
+# that goes on past the indexes reads the ref the keys spell.
 
 ranked: [gold, silver, bronze]
 place: 2
@@ -13,3 +14,7 @@ corner: '#.grid[1][0]' # → 3
 # A record takes a string key: the field it names, or null.
 medals: { gold: 3, silver: 1 }
 golds: '#.medals[#.ranked[0]]' # → 3
+podium:
+  gold: { name: Ash }
+  silver: { name: Bree }
+champion: '#.podium[#.ranked[0]].name' # → Ash, read as #.podium.gold.name

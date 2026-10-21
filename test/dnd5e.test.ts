@@ -1,4 +1,6 @@
 import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -827,6 +829,99 @@ describe('5e', () => {
         // An override has no document line to cite.
         { ':source': 'override', ':version': 1, ':set': 5 },
       ],
+    });
+  });
+
+  describe('combat', () => {
+    // aria plays the fighter from BOUGHT, bram is recruited from the fixtures.
+    const ARIA = [
+      ...BOUGHT,
+      '--param',
+      'name=Aria',
+      '--param',
+      'xp=0',
+      '--param',
+      'features.fighting_style=dueling',
+      '--param',
+      'skills.trained=["athletics","perception"]',
+    ].map((arg, i, args) => (args[i - 1] === '--param' ? `${PC}.${arg}` : arg));
+    type Combat = {
+      members: { ':options': string[]; ':value': string[] };
+      initiative: Record<string, number>;
+      _dexterity: Record<string, number>;
+      order: string[];
+      current: string;
+      round: number | { ':value': number };
+      turn: number | { ':value': number };
+    };
+    type State = {
+      data?: { combat: Combat | { ':value': null } };
+      query?: Array<{ path: string; options?: string[] }>;
+    };
+    const plain = (value: number | { ':value': number }) => (typeof value === 'number' ? value : value[':value']);
+
+    /** Play one turn against the saved state, saving the next. */
+    const turn = (state: string, ...extra: string[]) =>
+      run('5e/main.yaml', '--in', state, ...extra, '--out', state) as State;
+
+    it('starts a fight with some of the party, rolls initiative and takes turns', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'goblin-combat-'));
+      const state = join(dir, 'state.json');
+      try {
+        run('5e/main.yaml', ...ARIA, '--out', state);
+        turn(state, '--invoke', 'recruit("bram")');
+        turn(state, ...COMPANION_PARAMS);
+
+        // The members offered are the party as it stands.
+        expect(turn(state, '--invoke', 'game.start_combat()').query).toEqual([
+          expect.objectContaining({ path: 'combat.members', options: ['aria', 'bram'] }),
+        ]);
+        let refused = '';
+        try {
+          run('5e/main.yaml', '--in', state, '--param', 'combat.members=["zed"]');
+        } catch (err) {
+          refused = String((err as { stderr?: unknown }).stderr);
+        }
+        expect(refused).toContain('param options mismatch: members[0] expected one of ["aria", "bram"], got "zed"');
+
+        const fight = turn(state, '--param', 'combat.members=["bram","aria"]').data?.combat as Combat;
+        expect(fight.members[':value']).toEqual(['bram', 'aria']);
+        // d20 + dexterity: aria's +2, bram's +1.
+        expect(fight.initiative.aria).toBeGreaterThanOrEqual(3);
+        expect(fight.initiative.aria).toBeLessThanOrEqual(22);
+        expect(fight.initiative.bram).toBeGreaterThanOrEqual(2);
+        expect(fight.initiative.bram).toBeLessThanOrEqual(21);
+        // Private to combat.yaml, but still in the output.
+        expect(fight._dexterity).toEqual({ bram: 13, aria: 14 });
+        // Highest first; a tie goes to the higher Dexterity, so aria wins one.
+        const ranked = ['bram', 'aria'].sort(
+          (a, b) =>
+            (fight.initiative[b] ?? 0) - (fight.initiative[a] ?? 0) ||
+            (fight._dexterity[b] ?? 0) - (fight._dexterity[a] ?? 0),
+        );
+        expect(fight.order).toEqual(ranked);
+        expect([fight.current, plain(fight.round), plain(fight.turn)]).toEqual([ranked[0], 1, 0]);
+
+        const second = turn(state, '--invoke', 'combat.end_turn()').data?.combat as Combat;
+        expect([second.current, plain(second.round), plain(second.turn)]).toEqual([ranked[1], 1, 1]);
+        const wrapped = turn(state, '--invoke', 'combat.end_turn()').data?.combat as Combat;
+        expect([wrapped.current, plain(wrapped.round), plain(wrapped.turn)]).toEqual([ranked[0], 2, 0]);
+        // Replayed, each roll holds.
+        expect(wrapped.initiative).toEqual(fight.initiative);
+
+        expect(turn(state, '--invoke', 'game.end_combat()').data?.combat).toEqual(
+          expect.objectContaining({ ':value': null }),
+        );
+        // A new fight asks again: the last one's members were for that fight.
+        expect(turn(state, '--invoke', 'game.start_combat()').query?.map((param) => param.path)).toEqual([
+          'combat.members',
+        ]);
+        const next = turn(state, '--param', 'combat.members=["aria"]').data?.combat as Combat;
+        expect(Object.keys(next.initiative)).toEqual(['aria']);
+        expect([next.current, plain(next.round), plain(next.turn)]).toEqual(['aria', 1, 0]);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
     });
   });
 });

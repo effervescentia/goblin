@@ -1,4 +1,4 @@
-# 5e/main.yaml — root entry: the whole tree resolves as { data }, with each
+ # 5e/main.yaml — root entry: the whole tree resolves as { data }, with each
 # character a nested Character actor under `party`, named for its params.
 #
 # Each character mixes in the class it picks. Template paths resolve
@@ -26,3 +26,11 @@ party:
   aria: $tmpl('character.yaml', 'aria')
 
 'recruit(name)': $.party[name] = $tmpl('character.yaml', name)
+
+# The fight in progress: start with `game.start_combat()`, end with `game.end_combat()`.
+combat: null
+
+# Table-level actions; `#` is still this document, so they reach `combat`.
+game:
+  'start_combat()': "#.combat = $tmpl('combat.yaml')"
+  'end_combat()': '#.combat = null'

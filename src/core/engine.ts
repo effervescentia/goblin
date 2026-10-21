@@ -23,6 +23,7 @@ import {
   FORMULA_KEY,
   IF_KEY,
   LABEL_KEY,
+  OPTIONS_KEY,
   OVERRIDE_SOURCE,
   PARAM_KEY,
   PARAM_VALUE_KEY,
@@ -539,8 +540,9 @@ export class GoblinEngine {
     const raw = this.provenance.clone(loaded);
     if (loaded !== null && typeof loaded === 'object')
       this.provenance.origins.set(raw as object, this.provenance.origins.get(loaded) ?? file);
-    this.patcher.expandCalls(raw, { doc: raw, actor: raw, app: this.appRoot, current: raw });
-    return RecordNode.collectParams(raw, this.namespaceOf);
+    const scope: EvalRoots = { doc: raw, actor: raw, app: this.appRoot, current: raw };
+    this.patcher.expandCalls(raw, scope);
+    return RecordNode.collectParams(raw, this.namespaceOf, [], this.optionsAt(scope));
   }
 
   /**
@@ -616,16 +618,17 @@ export class GoblinEngine {
 
   private resolveInputs(
     actorRaw: unknown,
-    inputs: InputEvent[],
+    given: InputEvent[],
     written: string[],
   ): { data: unknown; result?: unknown } | { query: MissingParam[] } {
+    let inputs = given;
     let keyed = this.splitNamespaced(actorRaw, inputs, written);
     this.applyOverrides(actorRaw, keyed.inputs);
     const scope: EvalRoots = { doc: actorRaw, actor: actorRaw, app: this.appRoot, current: actorRaw, ...keyed };
     this.patcher.expandCalls(actorRaw, scope);
     this.applyOverrides(actorRaw, keyed.inputs);
     this.shareWithApp(actorRaw);
-    const outstanding = RecordNode.collectParams(actorRaw, this.namespaceOf, inputs);
+    const outstanding = RecordNode.collectParams(actorRaw, this.namespaceOf, inputs, this.optionsAt(scope));
     if (outstanding.length > 0) return { query: outstanding };
     const invokes = keyed.inputs.filter((event) => event.type === 'invoke');
     if (invokes.length === 0) return { data: debug(this.evaluate(actorRaw, scope)) };
@@ -636,7 +639,8 @@ export class GoblinEngine {
     this.cache.clear();
     let result: unknown;
     for (const event of invokes) {
-      result = this.invoke(event, { ...scope, path: [] });
+      result = this.invoke(event, { ...scope, ...keyed, path: [] });
+      inputs = this.startFresh(event, inputs);
       // An actor the call wrote in reads its namespace's events as it expands.
       keyed = this.splitNamespaced(actorRaw, inputs, written);
       // A set given after the invoke still wins over what the call wrote,
@@ -650,15 +654,47 @@ export class GoblinEngine {
       // puts its overrides back over what they wrote.
       if (this.patcher.expandCalls(actorRaw, { ...scope, ...later }))
         this.patcher.expandCalls(actorRaw, { ...scope, ...later });
+      // Filled now, so a later invoke into that actor reads its choices.
+      RecordNode.materializeParams(actorRaw, keyed.inputs, this.namespaceOf);
       this.cache.clear();
     }
     // An actor an invoke wrote in brings its own params: ask for them.
     const settled = { ...scope, ...keyed };
     RecordNode.materializeParams(actorRaw, keyed.inputs, this.namespaceOf);
-    const asked = RecordNode.collectParams(actorRaw, this.namespaceOf, inputs);
+    const asked = RecordNode.collectParams(actorRaw, this.namespaceOf, inputs, this.optionsAt(settled));
     if (asked.length > 0) return { query: asked };
     // Already expanded: a fresh expansion would re-apply every set.
     return { data: debug(this.evaluate(actorRaw, { ...settled, path: [] })), result: debug(result) ?? null };
+  }
+
+  /** An actor `event`'s call wrote in starts fresh: the inputs given for its
+   * path (or namespace) before the call, and the rolls recorded there before
+   * it, belonged to whatever it replaced. */
+  private startFresh(event: InputEvent, inputs: InputEvent[]): InputEvent[] {
+    const fresh = this.journal.writtenActors(event);
+    if (fresh.length === 0) return inputs;
+    for (const { path } of fresh) this.journal.forgetRolls(path, event.version);
+    const at = inputs.indexOf(event);
+    const under = (path: string, prefix: string) => path === prefix || path.startsWith(`${prefix}.`);
+    return inputs.filter(
+      (input, index) =>
+        index > at ||
+        input.type === 'invoke' ||
+        !fresh.some(
+          ({ path, namespace }) => under(input.path, path) || (namespace !== undefined && under(input.path, namespace)),
+        ),
+    );
+  }
+
+  /** Computed `:options` for the param at a tree path, evaluated as a field
+   * there would be: `.` its record, `#` and `@` the actor holding it. */
+  private optionsAt(scope: EvalRoots): (at: string[]) => unknown {
+    return (at) => {
+      const param = getPath(scope.actor, at) as Record<string, unknown>;
+      const nested = this.nestedActorOn(scope.actor, at, scope);
+      const inner = nested === undefined ? scope : this.enterActor(nested.actor, scope, at.slice(0, nested.depth));
+      return this.evalExpr(String(param[OPTIONS_KEY]), { ...inner, current: parentOf(scope.actor, at) });
+    };
   }
 
   /** Call the function an invoke event names (actor-relative unless led by a

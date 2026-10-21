@@ -16,6 +16,7 @@ import {
   THEN_KEY,
 } from '@/constants';
 import type { InputEvent } from '@/inputs';
+import { isNativeCall } from '@/lib';
 import { Die } from '@/nodes/die';
 import { FunctionNode } from '@/nodes/function';
 import { RecordNode } from '@/nodes/record';
@@ -89,11 +90,11 @@ export class Patcher {
   /** A patch value that is one call to a definition (`$tmpl('…')`,
    * `$.feature.x()`) inlines here, so `:param` nodes inside it land in the
    * actor tree instead of staying an expression. Calls that yield anything
-   * but a record stay as written, and so stay lazy. */
+   * but a record, or to a `$lib` native, stay as written, and so stay lazy. */
   private inlinePatchValue(value: unknown, scope: EvalRoots): unknown {
     if (typeof value !== 'string') return value;
     const trimmed = value.trim();
-    if (!CALL_EXPR.test(trimmed)) return value;
+    if (!CALL_EXPR.test(trimmed) || isNativeCall(trimmed)) return value;
     try {
       // A probe: anything it rolls is thrown away with a non-record result,
       // so it rolls scratch dice rather than taking the field's.

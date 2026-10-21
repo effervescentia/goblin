@@ -1,4 +1,4 @@
-# Standard library: `$lib` is implicitly loaded — native `math`, `dice`, `list` and `set`,
+# Standard library: `$lib` is implicitly loaded — native `math`, `dice`, `list`, `set` and `record`,
 # plus anything in src/lib/lib.yaml. No attaching needed.
 
 floored: $lib.math.floor(2.9) # → 2
@@ -30,3 +30,15 @@ both: $lib.set.intersection(@.melee, @.scouting) # → [athletics]
 melee_only: $lib.set.difference(@.melee, @.scouting) # → [intimidation]
 melee_is_scouting: $lib.set.subset(@.melee, @.scouting) # → 0
 picked_athletics: $lib.set.subset(['athletics'], @.picks) # → 1
+
+# `record` reads a record as a table keyed by name. `from` takes a function,
+# named by its ref, and calls it with each key.
+scores: { ash: 12, bree: 17, cade: 9 }
+names: $lib.record.keys(@.scores) # → [ash, bree, cade]
+ranking: $lib.record.rank(@.scores) # → [bree, ash, cade]
+# Later records break ties: ash and dov both scored 12.
+rivals: { ash: 12, dov: 12 }
+speed: { ash: 2, dov: 5 }
+photo_finish: $lib.record.rank(@.rivals, @.speed) # → [dov, ash]
+'doubled(name)': '#.scores[name] * 2'
+doubles: "$lib.record.from(['ash', 'cade'], #.doubled)" # → { ash: 24, cade: 18 }
