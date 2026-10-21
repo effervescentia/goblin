@@ -3,6 +3,7 @@ import type { ResolveParamsSchema } from '@/cli/dtos';
 import type { StateEvent } from '@/inputs';
 import type { MissingParam } from '@/nodes/record';
 import type { Format } from '@/server/dtos';
+import type { Turn } from '@/server/session';
 
 export const ResponseSchema = z
   .object({ jsonrpc: z.literal('2.0'), id: z.union([z.string(), z.number(), z.null()]) })
@@ -16,11 +17,14 @@ export const ResponseSchema = z
 /** The `resolve` params, as `--server` reads them. */
 export type ResolveParams = z.input<typeof ResolveParamsSchema>;
 
-/** What `resolve` answers: the envelope a one-shot CLI run prints. */
-export type Envelope =
+/** The envelope a one-shot CLI run prints. */
+type Envelope =
   | { hash: string; version: number; events: StateEvent[]; result?: unknown; data: unknown }
   | { hash: string; version: number; events: StateEvent[]; query: MissingParam[] }
   | { errors: string[] };
+
+/** What `resolve` answers: the envelope, plus the session keys unless the server is `--stateless`. */
+export type Answer = Envelope & Partial<Turn>;
 
 /** How to start a `goblin --server`; the client adds `--server`, `--format` and `--port` itself. */
 export interface Spawn {

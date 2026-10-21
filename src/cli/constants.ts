@@ -1,4 +1,4 @@
-export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--format cbor|json] [--port n] [--help]
+export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--stateless] [--format cbor|json] [--port n] [--help]
 
 Resolves a goblin document and prints the result as JSON: either
 { "hash", "version", "events", "data" } when all :param values are
@@ -57,9 +57,19 @@ Arguments:
                 Method "resolve" takes { entry?, in?, inputs?, stripMetadata? }
                 — in is a prior envelope, inputs a list of { type:
                 "parameter" | "override" | "invoke", path, value } — and
-                answers the envelope a run would print.
+                answers the envelope a run would print, plus "previous"
+                and "sessionID" unless --stateless.
                 Cannot be combined with --param, --set, --invoke, --out,
                 --strip-metadata or --compact.
+  --stateless   Answer each --server call on its own (needs --server). By
+                default a server is a session: it gets a UUID ("sessionID"
+                in every answer) and saves each envelope a call answers
+                (bar { "errors" }) as ~/.goblin/sessions/<sessionID>/
+                state_<timestamp>.json, with head.json holding the latest
+                as { "entry", "state": "<file>" }. A call without "in"
+                continues from that latest state if it names the same
+                entry, else starts fresh; "previous" names the file it
+                continued from, or is null.
   --format      Wire format for --server requests and responses: cbor
                 (default; one CBOR item per message, application/cbor over
                 http, binary frames over websocket) or json (one line per

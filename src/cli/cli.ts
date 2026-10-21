@@ -3,7 +3,7 @@
  * Goblin CLI — resolves the application state and prints it as JSON.
  *
  * Usage:
- *   goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--format cbor|json] [--port n] [--help]
+ *   goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--stateless] [--format cbor|json] [--port n] [--help]
  *
  * With no entry file, `.goblin.yaml` in the current directory is required.
  * An entry containing a directory (`examples/foo.yaml`) is resolved with
@@ -22,6 +22,7 @@ import { print } from '@/nodes/serialize';
 import { type Format, FormatSchema } from '@/server/dtos';
 import { HttpServer } from '@/server/http.server';
 import { INVALID_PARAMS, type Methods } from '@/server/rpc.server';
+import { Session } from '@/server/session';
 import { StdioServer } from '@/server/stdio.server';
 import { WebSocketServer } from '@/server/websocket.server';
 import { DEFAULT_PORT, INVOKE_ALONE, ONE_SHOT, USAGE } from './constants';
@@ -34,6 +35,8 @@ export interface CliArgs {
   help: boolean;
   /** Serve JSON-RPC instead of resolving once, over stdio, HTTP or WebSocket. */
   server?: ServerMode;
+  /** Answer each `--server` call on its own, keeping no session. */
+  stateless: boolean;
   /** The `--server` wire format; CBOR unless given. */
   format?: Format;
   /** The `--server http|websocket` port; 0 lets the OS pick. */
@@ -74,7 +77,7 @@ function parseInvoke(target: string | undefined): [string, unknown[]] {
 
 /** Pure argv parsing (excludes node/bun binary and script name). */
 export function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { compact: false, stripMetadata: false, help: false, events: [] };
+  const args: CliArgs = { compact: false, stripMetadata: false, help: false, stateless: false, events: [] };
   const oneShot: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -89,6 +92,8 @@ export function parseArgs(argv: string[]): CliArgs {
       const mode = ServerModeSchema.safeParse(argv[++i]);
       if (!mode.success) throw new Error(`--server expects stdio, http or websocket, got: ${argv[i] ?? '(nothing)'}`);
       args.server = mode.data;
+    } else if (arg === '--stateless') {
+      args.stateless = true;
     } else if (arg === '--format') {
       const format = FormatSchema.safeParse(argv[++i]);
       if (!format.success) throw new Error(`--format expects cbor or json, got: ${argv[i] ?? '(nothing)'}`);
@@ -127,6 +132,7 @@ export function parseArgs(argv: string[]): CliArgs {
   if (args.port !== undefined && args.server !== 'http' && args.server !== 'websocket')
     throw new Error('--port needs --server http or websocket');
   if (args.format !== undefined && !args.server) throw new Error('--format needs --server');
+  if (args.stateless && !args.server) throw new Error('--stateless needs --server');
   return args;
 }
 
@@ -296,9 +302,13 @@ export function parseRunParams(params: unknown = {}): RunRequest {
   return { entry, prior, inputs, stripMetadata };
 }
 
-/** The JSON-RPC methods `--server` answers, whichever the transport. */
-export const serverMethods = (cwd: string): Methods => ({
-  resolve: (params) => run(cwd, parseRunParams(params)),
+/** The JSON-RPC methods `--server` answers, whichever the transport; with a
+ * `session`, each `resolve` continues from and saves to it. */
+export const serverMethods = (cwd: string, session?: Session): Methods => ({
+  resolve: (params) => {
+    const request = parseRunParams(params);
+    return session === undefined ? run(cwd, request) : session.turn(request, (turn) => run(cwd, turn));
+  },
 });
 
 // Entry point only — no-op when imported (e.g. by tests).
@@ -309,18 +319,20 @@ if (import.meta.main) {
       process.stdout.write(`${USAGE}\n`);
       process.exit(0);
     }
+    // A session writes nothing until its first answer, so a one-shot run can hold one unused.
+    const methods = serverMethods(process.cwd(), args.stateless ? undefined : new Session());
     if (args.server === 'stdio') {
-      const server = new StdioServer(serverMethods(process.cwd()), args.format);
+      const server = new StdioServer(methods, args.format);
       await server.serve(process.stdin, (bytes) => process.stdout.write(bytes));
       process.exit(0);
     }
     if (args.server === 'http') {
       // Loopback only: `entry` names files on this machine, so the server must not answer other hosts.
-      const { fetch } = new HttpServer(serverMethods(process.cwd()), args.format);
+      const { fetch } = new HttpServer(methods, args.format);
       const server = Bun.serve({ hostname: '127.0.0.1', port: args.port ?? DEFAULT_PORT, fetch });
       console.error(`listening on ${server.url}`);
     } else if (args.server === 'websocket') {
-      const { fetch, websocket } = new WebSocketServer(serverMethods(process.cwd()), args.format);
+      const { fetch, websocket } = new WebSocketServer(methods, args.format);
       const server = Bun.serve({ hostname: '127.0.0.1', port: args.port ?? DEFAULT_PORT, fetch, websocket });
       console.error(`listening on ${server.url.href.replace(/^http/, 'ws')}`);
     } else {

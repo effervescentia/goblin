@@ -19,6 +19,7 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
+      stateless: false,
       events: [],
     });
   });
@@ -29,6 +30,7 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
+      stateless: false,
       events: [],
     });
   });
@@ -39,6 +41,7 @@ describe('parseArgs', () => {
       compact: true,
       stripMetadata: false,
       help: false,
+      stateless: false,
       events: [],
     });
     expect(parseArgs(['main.yaml', '--compact'])).toEqual({
@@ -46,6 +49,7 @@ describe('parseArgs', () => {
       compact: true,
       stripMetadata: false,
       help: false,
+      stateless: false,
       events: [],
     });
   });
@@ -56,6 +60,7 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: true,
       help: false,
+      stateless: false,
       events: [],
     });
     expect(parseArgs(['main.yaml', '--compact', '--strip-metadata'])).toEqual({
@@ -63,6 +68,7 @@ describe('parseArgs', () => {
       compact: true,
       stripMetadata: true,
       help: false,
+      stateless: false,
       events: [],
     });
   });
@@ -73,6 +79,7 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: true,
+      stateless: false,
       events: [],
     });
     expect(parseArgs(['-h'])).toEqual({
@@ -80,6 +87,7 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: true,
+      stateless: false,
       events: [],
     });
   });
@@ -90,6 +98,7 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
+      stateless: false,
       events: [{ type: 'parameter', path: 'hero_name', value: 'Aria' }],
     });
     expect(parseArgs(['--param', 'level=3', '--param', 'name=Aria'])).toEqual({
@@ -97,6 +106,7 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
+      stateless: false,
       events: [
         { type: 'parameter', path: 'level', value: 3 },
         { type: 'parameter', path: 'name', value: 'Aria' },
@@ -110,6 +120,7 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
+      stateless: false,
       events: [{ type: 'parameter', path: 'skills.trained', value: ['athletics', 'perception'] }],
     });
   });
@@ -130,6 +141,7 @@ describe('parseArgs', () => {
       compact: false,
       stripMetadata: false,
       help: false,
+      stateless: false,
       events: [{ type: 'override', path: 'level', value: 5 }],
     });
     expect(
@@ -213,6 +225,13 @@ describe('parseArgs --server', () => {
     expect(() => parseArgs(['--server', 'http', '--format'])).toThrow('--format expects cbor or json');
     expect(() => parseArgs(['--server', 'http', '--format', 'xml'])).toThrow('--format expects cbor or json');
     expect(() => parseArgs(['--format', 'json'])).toThrow('--format needs --server');
+  });
+
+  it('takes --stateless only with --server', () => {
+    expect(parseArgs(['--server', 'stdio']).stateless).toBe(false);
+    expect(parseArgs(['--stateless', '--server', 'http']).stateless).toBe(true);
+    expect(() => parseArgs(['--stateless'])).toThrow('--stateless needs --server');
+    expect(() => parseArgs(['a.yaml', '--stateless'])).toThrow('--stateless needs --server');
   });
 
   it('rejects a bad --port, or one without --server http or websocket', () => {
@@ -421,8 +440,9 @@ describe('rehydrate', () => {
 describe('USAGE', () => {
   it('documents the CLI', () => {
     expect(USAGE).toContain(
-      'goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--format cbor|json] [--port n] [--help]',
+      'goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--stateless] [--format cbor|json] [--port n] [--help]',
     );
+    expect(USAGE).toContain('--stateless');
     expect(USAGE).toContain('--out');
     expect(USAGE).toContain('--in');
     expect(USAGE).toContain('--compact');
@@ -779,10 +799,11 @@ describe('cli', () => {
   });
 });
 
+// These check the wire, so they run --stateless: answers stay bare envelopes and nothing lands in ~/.goblin.
 describe('cli --server stdio', () => {
   const server = (...messages: unknown[]): unknown[] => {
     const input = Buffer.concat(messages.map((message) => encode(message)));
-    const stdout = execFileSync('bun', ['src/cli/cli.ts', '--server', 'stdio'], { cwd: root, input });
+    const stdout = execFileSync('bun', ['src/cli/cli.ts', '--server', 'stdio', '--stateless'], { cwd: root, input });
     return decodeMultiple(stdout) ?? [];
   };
 
@@ -818,7 +839,7 @@ describe('cli --server stdio', () => {
   it('speaks one JSON line per message under --format json', () => {
     const entry = 'examples/08-parameters.yaml';
     const input = `${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'resolve', params: { entry } })}\n{\n`;
-    const stdout = execFileSync('bun', ['src/cli/cli.ts', '--server', 'stdio', '--format', 'json'], {
+    const stdout = execFileSync('bun', ['src/cli/cli.ts', '--server', 'stdio', '--stateless', '--format', 'json'], {
       cwd: root,
       input,
     }).toString();
@@ -875,7 +896,9 @@ describe('cli --server http', () => {
   it.each(WIRES)(
     'answers posted %s resolve turns with the envelope a run prints, logging its URL',
     async (_, { flags, type, write, read }) => {
-      const child = spawn('bun', ['src/cli/cli.ts', '--server', 'http', '--port', '0', ...flags], { cwd: root });
+      const child = spawn('bun', ['src/cli/cli.ts', '--server', 'http', '--stateless', '--port', '0', ...flags], {
+        cwd: root,
+      });
       try {
         const url = await listening(child);
         expect(new URL(url).hostname).toBe('127.0.0.1');
@@ -914,7 +937,9 @@ describe('cli --server websocket', () => {
       (data: unknown) => JSON.parse(data as string),
     ],
   ])('answers %s resolve frames with the envelope a run prints, logging its URL', async (_, flags, write, read) => {
-    const child = spawn('bun', ['src/cli/cli.ts', '--server', 'websocket', '--port', '0', ...flags], { cwd: root });
+    const child = spawn('bun', ['src/cli/cli.ts', '--server', 'websocket', '--stateless', '--port', '0', ...flags], {
+      cwd: root,
+    });
     try {
       const url = new URL(await listening(child));
       expect(url.protocol).toBe('ws:');
