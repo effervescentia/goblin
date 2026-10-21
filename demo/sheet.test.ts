@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   at,
   combatOf,
+  describeEvent,
+  eventsAt,
   fields,
   formulaAt,
   humanize,
@@ -11,6 +13,7 @@ import {
   readParam,
   signed,
   slotsOf,
+  sourceOf,
   templateInputs,
   unwrap,
 } from './sheet';
@@ -119,5 +122,41 @@ describe('sheet', () => {
         { key: 'aria', initiative: 14 },
       ],
     });
+  });
+
+  it('reads a field’s events, skipping a first one that only declared an empty slot', () => {
+    const fighter = { ':source': 'class/fighter/fighter.yaml', ':line': 7, ':set': 12 };
+    const character = {
+      hit_points: { current: { ':value': 12, ':events': [{ ':source': 'character.yaml', ':set': 8 }, fighter] } },
+      hit_die: {
+        ':value': 'd10',
+        ':events': [{ ':set': { ':doc': 'filled by your class', ':type': 'die' } }, fighter],
+      },
+      armor: { ':value': ['shields'], ':events': [{ ':set': [] }, fighter] },
+      features: { second_wind: { ':label': 'Second Wind', ':events': [{ ':add': 'second_wind' }] } },
+      level: 5,
+    };
+    expect(eventsAt(character, 'hit_points.current')).toHaveLength(2);
+    expect(eventsAt(character, 'hit_die')).toEqual([fighter]);
+    expect(eventsAt(character, 'armor')).toEqual([fighter]);
+    expect(eventsAt(character, 'features.second_wind')).toEqual([{ ':add': 'second_wind' }]);
+    expect(eventsAt(character, 'level')).toEqual([]);
+    expect(eventsAt(character, 'missing.deeper')).toEqual([]);
+  });
+
+  it('describes what an event did and where it came from', () => {
+    expect(describeEvent({ ':set': 12 })).toBe('set to 12');
+    expect(describeEvent({ ':set': ['all_armor', 'shields'] })).toBe('set to All armor, Shields');
+    expect(describeEvent({ ':add': 1 })).toBe('+1');
+    expect(describeEvent({ ':add': ['darkvision'] })).toBe('added Darkvision');
+    expect(describeEvent({ ':add': 'second_wind' })).toBe('added');
+    expect(describeEvent({ ':subtract': 1 })).toBe('−1');
+
+    expect(sourceOf({ ':source': 'class/fighter/fighter.yaml', ':line': 7, ':set': 12 })).toBe(
+      'class/fighter/fighter.yaml:7',
+    );
+    expect(sourceOf({ ':source': 'override', ':version': 4, ':set': 35 })).toBe('override (turn 4)');
+    expect(sourceOf({ ':source': 'class/fighter/fighter.yaml', ':subtract': 1 })).toBe('class/fighter/fighter.yaml');
+    expect(sourceOf({ ':set': 1 })).toBe('unknown');
   });
 });

@@ -161,3 +161,43 @@ export function combatOf(data: unknown): Combat | null {
     })),
   };
 }
+
+/** One entry of a field's `:events`: a `:set`, `:add` or `:subtract` and where it came from. */
+export type FieldEvent = Record<string, unknown>;
+
+/** A value that only holds a slot open: an empty list, or a record of metadata alone (`{ :doc }`). */
+const isPlaceholder = (value: unknown) =>
+  value === undefined ||
+  value === null ||
+  (Array.isArray(value) && value.length === 0) ||
+  (isRecord(value) && Object.keys(value).every((key) => key.startsWith(':')));
+
+/** The `:events` of the field at `path` under `node`, minus a first event that only declared an empty slot. */
+export function eventsAt(node: unknown, path: string): FieldEvent[] {
+  const keys = path.split('.');
+  const parent = keys.length > 1 ? at(node, keys.slice(0, -1).join('.')) : node;
+  const field = isRecord(parent) ? parent[keys.at(-1) as string] : undefined;
+  const events = isRecord(field) && Array.isArray(field[':events']) ? (field[':events'] as FieldEvent[]) : [];
+  return events.filter((event, i) => i > 0 || !(':set' in event && isPlaceholder(event[':set'])));
+}
+
+const show = (value: unknown) =>
+  Array.isArray(value) ? value.map((item) => humanize(String(item))).join(', ') : String(value);
+
+/** What `event` did: `set to 12`, `+1`, `−1`, or `added` for a key a record addition introduced. */
+export function describeEvent(event: FieldEvent): string {
+  if (':subtract' in event) return `−${show(event[':subtract'])}`;
+  if (':add' in event) {
+    const added = event[':add'];
+    if (typeof added === 'number') return `+${added}`;
+    return Array.isArray(added) ? `added ${show(added)}` : 'added';
+  }
+  return `set to ${show(event[':set'])}`;
+}
+
+/** Where `event` came from: `class/fighter/fighter.yaml:7`, or the run an override was given in. */
+export function sourceOf(event: FieldEvent): string {
+  const source = typeof event[':source'] === 'string' ? event[':source'] : 'unknown';
+  if (typeof event[':version'] === 'number') return `${source} (turn ${event[':version']})`;
+  return typeof event[':line'] === 'number' ? `${source}:${event[':line']}` : source;
+}
