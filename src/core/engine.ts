@@ -171,7 +171,9 @@ export class GoblinEngine {
     }
 
     if (segments.length === 0) {
-      return this.evaluate(base, scope);
+      // A bare `.` on a `:param` (a rule on the param itself) reads its fill;
+      // re-evaluating it would look the fill up by a path validation lacks.
+      return this.evaluate(RecordNode.isParam(base) ? this.derefValue(base) : base, scope);
     }
     // A wildcard ref reads as the list of its matches that resolve.
     if (segments.some((segment) => parseWildcard(segment) !== null)) {

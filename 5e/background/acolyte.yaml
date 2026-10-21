@@ -1,0 +1,17 @@
+'@': Character
+$if: "@.background == 'acolyte'"
+
+'@.proficiencies.skill':
+  - insight
+  - religion
+'@.proficiencies.tool':
+  - calligraphers_supplies
+'@.improvements.background':
+  :label: Background Ability Scores
+  :doc: 'Pick three to receive +1; an ability cannot be chosen more than twice.'
+  :param: true
+  :type: array
+  :options: [intelligence, wisdom, charisma]
+  :count: 3
+  '!validate':
+    - '$lib.list.size($lib.list.unique(.)) > 1'

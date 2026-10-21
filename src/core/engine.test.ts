@@ -1036,6 +1036,21 @@ describe('validate', () => {
     const bad = { hit_points: { '!validate': ['.current >= 0'], current: -2 } };
     expect(engine.validate(bad)).toEqual(['.current >= 0']);
   });
+
+  it('reads a bare `.` on a filled param as its value', () => {
+    const { engine } = testEngine();
+    const picks = (value: string[]) => ({
+      picks: {
+        ':param': true,
+        ':type': 'array',
+        ':options': ['a', 'b', 'c'],
+        '!validate': ['$lib.list.size($lib.set.union(., [])) > 1'],
+        ':value': value,
+      },
+    });
+    expect(engine.validate(picks(['a', 'a', 'b']))).toEqual([]);
+    expect(engine.validate(picks(['a', 'a', 'a']))).toEqual(['$lib.list.size($lib.set.union(., [])) > 1']);
+  });
 });
 
 describe('validate with patched fields', () => {
