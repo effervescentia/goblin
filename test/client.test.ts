@@ -61,9 +61,16 @@ describe.each(TRANSPORTS.flatMap((transport) => FORMATS.map((format) => [transpo
         expect(checkpoint).toEqual({ version: 1, entry, events: [], ...pick(asking, 'hash', 'query') });
         expect(turn).toEqual({ version: 2, entry, ...pick(next, 'events', 'hash') });
 
+        // `inspect` reads the head: a settled one lists its fields, an asking one nothing.
+        expect(await client.inspect({ entry })).toContainEqual(
+          expect.objectContaining({ path: 'hero_name', kind: 'param', value: 'Aria' }),
+        );
+        await expect(client.inspect({ entry, in: asking })).rejects.toMatchObject({ code: -32602 });
+
         // The log is the session's own: it takes no `in`, but can rewind.
         await expect(client.resolve({ entry, in: asking })).rejects.toMatchObject({ code: -32602 });
         expect(await client.rewind(1)).toEqual({ version: 1, sessionID });
+        expect(await client.inspect({ entry })).toEqual([]);
         expect(await client.resolve({ entry })).toMatchObject({ version: 2, previous: 1, sessionID });
         await expect(client.rewind(0)).rejects.toMatchObject({ code: -32602 });
         await expect(client.resolve({ entry: 'nope.yaml' })).rejects.toMatchObject({ code: -32000 });
@@ -80,6 +87,10 @@ describe.each(TRANSPORTS.flatMap((transport) => FORMATS.map((format) => [transpo
         const next = await client.resolve({ entry, in: asking, inputs: [...answers] });
         expect(next).toMatchObject({ version: 2 });
         expect('data' in next && next.data).toEqual(answered());
+        expect(await client.inspect({ entry, in: next })).toContainEqual(
+          expect.objectContaining({ path: 'details.title', kind: 'param', value: 'Sir' }),
+        );
+        expect(await client.inspect({ entry })).toEqual([]);
         expect(await client.resolve({ entry })).toEqual(cli(entry));
       } finally {
         await client.close();

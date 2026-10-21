@@ -2,6 +2,7 @@
  * Reading a resolved character out of the engine's `data`, metadata and all:
  * params and evented fields carry their value under `:value`, labels under `:label`.
  */
+import type { InspectNode } from '@/inspect';
 import type { MissingParam } from '@/nodes/record';
 
 export const ENTRY = '5e/main.yaml';
@@ -200,4 +201,15 @@ export function sourceOf(event: FieldEvent): string {
   const source = typeof event[':source'] === 'string' ? event[':source'] : 'unknown';
   if (typeof event[':version'] === 'number') return `${source} (turn ${event[':version']})`;
   return typeof event[':line'] === 'number' ? `${source}:${event[':line']}` : source;
+}
+
+/** The expression behind each derived field under `prefix`, by path relative to it; a literal that only
+ * restates its value (`d10`) is left out. */
+export function expressionsOf(nodes: InspectNode[], prefix: string): Map<string, string> {
+  const derived = new Map<string, string>();
+  for (const { kind, path, expression, value } of nodes) {
+    if (kind !== 'expression' || expression === undefined || expression === String(value)) continue;
+    if (path.startsWith(`${prefix}.`)) derived.set(path.slice(prefix.length + 1), expression);
+  }
+  return derived;
 }

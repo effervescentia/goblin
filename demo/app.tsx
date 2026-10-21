@@ -18,6 +18,7 @@ import {
   describeEvent,
   ENTRY,
   eventsAt,
+  expressionsOf,
   type FieldEvent,
   fields,
   formulaAt,
@@ -48,6 +49,7 @@ function App() {
   const [answer, setAnswer] = useState<Answer>();
   const [status, setStatus] = useState('connecting…');
   const [sessionID, setSessionID] = useState<string>();
+  const [expressions, setExpressions] = useState(new Map<string, string>());
 
   const turn: Turn = async (inputs = []) => {
     if (!client.current || busy.current) return;
@@ -55,6 +57,8 @@ function App() {
     setStatus('resolving…');
     try {
       const next = await client.current.resolve({ entry: ENTRY, inputs });
+      // A settled sheet's expressions are fetched before it shows, so its tooltips arrive with it.
+      if ('data' in next) setExpressions(expressionsOf(await client.current.inspect({ entry: ENTRY }), CHARACTER));
       setAnswer(next);
       if (next.sessionID) setSessionID(next.sessionID);
       setStatus('');
@@ -97,7 +101,7 @@ function App() {
           // Keyed by version so each turn's form starts blank.
           <Query key={answer.version} query={answer.query} turn={turn} />
         ) : (
-          <Sheet data={answer.data} turn={turn} />
+          <Sheet data={answer.data} expressions={expressions} turn={turn} />
         )}
       </main>
     </>
@@ -195,24 +199,37 @@ function Control({ param, value, onChange }: { param: MissingParam; value: strin
 
 // -- the sheet ----------------------------------------------------------------
 
-/** `children`, with a tooltip of the `events` that set or changed them on hover or focus. */
-function History({ events, title, children }: { events: FieldEvent[]; title?: string; children: ComponentChildren }) {
-  if (events.length === 0) return <>{children}</>;
+/** `children`, with a tooltip on hover or focus: the `expression` that derives them and the `events` that set or changed them. */
+function History({
+  events = [],
+  expression,
+  title,
+  children,
+}: {
+  events?: FieldEvent[];
+  expression?: string;
+  title?: string;
+  children: ComponentChildren;
+}) {
+  if (events.length === 0 && expression === undefined) return <>{children}</>;
   return (
     // biome-ignore lint/a11y/noNoninteractiveTabindex: focus shows the tooltip to keyboard users
     <span class="history" tabIndex={0}>
       {children}
       <span class="tooltip" role="tooltip">
-        {title ? <span class="title">{title}</span> : null}
-        <ol>
-          {events.map((event, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: events are append-only
-            <li key={i}>
-              <span>{describeEvent(event)}</span>
-              <span class="source">{sourceOf(event)}</span>
-            </li>
-          ))}
-        </ol>
+        {expression === undefined ? null : <code class="expression">= {expression}</code>}
+        {title && events.length > 0 ? <span class="title">{title}</span> : null}
+        {events.length > 0 ? (
+          <ol>
+            {events.map((event, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: events are append-only
+              <li key={i}>
+                <span>{describeEvent(event)}</span>
+                <span class="source">{sourceOf(event)}</span>
+              </li>
+            ))}
+          </ol>
+        ) : null}
       </span>
     </span>
   );
@@ -292,10 +309,11 @@ function Combat({ data, turn }: { data: unknown; turn: Turn }) {
   );
 }
 
-function Sheet({ data, turn }: { data: unknown; turn: Turn }) {
+function Sheet({ data, expressions, turn }: { data: unknown; expressions: Map<string, string>; turn: Turn }) {
   const sheet = at(data, CHARACTER);
   const get = (path: string) => at(sheet, path);
   const events = (path: string) => eventsAt(sheet, path);
+  const tip = (path: string) => ({ events: events(path), expression: expressions.get(path) });
   const invoke = (path: string) => () => turn([call(`${CHARACTER}.${path}`)]);
   const saves = (get('proficiencies.saving_throws') as string[] | undefined) ?? [];
 
@@ -304,8 +322,8 @@ function Sheet({ data, turn }: { data: unknown; turn: Turn }) {
       <header class="identity">
         <h2>{String(get('name'))}</h2>
         <p>
-          Level {String(get('level'))} {humanize(String(get('species')))} {humanize(String(get('class')))} ·{' '}
-          {String(get('xp'))} XP
+          Level <History {...tip('level')}>{String(get('level'))}</History> {humanize(String(get('species')))}{' '}
+          {humanize(String(get('class')))} · {String(get('xp'))} XP
         </p>
       </header>
 
@@ -313,29 +331,29 @@ function Sheet({ data, turn }: { data: unknown; turn: Turn }) {
 
       <div class="stats">
         <Stat label="Armor Class" formula={formulaAt(sheet, 'armor_class')}>
-          <History events={events('armor_class')}>{String(get('armor_class'))}</History>
+          <History {...tip('armor_class')}>{String(get('armor_class'))}</History>
         </Stat>
         <Stat label="Hit Points">
-          <History events={events('hit_points.current')}>{String(get('hit_points.current'))}</History> /{' '}
-          <History events={events('hit_points.max')}>{String(get('hit_points.max'))}</History>
+          <History {...tip('hit_points.current')}>{String(get('hit_points.current'))}</History> /{' '}
+          <History {...tip('hit_points.max')}>{String(get('hit_points.max'))}</History>
         </Stat>
         <Stat label="Initiative">
-          <History events={events('initiative.base')}>{signed(get('initiative.base'))}</History>
+          <History {...tip('initiative.base')}>{signed(get('initiative.base'))}</History>
         </Stat>
         <Stat label="Speed">
-          <History events={events('speed')}>{String(get('speed'))} ft</History>
+          <History {...tip('speed')}>{String(get('speed'))} ft</History>
         </Stat>
         <Stat label="Proficiency">
-          <History events={events('proficiency_bonus')}>{signed(get('proficiency_bonus'))}</History>
+          <History {...tip('proficiency_bonus')}>{signed(get('proficiency_bonus'))}</History>
         </Stat>
         <Stat label="Hit Die">
-          <History events={events('hit_die')}>{String(get('hit_die'))}</History>
+          <History {...tip('hit_die')}>{String(get('hit_die'))}</History>
         </Stat>
         <Stat label="Attacks">
-          <History events={events('attacks')}>{String(get('attacks'))}</History>
+          <History {...tip('attacks')}>{String(get('attacks'))}</History>
         </Stat>
         <Stat label="Critical Hit">
-          <History events={events('critical_hit')}>{String(get('critical_hit'))}–20</History>
+          <History {...tip('critical_hit')}>{String(get('critical_hit'))}–20</History>
         </Stat>
       </div>
 
@@ -343,12 +361,18 @@ function Sheet({ data, turn }: { data: unknown; turn: Turn }) {
         {fields(get('abilities')).map(([name, ability]) => (
           <div key={name} class="ability">
             <span class="name">{humanize(name)}</span>
-            <span class="modifier">{signed(at(ability, 'modifier'))}</span>
-            <History events={eventsAt(ability, 'start')} title="Starting score">
+            <span class="modifier">
+              <History {...tip(`abilities.${name}.modifier`)}>{signed(at(ability, 'modifier'))}</History>
+            </span>
+            <History
+              expression={expressions.get(`abilities.${name}.base`)}
+              events={events(`abilities.${name}.start`)}
+              title="Starting score"
+            >
               <span class="score">{String(at(ability, 'base'))}</span>
             </History>
             {saves.includes(name) ? (
-              <History events={events('proficiencies.saving_throws')}>
+              <History {...tip('proficiencies.saving_throws')}>
                 <span class="save">saving throw</span>
               </History>
             ) : null}
@@ -368,13 +392,13 @@ function Sheet({ data, turn }: { data: unknown; turn: Turn }) {
           </div>
           {fields(get('resources')).map(([name, resource]) => (
             <div key={name} class="resource">
-              <History events={eventsAt(get('resources'), name)}>{labelOf(resource, name)}</History>
+              <History {...tip(`resources.${name}`)}>{labelOf(resource, name)}</History>
               <span class="muted">
-                <History events={eventsAt(resource, 'current')}>{String(at(resource, 'current'))}</History> /{' '}
-                <History events={eventsAt(resource, 'max')}>{String(at(resource, 'max'))}</History>
+                <History {...tip(`resources.${name}.current`)}>{String(at(resource, 'current'))}</History> /{' '}
+                <History {...tip(`resources.${name}.max`)}>{String(at(resource, 'max'))}</History>
               </span>
               <span class="muted">
-                <History events={eventsAt(resource, 'recover')}>{String(at(resource, 'recover'))} rest</History>
+                <History {...tip(`resources.${name}.recover`)}>{String(at(resource, 'recover'))} rest</History>
               </span>
             </div>
           ))}
@@ -385,9 +409,9 @@ function Sheet({ data, turn }: { data: unknown; turn: Turn }) {
             const type = at(action, 'type');
             return (
               <div key={name} class="action">
-                <History events={eventsAt(get('actions'), name)}>{labelOf(action, name)}</History>
+                <History {...tip(`actions.${name}`)}>{labelOf(action, name)}</History>
                 <span class="muted">
-                  <History events={[...eventsAt(action, 'type'), ...eventsAt(action, 'die')]}>
+                  <History events={[...events(`actions.${name}.type`), ...events(`actions.${name}.die`)]}>
                     {[type && humanize(String(type)), at(action, 'die')].filter(Boolean).join(' · ')}
                   </History>
                 </span>
@@ -405,11 +429,11 @@ function Sheet({ data, turn }: { data: unknown; turn: Turn }) {
           <h3>Skills</h3>
           <Tags items={get('skills.trained')} />
           <h3>
-            <History events={events('proficiencies.armor')}>Armor</History>
+            <History {...tip('proficiencies.armor')}>Armor</History>
           </h3>
           <Tags items={get('proficiencies.armor')} />
           <h3>
-            <History events={events('proficiencies.weapon')}>Weapons</History>
+            <History {...tip('proficiencies.weapon')}>Weapons</History>
           </h3>
           <Tags items={get('proficiencies.weapon')} />
         </Section>
@@ -422,7 +446,7 @@ function Sheet({ data, turn }: { data: unknown; turn: Turn }) {
             return (
               <div key={name}>
                 <dt>
-                  <History events={eventsAt(get('features'), name)}>
+                  <History {...tip(`features.${name}`)}>
                     {labelOf(feature, name)}
                     {typeof choice === 'string' ? `: ${humanize(choice)}` : null}
                   </History>

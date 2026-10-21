@@ -104,6 +104,14 @@ export class Session {
     });
   }
 
+  /** The head as `turn` would continue from it for `entry`, or undefined when the log holds another entry or none. */
+  head(entry?: string): Promise<unknown> {
+    return this.enqueue(async () => {
+      const head = this.chain.at(-1);
+      return head?.item.entry === (entry ?? null) ? priorOf(head) : undefined;
+    });
+  }
+
   /** Cut the log back to `version`, one of the latest `history`, so the next turn continues from it. */
   rewind(version: number): Promise<{ version: number; sessionID: string }> {
     return this.enqueue(async () => {

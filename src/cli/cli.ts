@@ -19,6 +19,7 @@ import type { EngineEvent } from '@/core/journal';
 import { StateEventSchema, VersionSchema } from '@/dtos';
 import { RpcError } from '@/errors';
 import { type InputEvent, isInputEvent, type StateEvent } from '@/inputs';
+import { type InspectNode, inspect } from '@/inspect';
 import { print } from '@/nodes/serialize';
 import { type Format, FormatSchema } from '@/server/dtos';
 import { HttpServer } from '@/server/http.server';
@@ -27,7 +28,14 @@ import { Session } from '@/server/session';
 import { StdioServer } from '@/server/stdio.server';
 import { WebSocketServer } from '@/server/websocket.server';
 import { DEFAULT_PORT, INVOKE_ALONE, ONE_SHOT, STATEFUL_IN, USAGE } from './constants';
-import { ConfigSchema, ResolveParamsSchema, RewindParamsSchema, type ServerMode, ServerModeSchema } from './dtos';
+import {
+  ConfigSchema,
+  InspectParamsSchema,
+  ResolveParamsSchema,
+  RewindParamsSchema,
+  type ServerMode,
+  ServerModeSchema,
+} from './dtos';
 
 export interface CliArgs {
   entry?: string;
@@ -305,6 +313,13 @@ export async function run(
   return withHash(shown, stream, version);
 }
 
+/** `inspect()` of `prior` (a saved envelope) replayed, or of the bare entry; none while it asks or fails validation. */
+export async function inspectState(cwd: string, entry?: string, prior?: unknown): Promise<InspectNode[]> {
+  const { events } = prior === undefined ? { events: [] } : rehydrate(prior);
+  const { state, actor, engine } = await resolveApp(cwd, entry, events);
+  return 'data' in state ? inspect(actor, state.data, engine.namespaceOf) : [];
+}
+
 export interface RunRequest {
   entry?: string;
   /** A prior `{ data }` / `{ query }` envelope to replay, as `--in` reads it. */
@@ -331,6 +346,14 @@ export const serverMethods = (cwd: string, session?: Session): Methods => ({
     if (session === undefined) return run(cwd, request);
     if (request.prior !== undefined) throw new RpcError(INVALID_PARAMS, STATEFUL_IN);
     return session.turn(request, (turn) => run(cwd, turn));
+  },
+  inspect: async (params = {}) => {
+    const parsed = InspectParamsSchema.safeParse(params);
+    if (!parsed.success) throw new RpcError(INVALID_PARAMS, 'inspect expects { entry?, in? }');
+    const { entry, in: prior } = parsed.data;
+    if (session === undefined) return inspectState(cwd, entry, prior);
+    if (prior !== undefined) throw new RpcError(INVALID_PARAMS, STATEFUL_IN);
+    return inspectState(cwd, entry, await session.head(entry));
   },
   ...(session === undefined
     ? {}

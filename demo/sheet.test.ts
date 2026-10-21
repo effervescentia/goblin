@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import type { InspectNode } from '@/inspect';
 import {
   at,
   combatOf,
   describeEvent,
   eventsAt,
+  expressionsOf,
   fields,
   formulaAt,
   humanize,
@@ -158,5 +160,29 @@ describe('sheet', () => {
     expect(sourceOf({ ':source': 'override', ':version': 4, ':set': 35 })).toBe('override (turn 4)');
     expect(sourceOf({ ':source': 'class/fighter/fighter.yaml', ':subtract': 1 })).toBe('class/fighter/fighter.yaml');
     expect(sourceOf({ ':set': 1 })).toBe('unknown');
+  });
+
+  it('maps derived fields under the character to their expressions', () => {
+    const node = (path: string, kind: InspectNode['kind'], expression?: string, value?: unknown): InspectNode => ({
+      path,
+      key: path.split('.').at(-1) ?? path,
+      kind,
+      expression,
+      value,
+      reads: [],
+      children: [],
+      private: false,
+    });
+    const derived = expressionsOf(
+      [
+        node('party.aria.armor_class', 'expression', '10 + .abilities.dexterity.modifier', 11),
+        node('party.aria.hit_die', 'expression', 'd10', 'd10'),
+        node('party.aria.rest.long', 'function', '() => @.hit_points.current = @.hit_points.max'),
+        node('party.aria.speed', 'value', undefined, 30),
+        node('party.bram.armor_class', 'expression', '10 + .abilities.dexterity.modifier', 12),
+      ],
+      'party.aria',
+    );
+    expect([...derived]).toEqual([['armor_class', '10 + .abilities.dexterity.modifier']]);
   });
 });
