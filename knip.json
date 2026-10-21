@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["inspector/app.ts", "demo/app.ts", "{src,test,demo}/**/*.test.ts"],
-  "project": ["src/**/*.ts", "test/**/*.ts", "inspector/**/*.ts", "demo/**/*.ts"],
+  "entry": ["inspector/app.ts", "demo/app.tsx", "{src,test,demo}/**/*.test.ts"],
+  "project": ["src/**/*.ts", "test/**/*.ts", "inspector/**/*.ts", "demo/**/*.{ts,tsx}"],
   "ignoreUnresolved": ["src/cli/cli.ts"]
 }

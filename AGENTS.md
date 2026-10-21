@@ -82,13 +82,13 @@ apart. Treat a missing spec update as an incomplete change.
   the logged URL). Id matching, failure and `close` (waits out in-flight calls) live in
   `src/client/rpc.client.ts`; each transport only frames, reusing `src/server/codec.ts`. Keep it free
   of Bun APIs — `node:child_process` loads lazily, only to spawn.
-- `bun run inspector` serves the inspector (`inspector/`, Bun-only) at localhost:3000: it
+- `bun run inspector` serves the inspector (`inspector/`, Bun-only) at localhost:1337: it
   resolves an entry via `resolveApp` in `src/cli/cli.ts`, answers `{ query }`
   turns with a form, and renders `inspect()` (`src/inspect.ts`, pure) —
   fields, what each reads and is read by, and their `:events`.
 - `bun run demo` serves a character sheet (`demo/`, Bun-only) at localhost:1338
   for `aria` in `5e/main.yaml`: `demo/server.ts` spawns a stateful
-  `--server websocket`, and the page talks to it only through `goblin/client`,
+  `--server websocket`, and the page (Preact) talks to it only through `goblin/client`,
   answering `{ query }` with form inputs and invoking rests and actions.
   Reading the resolved tree (`:value`, `:label`) lives in `demo/sheet.ts`, pure.
 - Engine inputs are the same `InputEvent` stream the CLI saves (`src/inputs.ts`):

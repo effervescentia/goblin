@@ -50,3 +50,17 @@ export function parseParam(param: MissingParam, raw: string): unknown {
   if (param.type === 'array' || param.type === 'record') return JSON.parse(raw);
   return raw;
 }
+
+/** How many controls `param` takes: an exact count may repeat a pick (the same ability twice), so one select each. */
+export const slotsOf = (param: MissingParam) =>
+  param.options && param.type === 'array' ? (param.count ?? param.options.length) : 1;
+
+/** The value `param`'s controls hold — selects hold an option's index — or undefined until every one is filled. */
+export function readParam(param: MissingParam, raw: (string | undefined)[]): unknown {
+  const { options } = param;
+  if (!options) return parseParam(param, raw[0] ?? '');
+  const picks = Array.from({ length: slotsOf(param) }, (_, i) => raw[i] || undefined);
+  if (picks.some((pick) => pick === undefined)) return undefined;
+  const values = picks.map((pick) => options[Number(pick)]);
+  return param.type === 'array' ? values : values[0];
+}

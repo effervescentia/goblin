@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { at, fields, humanize, labelOf, parseParam, signed, unwrap } from './sheet';
+import { at, fields, humanize, labelOf, parseParam, readParam, signed, slotsOf, unwrap } from './sheet';
 
 describe('sheet', () => {
   const sheet = {
@@ -41,5 +41,22 @@ describe('sheet', () => {
     expect(parseParam({ path: 'aria.xp', type: 'integer' }, '6500')).toBe(6500);
     expect(parseParam({ path: 'aria.ready', type: 'boolean' }, 'true')).toBe(true);
     expect(parseParam({ path: 'aria.skills', type: 'array' }, '["athletics"]')).toEqual(['athletics']);
+  });
+
+  it('reads option picks by index, waiting on every slot', () => {
+    const species = { path: 'aria.species', type: 'string', options: ['dwarf', 'elf'] };
+    expect(slotsOf(species)).toBe(1);
+    expect(readParam(species, [''])).toBeUndefined();
+    expect(readParam(species, ['1'])).toBe('elf');
+
+    const scores = { path: 'aria.abilities.strength.assigned', type: 'integer', options: [15, 14] };
+    expect(readParam(scores, ['0'])).toBe(15);
+
+    const improvements = { path: 'aria.improvements.level_4', type: 'array', options: ['str', 'dex'], count: 2 };
+    expect(slotsOf(improvements)).toBe(2);
+    expect(readParam(improvements, ['0'])).toBeUndefined();
+    expect(readParam(improvements, ['0', '0'])).toEqual(['str', 'str']);
+
+    expect(readParam({ path: 'aria.name', type: 'string' }, ['Aria'])).toBe('Aria');
   });
 });
