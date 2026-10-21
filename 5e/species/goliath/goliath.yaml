@@ -7,8 +7,11 @@ $if: "@.species == 'goliath'"
 '@.features':
   +giant_ancestry:
     :label: Giant Ancestry
+    :doc: 'Choose a supernatural boon from your giant ancestry: Cloud''s Jaunt, Fire''s Burn, Frost''s Chill, Hill''s Tumble, Stone''s Endurance, or Storm''s Thunder. Uses equal to your proficiency bonus per long rest.'
   +large_form:
     $if: '@.level >= 5'
     :label: Large Form
+    :doc: As a bonus action, become Large for 10 minutes, with advantage on Strength checks and +10 feet of Speed. Restores on a long rest.
   +powerful_build:
     :label: Powerful Build
+    :doc: You have advantage on checks to end the Grappled condition, and count as one size larger for carrying capacity.

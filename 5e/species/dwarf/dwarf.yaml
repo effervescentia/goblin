@@ -7,9 +7,13 @@ $if: "@.species == 'dwarf'"
 '@.features':
   +darkvision:
     :label: Darkvision
+    :doc: You can see in dim light within 120 feet as if it were bright light, and in darkness as if it were dim light.
   +dwarven_resilience:
     :label: Dwarven Resilience
+    :doc: You have resistance to Poison damage and advantage on saving throws to avoid or end the Poisoned condition.
   +dwarven_toughness:
     :label: Dwarven Toughness
+    :doc: Your hit point maximum increases by 1, and by 1 again whenever you gain a level.
   +stonecunning:
     :label: Stonecunning
+    :doc: As a bonus action, gain Tremorsense out to 60 feet for 10 minutes while on or touching stone. Uses equal to your proficiency bonus per long rest.

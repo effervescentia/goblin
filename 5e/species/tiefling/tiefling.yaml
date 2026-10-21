@@ -7,5 +7,7 @@ $if: "@.species == 'tiefling'"
 '@.features':
   +darkvision:
     :label: Darkvision
+    :doc: You can see in dim light within 60 feet as if it were bright light, and in darkness as if it were dim light.
   +otherworldly_presence:
     :label: Otherworldly Presence
+    :doc: You know the Thaumaturgy cantrip, using the same spellcasting ability as your Fiendish Legacy spells.

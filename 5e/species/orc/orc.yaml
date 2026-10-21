@@ -7,7 +7,10 @@ $if: "@.species == 'orc'"
 '@.features':
   +adrenaline_rush:
     :label: Adrenaline Rush
+    :doc: Take the Dash action as a bonus action and gain temporary hit points equal to your proficiency bonus. Uses equal to your proficiency bonus per short or long rest.
   +darkvision:
     :label: Darkvision
+    :doc: You can see in dim light within 120 feet as if it were bright light, and in darkness as if it were dim light.
   +relentless_endurance:
     :label: Relentless Endurance
+    :doc: 'When you''re reduced to 0 hit points but not killed outright, drop to 1 hit point instead. Restores on a long rest.'
