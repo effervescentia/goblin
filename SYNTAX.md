@@ -762,8 +762,9 @@ applied one, `'@': Character`). Provided
 choices fill in first, so a mixin can gate on a choice an earlier patch
 declared.
 
-- The key holding the call is consumed, and a record left empty by its
-  mixin calls goes with it.
+- The key holding the call stays, as `null`, so a record of mixins can
+  list them: 5e's `class` offers `:options: $lib.record.keys(._classes)`,
+  the record whose keys each mix in a class.
 - The mixin's writes are patch writes: `:events` cite its file and lines.
 - Paths resolve relative to the calling file, like `$tmpl`, and mixins are
   discovered on load the same way (textually — keep the call shape out of
@@ -794,7 +795,9 @@ _subclasses:
 # Examples (examples/14-mixin-actor.yaml, examples/14-mixin-boon.yaml)
 $actor: Adventurer
 speed: 30
-boon: $mixin('14-mixin-boon.yaml') # → gone; '@.speed': 40 lands on this actor
+_gifts:
+  boon: $mixin('14-mixin-boon.yaml') # → null; '@.speed': 40 lands on this actor
+gifts: $lib.record.keys(._gifts) # → [boon]
 ```
 
 ## Parameters
@@ -823,7 +826,8 @@ constraints, so a UI can prompt with a display name rather than a path.
   expression, the one metadata value that evaluates: it is computed where
   the param lives (`.` the record holding it, `@`/`#` its actor), for the
   `{ query }` report and the evaluated `:param` record alike, so the choices
-  follow the tree. 5e's combat offers the party as it stands
+  follow the tree, and it may read the `_` fields of the document that
+  declared it. 5e's combat offers the party as it stands
   (`:options: $lib.record.keys($.party)`). An `override` (`--set`) skips a
   computed list. Anything but an array or a string throws
   (`invalid :options for …`).

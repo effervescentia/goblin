@@ -175,7 +175,8 @@ export class Patcher {
       for (const [key, value] of Object.entries(record)) {
         if (isMetaKey(key) || isValidateKey(key)) continue;
         if (typeof value === 'string' && MIXIN_CALL.test(value.trim())) {
-          delete record[key]; // consumed: the mixin merges into the actor instead
+          // Consumed: the mixin merges into the actor, the key stays for `$lib.record.keys`.
+          record[key] = null;
           this.mixin(value, inner);
           wrote = true;
           continue;
@@ -185,11 +186,7 @@ export class Patcher {
           record[key] = this.provenance.claim(next, this.engine.fieldSource(record, key) ?? '');
           wrote = true;
         }
-        const child = record[key];
-        const mixins = child !== null && typeof child === 'object' && !Array.isArray(child) && hasMixin(child);
-        visit(child, inner, [...base, key]);
-        // A record that only held mixin calls leaves nothing behind.
-        if (mixins && Object.keys(child as object).length === 0) delete record[key];
+        visit(record[key], inner, [...base, key]);
       }
     };
     visit(raw, scope, []);
@@ -312,7 +309,8 @@ export class Patcher {
 
   private mergeEntry(target: Record<string, unknown>, key: string, rawValue: unknown, scope: EvalRoots): void {
     if (typeof rawValue === 'string' && MIXIN_CALL.test(rawValue.trim())) {
-      this.mixin(rawValue, scope); // the key holding the call is consumed
+      this.mixin(rawValue, scope);
+      if (!(key in target)) target[key] = null;
       return;
     }
     const value = this.inlinePatchValue(rawValue, scope);
@@ -332,11 +330,8 @@ export class Patcher {
       if (key !== k) this.journal.record(target, k, ADD_KEY, k);
       // Always merge through mergeInto so nested `+`, path keys and
       // `$if`/`$then` wrappers are consumed rather than stored raw.
-      const created = typeof target[k] !== 'object' || target[k] === null || Array.isArray(target[k]);
-      if (created) target[k] = {};
+      if (typeof target[k] !== 'object' || target[k] === null || Array.isArray(target[k])) target[k] = {};
       this.mergeInto(target[k], value, { ...scope, current: target[k] });
-      // A record that only held mixin calls leaves nothing behind.
-      if (created && Object.keys(target[k] as object).length === 0 && hasMixin(value)) delete target[k];
       return;
     }
     if (Array.isArray(value)) {
@@ -388,11 +383,4 @@ export class Patcher {
     }
     return added;
   }
-}
-
-/** Whether a patch value holds a `$mixin('…')` call anywhere inside. */
-function hasMixin(value: unknown): boolean {
-  if (typeof value === 'string') return MIXIN_CALL.test(value.trim());
-  if (value === null || typeof value !== 'object') return false;
-  return Object.values(value).some(hasMixin);
 }

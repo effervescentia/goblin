@@ -11,4 +11,4 @@ name:
 speed: 30
 gold: 10
 pace: '@.speed' # this hero's speed, wherever it is nested
-boon: $mixin('14-mixin-boon.yaml') # → gone; speed 40, gold 15
+_boon: $mixin('14-mixin-boon.yaml') # → null; speed 40, gold 15

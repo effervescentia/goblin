@@ -619,13 +619,13 @@ describe('mixins', () => {
     return engine;
   };
 
-  it('merges into the actor document that calls it, consuming the key', () => {
+  it('merges into the actor document that calls it, leaving the key null', () => {
     const engine = engineWith({
       'boon.yaml': boon,
       'hero.yaml': { $actor: 'Hero', speed: 30, gold: 1, boon: "$mixin('boon.yaml')" },
     });
     const state = engine.resolve('hero.yaml') as { data: Record<string, unknown> };
-    expect(state.data.boon).toBeUndefined();
+    expect(state.data.boon).toBeNull();
     expect(state.data.speed).toEqual({
       ':value': 40,
       ':events': [
@@ -636,17 +636,17 @@ describe('mixins', () => {
     expect(fieldValue(state.data.gold)).toBe(6);
   });
 
-  it('drops a record in an actor document that only held mixin calls', () => {
+  it('keeps the keys of a record in an actor document that only held mixin calls', () => {
     const engine = engineWith({
       'boon.yaml': boon,
       'hero.yaml': { $actor: 'Hero', speed: 30, gold: 1, gifts: { first: "$mixin('boon.yaml')" } },
     });
     const state = engine.resolve('hero.yaml') as { data: Record<string, unknown> };
-    expect(state.data).not.toHaveProperty('gifts');
+    expect(state.data.gifts).toEqual({ first: null });
     expect(fieldValue(state.data.speed)).toBe(40);
   });
 
-  it('merges into the actor a patch applies to, leaving no empty record behind', () => {
+  it('merges into the actor a patch applies to, keeping the key that called it', () => {
     const engine = engineWith({
       'boon.yaml': boon,
       'hero.yaml': { $actor: 'Hero', speed: 30, gold: 1 },
@@ -655,7 +655,7 @@ describe('mixins', () => {
     const actor = engine.evalExpr("$tmpl('hero.yaml')", { doc: {}, actor: {}, app: engine.appRoot, current: {} });
     engine.apply(actor, 'class.yaml');
     expect(actor).toMatchObject({ speed: 40, gold: 6, hp: 10 });
-    expect(actor).not.toHaveProperty('extras');
+    expect(actor).toHaveProperty('extras', { blessing: null });
   });
 
   it('walks up the template chain to the nearest document declaring its actor', () => {
@@ -1881,6 +1881,27 @@ describe('parameters', () => {
     expect(() => engine.resolve('camp.yaml', [parameter('mount', 'mule'), parameter('hero.pack', 'heavy')])).toThrow(
       'param options mismatch: mount expected one of ["pony", "warhorse"], got "mule"',
     );
+  });
+
+  it('computes :options from the keys of a private record of mixins', () => {
+    // A root actor's mixins apply once per engine, so each resolve gets its own.
+    const engine = () => {
+      const fresh = new GoblinEngine('.');
+      fresh.register('boon.yaml', { '@': 'Hero', $if: "@.gift == 'boon'", '@.speed': 40 });
+      fresh.register('curse.yaml', { '@': 'Hero', $if: "@.gift == 'curse'", '@.speed': 20 });
+      fresh.register('hero.yaml', {
+        $actor: 'Hero',
+        speed: 30,
+        gift: { ':param': true, ':type': 'string', ':options': '$lib.record.keys(._gifts)' },
+        _gifts: { boon: "$mixin('boon.yaml')", curse: "$mixin('curse.yaml')" },
+      });
+      return fresh;
+    };
+    expect(engine().resolve('hero.yaml')).toEqual({
+      query: [{ path: 'gift', type: 'string', options: ['boon', 'curse'] }],
+    });
+    const state = engine().resolve('hero.yaml', [parameter('gift', 'curse')]) as { data: Record<string, unknown> };
+    expect(fieldValue(state.data.speed)).toBe(20);
   });
 
   it('enforces :unique distinctness and :count length on arrays', () => {
