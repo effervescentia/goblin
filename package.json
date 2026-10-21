@@ -11,7 +11,8 @@
     "check:unused": "knip",
     "format": "biome check --write --use-editorconfig true",
     "dev": "bun src/cli/cli.ts",
-    "ui": "PORT=1337 bun ui/server.ts",
+    "inspector": "bun inspector/server.ts",
+    "demo": "bun demo/server.ts",
     "test": "vitest run",
     "build": "bun build --compile src/cli/cli.ts --outfile build/goblin && rm -f .*.bun-build"
   },
@@ -28,6 +29,7 @@
   },
   "dependencies": {
     "cbor-x": "1.6.6",
+    "preact": "11.0.1",
     "ts-pattern": "5.9.0",
     "yaml": "2.9.1",
     "zod": "4.6.7"

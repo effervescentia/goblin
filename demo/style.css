@@ -1,0 +1,280 @@
+:root {
+  --bg: #f4f1ea;
+  --panel: #fffdf8;
+  --ink: #23201b;
+  --muted: #776f63;
+  --line: #e2dccf;
+  --accent: #8a2f24;
+  --accent-soft: #f5e4df;
+  --bad: #a3352b;
+  --sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17150f;
+    --panel: #201d17;
+    --ink: #ece6da;
+    --muted: #a39a8b;
+    --line: #353027;
+    --accent: #e48a77;
+    --accent-soft: #3a2420;
+    --bad: #f08b7f;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.5 var(--sans);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--serif);
+  margin: 0;
+}
+
+button,
+select,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--panel);
+  border-radius: 6px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+select,
+input {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  width: 100%;
+}
+
+.bar {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.status {
+  color: var(--muted);
+}
+
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.errors {
+  color: var(--bad);
+}
+
+.query {
+  display: grid;
+  gap: 16px;
+}
+
+.query > button {
+  justify-self: start;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.card,
+.panel,
+.stat,
+.ability {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.card {
+  margin: 0;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.card legend {
+  font-family: var(--serif);
+  font-weight: 600;
+  padding: 0 4px;
+}
+
+.doc {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.picks {
+  display: grid;
+  gap: 6px;
+}
+
+.sheet {
+  display: grid;
+  gap: 16px;
+}
+
+.identity h2 {
+  font-size: 32px;
+}
+
+.identity p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.stat {
+  display: grid;
+  justify-items: center;
+  padding: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.stat .value {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.abilities {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.ability {
+  display: grid;
+  justify-items: center;
+  padding: 10px 8px;
+}
+
+.ability .name {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.ability .modifier {
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 600;
+}
+
+.ability .score {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 10px;
+}
+
+.ability .save {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.panel {
+  padding: 14px 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.panel h3 {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.rests {
+  display: flex;
+  gap: 8px;
+}
+
+.resource,
+.action {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 0;
+  border-top: 1px solid var(--line);
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tags li {
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.features {
+  margin: 0;
+}
+
+.features dt {
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.features dd {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
