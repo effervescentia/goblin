@@ -364,6 +364,7 @@ params (see Parameters). `--strip-metadata` drops all of it.
 failure messages (a throwing rule reports `"<rule> → <message>"`). Predicates
 evaluate with `.` bound to the containing node; use `.`-relative refs, since
 `$`/`@`/`#` inside validation resolve against shared globals, not the actor.
+A rule on a `:param` node itself reads a bare `.` as its filled value.
 
 The CLI runs them on every resolved sheet: failing rules replace the `{ data }`
 envelope with `{ errors }`, listing each failure message, so a caller never

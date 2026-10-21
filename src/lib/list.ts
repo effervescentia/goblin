@@ -22,4 +22,6 @@ export const LIST_LIB: Record<string, (...args: never[]) => number> = {
   has: ((value: unknown, item: unknown) => (picksOf(value).includes(item) ? 1 : 0)) as never,
   /** How many picks were made in total. */
   size: ((value: unknown) => picksOf(value).length) as never,
+  /** Takes only unique values from an array */
+  unique: (value: unknown) => Array.from(new Set(picksOf(value))) as never,
 };

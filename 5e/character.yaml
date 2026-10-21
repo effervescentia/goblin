@@ -76,6 +76,8 @@ proficiencies:
   armor: []
   weapon: []
   saving_throws: []
+  skill: []
+  tool: []
 # Expendable uses: each entry has `current`, `max` and `recover` — `short`
 # (back on any rest) or `long` (back only on a long rest).
 resources: {}
@@ -108,6 +110,18 @@ _species:
   human: $mixin('species/human/human.yaml')
   orc: $mixin('species/orc/orc.yaml')
   tiefling: $mixin('species/tiefling/tiefling.yaml')
+
+background:
+  :label: Background
+  :doc: Choose a background for your character.
+  :param: true
+  :type: string
+  :options:
+    - acolyte
+
+_backgrounds:
+  acolyte: $mixin('background/acolyte.yaml')
+  artisan: $mixin('background/artisan.yaml')
 
 class:
   :label: Class
