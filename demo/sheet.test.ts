@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { at, fields, formulaAt, humanize, labelOf, parseParam, readParam, signed, slotsOf, unwrap } from './sheet';
+import {
+  at,
+  fields,
+  formulaAt,
+  humanize,
+  labelOf,
+  parseParam,
+  readParam,
+  signed,
+  slotsOf,
+  templateInputs,
+  unwrap,
+} from './sheet';
 
 describe('sheet', () => {
   const sheet = {
@@ -69,5 +81,12 @@ describe('sheet', () => {
     expect(readParam(improvements, ['0', '0'])).toEqual(['str', 'str']);
 
     expect(readParam({ path: 'aria.name', type: 'string' }, ['Aria'])).toBe('Aria');
+  });
+
+  it('sends a template as params under the character', () => {
+    expect(templateInputs({ label: 'Test', params: { class: 'fighter', 'skills.trained': ['athletics'] } })).toEqual([
+      { type: 'parameter', path: 'aria.class', value: 'fighter' },
+      { type: 'parameter', path: 'aria.skills.trained', value: ['athletics'] },
+    ]);
   });
 });

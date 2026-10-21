@@ -22,6 +22,8 @@ import {
   readParam,
   signed,
   slotsOf,
+  TEMPLATES,
+  templateInputs,
   unwrap,
 } from './sheet';
 
@@ -107,6 +109,14 @@ function Query({ query, turn }: { query: MissingParam[]; turn: Turn }) {
 
   return (
     <form class="query" onSubmit={submit}>
+      <div class="templates">
+        <span class="muted">Start from a premade character:</span>
+        {TEMPLATES.map((template) => (
+          <button key={template.label} type="button" onClick={() => turn(templateInputs(template))}>
+            {template.label}
+          </button>
+        ))}
+      </div>
       <h2>Choices to make</h2>
       <div class="cards">
         {query.map((param) => (
