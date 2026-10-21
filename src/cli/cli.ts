@@ -3,7 +3,7 @@
  * Goblin CLI — resolves the application state and prints it as JSON.
  *
  * Usage:
- *   goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--stateless] [--format cbor|json] [--port n] [--help]
+ *   goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--stateless] [--history n] [--format cbor|json] [--port n] [--help]
  *
  * With no entry file, `.goblin.yaml` in the current directory is required.
  * An entry containing a directory (`examples/foo.yaml`) is resolved with
@@ -37,6 +37,8 @@ export interface CliArgs {
   server?: ServerMode;
   /** Answer each `--server` call on its own, keeping no session. */
   stateless: boolean;
+  /** How many saved states a `--server` session keeps; 30 unless given. */
+  history?: number;
   /** The `--server` wire format; CBOR unless given. */
   format?: Format;
   /** The `--server http|websocket` port; 0 lets the OS pick. */
@@ -94,6 +96,11 @@ export function parseArgs(argv: string[]): CliArgs {
       args.server = mode.data;
     } else if (arg === '--stateless') {
       args.stateless = true;
+    } else if (arg === '--history') {
+      const history = argv[++i];
+      if (history === undefined || !/^\d+$/.test(history) || Number(history) < 1)
+        throw new Error(`--history expects an integer >= 1, got: ${history ?? '(nothing)'}`);
+      args.history = Number(history);
     } else if (arg === '--format') {
       const format = FormatSchema.safeParse(argv[++i]);
       if (!format.success) throw new Error(`--format expects cbor or json, got: ${argv[i] ?? '(nothing)'}`);
@@ -133,6 +140,8 @@ export function parseArgs(argv: string[]): CliArgs {
     throw new Error('--port needs --server http or websocket');
   if (args.format !== undefined && !args.server) throw new Error('--format needs --server');
   if (args.stateless && !args.server) throw new Error('--stateless needs --server');
+  if (args.history !== undefined && (!args.server || args.stateless))
+    throw new Error('--history needs a stateful --server');
   return args;
 }
 
@@ -320,7 +329,7 @@ if (import.meta.main) {
       process.exit(0);
     }
     // A session writes nothing until its first answer, so a one-shot run can hold one unused.
-    const methods = serverMethods(process.cwd(), args.stateless ? undefined : new Session());
+    const methods = serverMethods(process.cwd(), args.stateless ? undefined : new Session({ history: args.history }));
     if (args.server === 'stdio') {
       const server = new StdioServer(methods, args.format);
       await server.serve(process.stdin, (bytes) => process.stdout.write(bytes));

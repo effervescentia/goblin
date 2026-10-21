@@ -2,13 +2,15 @@
  * A stateful server's history: every envelope it answers is saved as
  * `<root>/<id>/state_<timestamp>.json`, and `head.json` names the latest (`state`)
  * and the `entry` it resolved; the next turn continues from it unless it brings its own `in`.
+ * Only the latest `history` states are kept.
  */
 import { randomUUID } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 const SESSIONS_DIR = join('.goblin', 'sessions');
+const DEFAULT_HISTORY = 30;
 
 /** The keys a stateful server adds to each `resolve` answer, beside the envelope (and outside its `hash`). */
 export interface Turn {
@@ -17,15 +19,26 @@ export interface Turn {
   sessionID: string;
 }
 
+interface SessionOptions {
+  /** Where session directories go; `~/.goblin/sessions` unless given. */
+  root?: string;
+  /** How many `state_*.json` files to keep, the oldest deleted first. */
+  history?: number;
+}
+
 export class Session {
   readonly id = randomUUID();
   readonly dir: string;
+  private readonly history: number;
+  /** This session's state files, oldest first. */
+  private readonly saved: string[] = [];
   private head?: { entry?: string; name: string; state: unknown };
   private stamp = 0;
   private queue: Promise<unknown> = Promise.resolve();
 
-  constructor(root = join(homedir(), SESSIONS_DIR)) {
+  constructor({ root = join(homedir(), SESSIONS_DIR), history = DEFAULT_HISTORY }: SessionOptions = {}) {
     this.dir = join(root, this.id);
+    this.history = history;
   }
 
   /** Run one turn from the head (unless `request` has a `prior`, or names another entry) and save what it
@@ -53,6 +66,10 @@ export class Session {
     await writeFile(join(this.dir, name), `${JSON.stringify(state, null, 2)}\n`);
     await writeFile(join(this.dir, 'head.json'), `${JSON.stringify({ entry: entry ?? null, state: name }, null, 2)}\n`);
     this.head = { entry, name, state };
+    // Pruned only once head.json has moved on, so it never names a deleted state.
+    this.saved.push(name);
+    for (const old of this.saved.splice(0, Math.max(0, this.saved.length - this.history)))
+      await rm(join(this.dir, old), { force: true });
   }
 }
 

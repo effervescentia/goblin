@@ -53,7 +53,7 @@ apart. Treat a missing spec update as an incomplete change.
   The final evaluated state always logs; diagnostics need `--debug`
   (validation failures always log as errors).
 - `bun run build` compiles `src/cli/cli.ts` to a `build/goblin` binary
-  (`goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--stateless] [--format cbor|json] [--port n] [--help]`) that prints
+  (`goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--stateless] [--history n] [--format cbor|json] [--port n] [--help]`) that prints
   the resolution envelope (`{ hash, version, events, result?, data }` — a run counter, the append-only stream of every `--param`/`--set`/`--invoke` given (as `parameter`/`override`/`invoke` events) with the engine's `set`/`add`/`subtract` writes and every die `roll` woven in (`weave`, in the order made), and the return value of this run's `--invoke`, with `hash` a `sha256:` of the compact JSON of the rest — `{ hash, version, events, query }` when params are outstanding, or `{ errors }` for failing `!validate` rules) as JSON to stdout, also writing it to `--out` unless it is `{ errors }`. `--invoke` only runs on a stable state: never alongside `--param`/`--set`, and only on an `--in` state (or bare entry) that resolves to `{ data }`. `--in` replays all of a prior output's `events` — inputs re-make the writes, recorded rolls replay as a tape (`Die.within` frames), and invoke-made writes keep their values — appends this run's, and bumps its `version` (`-` reads stdin). Keep serialized key order deterministic (same input → same order) — the
   `hash` is over `JSON.stringify`, so unstable ordering silently changes it. `src/cli/cli.ts` is Bun-only; keep `parseArgs` pure
   so `src/cli/cli.test.ts` stays runtime-agnostic.
@@ -68,7 +68,7 @@ apart. Treat a missing spec update as an incomplete change.
   (and `hash`) the CLI prints; add methods to `serverMethods` in `src/cli/cli.ts`, not a transport.
   Servers are stateful unless `--stateless`: a `Session` (`src/server/session.ts`) saves each answered
   envelope (not `{ errors }`) to `~/.goblin/sessions/<sessionID>/state_<timestamp>.json` with `head.json`
-  (`{ entry, state }`) naming the latest and its entry, continues a `resolve` without `in` (and with the
+  (`{ entry, state }`) naming the latest and its entry, keeps only the latest `--history` states (default 30), continues a `resolve` without `in` (and with the
   same entry) from it, one turn at a time, and adds `previous`/`sessionID` beside the envelope — outside
   its `hash`. Tests that spawn a server set `HOME` to a temp dir.
 - `goblin/client` (`src/client/main.ts`, a `package.json` sub-export) is the JSON-RPC

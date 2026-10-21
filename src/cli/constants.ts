@@ -1,4 +1,4 @@
-export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--stateless] [--format cbor|json] [--port n] [--help]
+export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--stateless] [--history n] [--format cbor|json] [--port n] [--help]
 
 Resolves a goblin document and prints the result as JSON: either
 { "hash", "version", "events", "data" } when all :param values are
@@ -70,6 +70,9 @@ Arguments:
                 continues from that latest state if it names the same
                 entry, else starts fresh; "previous" names the file it
                 continued from, or is null.
+  --history     How many state_<timestamp>.json files a --server session
+                keeps (an integer >= 1, default 30); once over, the oldest
+                are deleted. Cannot be combined with --stateless.
   --format      Wire format for --server requests and responses: cbor
                 (default; one CBOR item per message, application/cbor over
                 http, binary frames over websocket) or json (one line per
