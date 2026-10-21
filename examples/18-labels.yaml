@@ -1,0 +1,11 @@
+# Labelled expressions: `[Label](expr)` names part of an expression for
+# display. The field prints `{ :value, :formula, :parts }`; refs read the value.
+
+dexterity: 2
+proficiency: 3
+strength: 1
+
+armor_class: '10 + [Dexterity](#.dexterity)' # → 12, formula "10 + Dexterity"
+attack: '[Proficiency](#.proficiency) + [Strength](#.strength)' # → 4
+damage: '[Weapon](1d8) + [Strength](#.strength)' # → 1d8 rolled, plus 1
+touch: '#.armor_class - #.dexterity' # → 10: reads through the label

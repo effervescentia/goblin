@@ -12,8 +12,8 @@ $if: "@.level >= 3 && @.features.martial_archetype == 'eldritch_knight'"
       Cast wizard spells using Intelligence. Counts below are how many cantrips
       and spells you know at your level.
     ability: intelligence
-    save_dc: 8 + @.proficiency_bonus + @.abilities.intelligence.modifier
-    attack_bonus: '@.proficiency_bonus + @.abilities.intelligence.modifier'
+    save_dc: 8 + [Proficiency](@.proficiency_bonus) + [INT](@.abilities.intelligence.modifier)
+    attack_bonus: '[Proficiency](@.proficiency_bonus) + [INT](@.abilities.intelligence.modifier)'
     cantrips_known: 2 + (@.level >= 10)
     spells_known: >-
       3 + (@.level >= 4) + (@.level >= 7) + (@.level >= 8) + (@.level >= 10) +

@@ -118,6 +118,12 @@ export const PARAM_VALUE_KEY = ':value';
 /** A written field's change history: `{ :value, :events }` (see `apply`). */
 export const EVENTS_KEY = ':events';
 
+/** A labelled field's expression, each `[Label](…)` tag read as its label. */
+export const FORMULA_KEY = ':formula';
+
+/** A labelled field's `{ :label, :value }` parts, in the order evaluated. */
+export const PARTS_KEY = ':parts';
+
 /** Event: the value a patch wrote over the field. */
 export const SET_KEY = ':set';
 

@@ -393,6 +393,95 @@ describe('wildcards', () => {
   });
 });
 
+describe('labelled expressions', () => {
+  const evaluateWith = (doc: Record<string, unknown>) => {
+    const engine = new GoblinEngine('.');
+    engine.docs.set('main.yaml', doc);
+    return { engine, out: engine.evaluateDoc('main.yaml') as Record<string, unknown> };
+  };
+
+  it('prints a labelled field with its formula and each part', () => {
+    const { out } = evaluateWith({ dex: 3, armor_class: '10 + [Dexterity](#.dex)', plain: '#.dex + 1' });
+    expect(out.armor_class).toEqual({
+      ':value': 13,
+      ':formula': '10 + Dexterity',
+      ':parts': [{ ':label': 'Dexterity', ':value': 3 }],
+    });
+    expect(out.plain).toBe(4);
+  });
+
+  it('reads through the label: refs see the value', () => {
+    const { out } = evaluateWith({ dex: 3, armor_class: '10 + [Dexterity](#.dex)', touch: '#.armor_class - 2' });
+    expect(out.touch).toBe(11);
+  });
+
+  it('files only its own parts, not those of the fields it reads', () => {
+    const { out } = evaluateWith({
+      dex: '[Score](14) - #.base',
+      base: 10,
+      armor_class: '10 + [Dexterity](#.dex)',
+    });
+    expect(out.armor_class).toMatchObject({ ':parts': [{ ':label': 'Dexterity', ':value': 4 }] });
+    expect(out.dex).toMatchObject({ ':parts': [{ ':label': 'Score', ':value': 14 }] });
+  });
+
+  it('keeps the outermost label in the formula and nested parts in evaluation order', () => {
+    const { out } = evaluateWith({ prof: 2, attack: "[Proficiency](#.prof * [Twice, 'doubled'](2)) + #.prof" });
+    expect(out.attack).toMatchObject({
+      ':formula': 'Proficiency + #.prof',
+      ':parts': [
+        { ':label': "Twice, 'doubled'", ':value': 2 },
+        { ':label': 'Proficiency', ':value': 4 },
+      ],
+    });
+  });
+
+  it('leaves list literals and indexing alone', () => {
+    const { out } = evaluateWith({ a: 1, b: 2, first: '[#.a, #.b][1]', pick: '#.list[0]', list: [5] });
+    expect(out.first).toBe(2);
+    expect(out.pick).toBe(5);
+  });
+
+  it('has no part for a tag its expression skipped', () => {
+    const { out } = evaluateWith({ dex: 3, bonus: '#.dex > 5 ? [Big](#.dex) : 0' });
+    expect(out.bonus).toEqual({ ':value': 0, ':formula': '#.dex > 5 ? Big : 0', ':parts': [] });
+  });
+
+  it('rejects an empty label', () => {
+    expect(() => evaluateWith({ dex: 3, armor_class: '10 + [ ](#.dex)' })).toThrow('empty label');
+  });
+
+  it('collapses to the value when metadata is stripped, and validates against it', () => {
+    const { engine, out } = evaluateWith({
+      dex: 3,
+      armor_class: '10 + [Dexterity](#.dex)',
+      '!validate': ['.armor_class == 13'],
+    });
+    expect(print(out)).toMatchObject({ armor_class: 13 });
+    expect(engine.validate(out)).toEqual([]);
+  });
+
+  it('prints parts beside the events of a patched field', () => {
+    const engine = new GoblinEngine('.');
+    engine.register('actor.yaml', { $actor: 'Hero', dex: 3, armor_class: 10 });
+    engine.register('shield.yaml', { '@': 'Hero', '+@.armor_class': '[Dexterity](@.dex)' });
+    const actor = engine.evalExpr("$tmpl('actor.yaml')", { doc: {}, actor: {}, app: engine.appRoot, current: {} });
+    engine.apply(actor, 'shield.yaml');
+    const out = engine.evaluate(actor, { doc: actor, actor, app: engine.appRoot, current: actor }) as {
+      armor_class: unknown;
+    };
+    expect(out.armor_class).toEqual({
+      ':value': 13,
+      ':formula': '(10) + (Dexterity)',
+      ':parts': [{ ':label': 'Dexterity', ':value': 3 }],
+      ':events': [
+        { ':source': 'actor.yaml', ':set': 10 },
+        { ':source': 'shield.yaml', ':add': 3 },
+      ],
+    });
+  });
+});
+
 describe('event locations', () => {
   // Documents registered with their text cite the line and column of the key
   // behind each write; `yaml` parses here so the test stays runtime-agnostic.

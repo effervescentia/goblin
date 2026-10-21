@@ -46,7 +46,7 @@ _ability_methods:
 
 proficiency_bonus: '$.level.proficiency_for(.level)'
 
-armor_class: '10 + .abilities.dexterity.modifier'
+armor_class: '10 + [DEX](.abilities.dexterity.modifier)'
 speed: 30
 attacks: 1
 # The lowest d20 roll that scores a critical hit; a Champion widens it.

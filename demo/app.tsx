@@ -11,7 +11,19 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Answer, ResolveParams } from '@/client/dtos';
 import { createClient, type GoblinClient } from '@/client/main';
 import type { MissingParam } from '@/nodes/record';
-import { at, CHARACTER, ENTRY, fields, humanize, labelOf, readParam, signed, slotsOf, unwrap } from './sheet';
+import {
+  at,
+  CHARACTER,
+  ENTRY,
+  fields,
+  formulaAt,
+  humanize,
+  labelOf,
+  readParam,
+  signed,
+  slotsOf,
+  unwrap,
+} from './sheet';
 
 type Input = NonNullable<ResolveParams['inputs']>[number];
 
@@ -145,11 +157,20 @@ function Control({ param, value, onChange }: { param: MissingParam; value: strin
 
 // -- the sheet ----------------------------------------------------------------
 
-function Stat({ label, children }: { label: string; children: ComponentChildren }) {
+function Stat({
+  label,
+  formula,
+  children,
+}: {
+  label: string;
+  formula?: { formula: string; parts: string[] };
+  children: ComponentChildren;
+}) {
   return (
-    <div class="stat">
+    <div class="stat" title={formula?.parts.join(', ')}>
       <span class="value">{children}</span>
       <span>{label}</span>
+      {formula ? <span class="formula">{formula.formula}</span> : null}
     </div>
   );
 }
@@ -190,7 +211,9 @@ function Sheet({ sheet, turn }: { sheet: unknown; turn: Turn }) {
       </header>
 
       <div class="stats">
-        <Stat label="Armor Class">{String(get('armor_class'))}</Stat>
+        <Stat label="Armor Class" formula={formulaAt(sheet, 'armor_class')}>
+          {String(get('armor_class'))}
+        </Stat>
         <Stat label="Hit Points">
           {String(get('hit_points.current'))} / {String(get('hit_points.max'))}
         </Stat>

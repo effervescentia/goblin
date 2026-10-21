@@ -297,12 +297,17 @@ describe('5e', () => {
       data: {
         level: number;
         attacks: Record<string, unknown>;
-        armor_class: number;
+        armor_class: unknown;
         features: Record<string, unknown>;
       };
     };
     expect(data.data.level).toBe(5);
-    expect(data.data.armor_class).toBe(12); // 10 + dex 14
+    // A labelled formula names its parts for the sheet: 10 + dex 14.
+    expect(data.data.armor_class).toEqual({
+      ':value': 12,
+      ':formula': '10 + Dexterity',
+      ':parts': [{ ':label': 'Dexterity', ':value': 2 }],
+    });
     // A patched field carries the writes that produced it, in order — here
     // the Extra Attack feature adding to the character's single attack, each
     // write logged as the value it resolved to (level 5 adds 1).
