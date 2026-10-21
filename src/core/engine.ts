@@ -697,7 +697,8 @@ export class GoblinEngine {
       const param = getPath(scope.actor, at) as Record<string, unknown>;
       const nested = this.nestedActorOn(scope.actor, at, scope);
       const inner = nested === undefined ? scope : this.enterActor(nested.actor, scope, at.slice(0, nested.depth));
-      return this.evalExpr(String(param[OPTIONS_KEY]), { ...inner, current: parentOf(scope.actor, at) });
+      const source = this.fieldSource(param, OPTIONS_KEY);
+      return this.evalExpr(String(param[OPTIONS_KEY]), { ...inner, current: parentOf(scope.actor, at), source });
     };
   }
 

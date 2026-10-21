@@ -234,9 +234,9 @@ describe('examples', () => {
     expect(state.data).toMatchObject({ weight: 100, heft: 8 });
   });
 
-  it('14-mixin-actor.yaml merges its typed mixin and drops the call', () => {
+  it('14-mixin-actor.yaml merges its typed mixin and keeps the key', () => {
     const state = cli('examples/14-mixin-actor.yaml', '--strip-metadata') as { data: unknown };
-    expect(state.data).toEqual({ speed: 40, gold: 15 });
+    expect(state.data).toEqual({ speed: 40, gold: 15, gifts: ['boon', 'curse'] });
   });
 
   it('13-wildcards.yaml reads every match and refills by rule', () => {
