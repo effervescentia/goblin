@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   at,
   combatOf,
+  docOf,
   fields,
   formulaAt,
   humanize,
   labelOf,
   parseParam,
   picksAny,
+  plainStep,
   readParam,
   signed,
   slotsOf,
@@ -52,6 +54,21 @@ describe('sheet', () => {
     expect(formulaAt(sheet, 'armor_class')).toEqual({ formula: '10 + Dexterity', parts: ['Dexterity +2'] });
     expect(formulaAt(sheet, 'speed')).toBeUndefined();
     expect(formulaAt(sheet, 'hit_points.current')).toBeUndefined();
+  });
+
+  it('reads one level of a record as plain values, functions as their signature', () => {
+    expect(plainStep(sheet.name)).toBe('Aria');
+    expect(plainStep(sheet.armor_class)).toBe(12);
+    expect(plainStep(sheet.hit_points)).toEqual({ current: sheet.hit_points.current, max: 11 });
+    expect(plainStep({ ':type': 'function', ':params': [], ':source': '…' })).toBe('ƒ()');
+    expect(plainStep({ ':type': 'function', ':params': ['target', 'amount'] })).toBe('ƒ(target, amount)');
+    expect(plainStep({ ':value': { ':value': [1] } })).toEqual([1]);
+  });
+
+  it('reads a field’s `:doc`', () => {
+    expect(docOf(sheet.features)).toBe('all of them');
+    expect(docOf(sheet.speed)).toBeUndefined();
+    expect(docOf('a string')).toBeUndefined();
   });
 
   it('signs modifiers', () => {

@@ -320,3 +320,56 @@ button.quiet {
   color: var(--muted);
   font-size: 14px;
 }
+
+.views {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.json-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.json-tools .check {
+  margin-right: auto;
+}
+
+.tree {
+  overflow: auto;
+  max-height: 75vh;
+  font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre;
+}
+
+.tree summary {
+  cursor: pointer;
+}
+
+.tree details[open] > summary .folded {
+  display: none;
+}
+
+.tree .entries {
+  padding-left: 2ch;
+  margin-left: 0.5ch;
+  border-left: 1px solid var(--line);
+}
+
+.tree .key {
+  color: var(--accent);
+}
+
+.tree .documented {
+  text-decoration: underline dotted;
+  cursor: help;
+}
+
+.tree .literal.number,
+.tree .literal.boolean,
+.tree .literal.null {
+  color: var(--muted);
+}

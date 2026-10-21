@@ -161,3 +161,20 @@ export function combatOf(data: unknown): Combat | null {
     })),
   };
 }
+
+/** A field's `:doc`, if it has one. */
+export const docOf = (node: unknown) => (isRecord(node) && typeof node[':doc'] === 'string' ? node[':doc'] : undefined);
+
+/**
+ * One level of `node` as a plain value: unwrapped from its metadata, a function as its signature (`ƒ(target)`),
+ * a record cut to its own fields. Children stay raw, so each can still be read for its own `:doc`.
+ */
+export function plainStep(node: unknown): unknown {
+  if (!isRecord(node)) return node;
+  if (node[':type'] === 'function') {
+    const params = Array.isArray(node[':params']) ? node[':params'] : [];
+    return `ƒ(${params.join(', ')})`;
+  }
+  if (':value' in node) return plainStep(node[':value']);
+  return Object.fromEntries(fields(node));
+}
