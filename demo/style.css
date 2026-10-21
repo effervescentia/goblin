@@ -179,10 +179,6 @@ main {
   color: var(--muted);
 }
 
-.stat .formula {
-  font-size: 11px;
-}
-
 .stat .value {
   font-size: 22px;
   font-weight: 600;

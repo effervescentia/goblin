@@ -196,7 +196,6 @@ function Stat({
     <div class="stat" title={formula?.parts.join(', ')}>
       <span class="value">{children}</span>
       <span>{label}</span>
-      {formula ? <span class="formula">{formula.formula}</span> : null}
     </div>
   );
 }
