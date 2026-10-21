@@ -2,9 +2,6 @@
 $if: "@.class == 'barbarian'"
 
 '@.hit_die': d12
-'@.hit_points':
-  max: 12 + @.abilities.constitution.modifier
-  current: '@.hit_points.max'
 '@.proficiencies.weapon':
   - simple_weapons
   - martial_weapons
@@ -32,18 +29,24 @@ $if: "@.class == 'barbarian'"
 '@.features':
   +rage:
     :label: Rage
+    :doc: As a bonus action, gain Resistance to Bludgeoning, Piercing, and Slashing damage and bonus Strength damage. Uses increase with barbarian level; one restores on a short rest, all on a long rest.
   +unarmored_defense:
     :label: Unarmored Defense
+    :doc: Without armor, your AC equals 10 + your Dexterity and Constitution modifiers; you can still use a Shield.
   +weapon_mastery:
     :label: Weapon Mastery
+    :doc: Mastery properties of two weapons; the number increases at levels 4 and 10.
   +danger_sense:
     :label: Danger Sense
+    :doc: Advantage on Dexterity saving throws unless you are Incapacitated.
   +reckless_attack:
     $if: '@.level >= 2'
     :label: Reckless Attack
+    :doc: Gain Advantage on Strength attack rolls this turn, but attack rolls against you have Advantage until your next turn.
   +primal_knowledge:
     $if: '@.level >= 3'
     :label: Primal Knowledge
+    :doc: Gain another Barbarian skill proficiency; while raging, make Acrobatics, Intimidation, Perception, Stealth, and Survival checks with Strength.
   +ability_score_improvement_1:
     $if: '@.level >= 4'
     :label: Ability Score Improvement
@@ -52,15 +55,19 @@ $if: "@.class == 'barbarian'"
   +extra_attack:
     $if: '@.level >= 5'
     :label: Extra Attack
+    :doc: Attack twice instead of once whenever you take the Attack action.
   +fast_movement:
     $if: '@.level >= 5'
     :label: Fast Movement
+    :doc: Your Speed increases by 10 feet while you aren't wearing Heavy armor.
   +feral_instinct:
     $if: '@.level >= 7'
     :label: Feral Instinct
+    :doc: Advantage on Initiative rolls.
   +instinctive_pounce:
     $if: '@.level >= 7'
     :label: Instinctive Pounce
+    :doc: When you enter your Rage, move up to half your Speed.
   +ability_score_improvement_2:
     $if: '@.level >= 8'
     :label: Ability Score Improvement
@@ -69,9 +76,11 @@ $if: "@.class == 'barbarian'"
   +brutal_strike:
     $if: '@.level >= 9'
     :label: Brutal Strike
+    :doc: When attacking recklessly, forgo Advantage on one Strength attack to deal an extra 1d10 damage and apply Forceful Blow or Hamstring Blow.
   +relentless_rage:
     $if: '@.level >= 11'
     :label: Relentless Rage
+    :doc: When raging and reduced to 0 hit points, succeed on a DC 10 Constitution save to drop to twice your barbarian level instead. The DC rises by 5 per use and resets on a short or long rest.
   +ability_score_improvement_3:
     $if: '@.level >= 12'
     :label: Ability Score Improvement
@@ -80,9 +89,11 @@ $if: "@.class == 'barbarian'"
   +improved_brutal_strike_1:
     $if: '@.level >= 13'
     :label: Improved Brutal Strike
+    :doc: Add Staggering Blow and Sundering Blow to your Brutal Strike options.
   +persistent_rage:
     $if: '@.level >= 15'
     :label: Persistent Rage
+    :doc: Regain all Rage uses when you roll Initiative (once per long rest), and your Rage lasts 10 minutes without needing to be extended.
   +ability_score_improvement_4:
     $if: '@.level >= 16'
     :label: Ability Score Improvement
@@ -91,12 +102,16 @@ $if: "@.class == 'barbarian'"
   +improved_brutal_strike_2:
     $if: '@.level >= 17'
     :label: Improved Brutal Strike
+    :doc: Brutal Strike deals an extra 2d10 damage and can apply two different effects.
   +indomitable_might:
     $if: '@.level >= 18'
     :label: Indomitable Might
+    :doc: If a Strength check or saving throw total is lower than your Strength score, use the score instead.
   +epic_boon:
     $if: '@.level >= 19'
-    :label: Epic boon
+    :label: Epic Boon
+    :doc: Gain an Epic Boon feat or another feat for which you qualify.
   +primal_champion:
     $if: '@.level >= 20'
     :label: Primal Champion
+    :doc: Your Strength and Constitution scores increase by 4, to a maximum of 25.

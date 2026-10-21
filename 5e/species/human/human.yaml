@@ -7,7 +7,10 @@ $if: "@.species == 'human'"
 '@.features':
   +resourceful:
     :label: Resourceful
+    :doc: You gain Heroic Inspiration whenever you finish a long rest.
   +skillful:
     :label: Skillful
+    :doc: You gain proficiency in one skill of your choice.
   +versatile:
     :label: Versatile
+    :doc: You gain an Origin feat of your choice.

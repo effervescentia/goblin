@@ -65,7 +65,8 @@ apart. Treat a missing spec update as an incomplete change.
   `fetch`/`websocket` handlers over minimal socket interfaces). `--format cbor|json`
   (default `cbor`, `--server` only) picks the encoding for all three — binary or text frames over websocket — via `src/server/codec.ts`. Its `resolve`
   method calls the same `run` as a one-shot invocation, so its result is the exact envelope
-  (and `hash`) the CLI prints; add methods to `serverMethods` in `src/cli/cli.ts`, not a transport.
+  (and `hash`) the CLI prints; `inspect` (`inspectState`) answers `inspect()`'s nodes for the session head
+  (or a `--stateless` server's `in`), `[]` while it asks; add methods to `serverMethods` in `src/cli/cli.ts`, not a transport.
   Servers are stateful unless `--stateless`: a `Session` (`src/server/session.ts`) appends each answered
   turn (not `{ errors }`) to `~/.goblin/sessions/<sessionID>/log.cbor`, a CBOR Sequence (no delimiters) whose
   first item is a checkpoint holding every event so far and each later one `{ version, entry, at?, events, hash, query? }`
@@ -89,7 +90,8 @@ apart. Treat a missing spec update as an incomplete change.
 - `bun run demo` serves a character sheet (`demo/`, Bun-only) at localhost:1338
   for `aria` in `5e/main.yaml`: `demo/server.ts` spawns a stateful
   `--server websocket`, and the page (Preact) talks to it only through `goblin/client`,
-  answering `{ query }` with form inputs and invoking rests and actions.
+  answering `{ query }` with form inputs and invoking rests and actions. Hovering a value shows
+  its expression (from the `inspect` method) and its `:events`, minus an empty first slot.
   Reading the resolved tree (`:value`, `:label`) lives in `demo/sheet.ts`, pure.
 - Engine inputs are the same `InputEvent` stream the CLI saves (`src/inputs.ts`):
   `resolve`/`evaluateDoc`/`apply` take `InputEvent[]`, never param/override

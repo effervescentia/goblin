@@ -7,5 +7,6 @@ strength: 1
 
 armor_class: '10 + [Dexterity](#.dexterity)' # → 12, formula "10 + Dexterity"
 attack: '[Proficiency](#.proficiency) + [Strength](#.strength)' # → 4
-damage: '[Weapon](1d8) + [Strength](#.strength)' # → 1d8 rolled, plus 1
+# → 1d8 rolled, plus 1; its `roll` event carries formula "Weapon + Strength" and both parts.
+damage: '[Weapon](1d8) + [Strength](#.strength)'
 touch: '#.armor_class - #.dexterity' # → 10: reads through the label

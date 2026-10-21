@@ -117,6 +117,13 @@ describe('dice', () => {
     expect(engine.evalExpr('$lib.dice.keep_highest(5, 1, 1)', scope)).toBe(1);
     expect(engine.evalExpr('$lib.dice.keep_highest(3, 1, 3)', scope)).toBe(3);
   });
+
+  it('reads a die field’s highest roll with $lib.dice.max', () => {
+    const { engine, scope } = testEngine();
+    const dice = { hit_die: 'd10', damage: '2d6' };
+    expect(engine.evalExpr('$lib.dice.max(.hit_die)', { ...scope, current: dice })).toBe(10);
+    expect(engine.evalExpr('$lib.dice.max(.damage) + 1', { ...scope, current: dice })).toBe(13);
+  });
 });
 
 describe('expressions', () => {
@@ -500,6 +507,40 @@ describe('labelled expressions', () => {
     });
     expect(print(out)).toMatchObject({ armor_class: 13 });
     expect(engine.validate(out)).toEqual([]);
+  });
+
+  it('files the formula and parts of the labelled expression behind each roll and assignment', () => {
+    const engine = new GoblinEngine('.');
+    engine.register('hero.yaml', {
+      $actor: 'Hero',
+      dex: 2,
+      base: '[DEX](@.dex)',
+      // Unlabelled itself, so its roll cites no formula, though a labelled field reads it.
+      luck: '1d6 + @.dex',
+      lucky: '[Luck](@.luck)',
+      'roll()': '1d20 + [Initiative](.base)',
+      initiative: '.roll()',
+      hp: 1,
+      'heal()': '@.hp += [Potion](2d4) + [Level](1)',
+    });
+    const heal = invoke('heal', [], 2);
+    const state = engine.resolve('hero.yaml', [heal]) as { data: unknown };
+    const made = engine.events(engine.docs.get('hero.yaml'), state.data).map(({ event }) => event);
+    const byPath = Object.fromEntries(made.map(({ path, ...event }) => [path, event]));
+    const healed = {
+      formula: '@.hp += Potion + Level',
+      parts: [
+        { label: 'Potion', value: expect.any(Number) },
+        { label: 'Level', value: 1 },
+      ],
+    };
+    expect(byPath.luck).not.toHaveProperty('formula');
+    expect(byPath.initiative).toMatchObject({
+      formula: '1d20 + Initiative',
+      parts: [{ label: 'Initiative', value: 2 }],
+    });
+    expect(byPath.heal).toMatchObject({ type: 'roll', dice: '2d4', ...healed });
+    expect(byPath.hp).toMatchObject({ type: 'add', ...healed });
   });
 
   it('prints parts beside the events of a patched field', () => {

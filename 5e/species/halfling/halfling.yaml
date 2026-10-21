@@ -7,9 +7,13 @@ $if: "@.species == 'halfling'"
 '@.features':
   +brave:
     :label: Brave
+    :doc: You have advantage on saving throws to avoid or end the Frightened condition.
   +halfling_nimbleness:
     :label: Halfling Nimbleness
+    :doc: 'You can move through the space of any creature a size larger than you, but you can''t stop there.'
   +luck:
     :label: Luck
+    :doc: When you roll a 1 on the d20 of a D20 Test, you can reroll the die and must use the new roll.
   +naturally_stealthy:
     :label: Naturally Stealthy
+    :doc: You can take the Hide action even when obscured only by a creature at least one size larger than you.

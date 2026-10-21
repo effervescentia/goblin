@@ -1,5 +1,5 @@
 import z from 'zod';
-import type { ResolveParamsSchema } from '@/cli/dtos';
+import type { InspectParamsSchema, ResolveParamsSchema } from '@/cli/dtos';
 import type { StateEvent } from '@/inputs';
 import type { MissingParam } from '@/nodes/record';
 import type { Format } from '@/server/dtos';
@@ -25,6 +25,9 @@ type Envelope =
 
 /** What `resolve` answers: the envelope, plus the session keys unless the server is `--stateless`. */
 export type Answer = Envelope & Partial<Turn>;
+
+/** The `inspect` params: an `in` state for a `--stateless` server; a stateful one inspects its head. */
+export type InspectParams = z.input<typeof InspectParamsSchema>;
 
 /** What `rewind` answers: the version the session's head is now. */
 export type Rewound = { version: number; sessionID: string };

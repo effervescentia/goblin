@@ -7,12 +7,17 @@ $if: "@.species == 'dragonborn'"
 '@.features':
   +draconic_ancestry:
     :label: Draconic Ancestry
+    :doc: Your dragon lineage sets the damage type of your Breath Weapon and Damage Resistance.
   +breath_weapon:
     :label: Breath Weapon
+    :doc: Replace one attack with a 15-foot cone or 30-foot line of 1d10 damage (2d10 at 5, 3d10 at 11, 4d10 at 17), Dexterity save for half. Uses equal to your proficiency bonus per long rest.
   +damage_resistance:
     :label: Damage Resistance
+    :doc: You have resistance to the damage type of your Draconic Ancestry.
   +darkvision:
     :label: Darkvision
+    :doc: You can see in dim light within 60 feet as if it were bright light, and in darkness as if it were dim light.
   +draconic_flight:
     $if: '@.level >= 5'
     :label: Draconic Flight
+    :doc: As a bonus action, sprout spectral wings for 10 minutes, gaining a Fly Speed equal to your Speed. Restores on a long rest.

@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import type { StateEvent } from '@/inputs';
+import type { InspectNode } from '@/inspect';
 import {
   at,
   combatOf,
+  describeEvent,
   docOf,
+  eventsAt,
+  expressionsOf,
   fields,
   formulaAt,
   humanize,
@@ -11,8 +16,13 @@ import {
   picksAny,
   plainStep,
   readParam,
+  type Segment,
   signed,
   slotsOf,
+  solve,
+  solvedText,
+  solveRefs,
+  sourceOf,
   templateInputs,
   unwrap,
 } from './sheet';
@@ -25,6 +35,16 @@ describe('sheet', () => {
       ':value': 12,
       ':formula': '10 + Dexterity',
       ':parts': [{ ':label': 'Dexterity', ':value': 2 }],
+    },
+    abilities: {
+      wisdom: {
+        start: { ':value': 13, ':events': [] },
+        base: {
+          ':value': 15,
+          ':formula': '.start + Improvements',
+          ':parts': [{ ':label': 'Improvements', ':value': 2 }],
+        },
+      },
     },
     hit_points: { '!validate': ['.current >= 0'], current: { ':value': 11, ':events': [] }, max: 11 },
     features: { ':doc': 'all of them', _hidden: 1, darkvision: { ':label': 'Darkvision' }, extra_attack: {} },
@@ -51,7 +71,10 @@ describe('sheet', () => {
   });
 
   it('reads a labelled field’s formula and parts', () => {
-    expect(formulaAt(sheet, 'armor_class')).toEqual({ formula: '10 + Dexterity', parts: ['Dexterity +2'] });
+    expect(formulaAt(sheet, 'armor_class')).toEqual({
+      formula: '10 + Dexterity',
+      segments: [{ text: '10 + ' }, { label: 'Dexterity', value: 2, hue: 0 }],
+    });
     expect(formulaAt(sheet, 'speed')).toBeUndefined();
     expect(formulaAt(sheet, 'hit_points.current')).toBeUndefined();
   });
@@ -69,6 +92,59 @@ describe('sheet', () => {
     expect(docOf(sheet.features)).toBe('all of them');
     expect(docOf(sheet.speed)).toBeUndefined();
     expect(docOf('a string')).toBeUndefined();
+  });
+
+  it('reads the unlabelled refs in a formula: beside the field, or on the character', () => {
+    const segments = formulaAt(sheet, 'abilities.wisdom.base')?.segments ?? [];
+    expect(segments).toEqual([
+      { ref: '.start', value: 13 },
+      { text: ' + ' },
+      { label: 'Improvements', value: 2, hue: 0 },
+    ]);
+    expect(solvedText(segments)).toBe('13 + 2');
+    const read = (ref: string) => ({ '.a': 1, '@.b.c': 2 })[ref];
+    expect(solvedText(solveRefs([{ text: '.a + @.b.c + #.a + $lib.a + x.a + .missing + 1.5' }], read))).toBe(
+      '1 + 2 + #.a + $lib.a + x.a + .missing + 1.5',
+    );
+  });
+
+  it('solves a formula with its parts, in the order their tags finished', () => {
+    expect(
+      solve('8 + Proficiency + STR or DEX', [
+        { label: 'Proficiency', value: 3 },
+        { label: 'STR or DEX', value: -1 },
+      ]),
+    ).toSatisfy((segments: Segment[]) => solvedText(segments) === '8 + 3 + -1');
+    // An inner tag finishes before the outer one around it, and is not in the formula.
+    expect(
+      solve('Bonus + DEX', [
+        { label: 'DEX', value: 1 },
+        { label: 'Bonus', value: 4 },
+        { label: 'DEX', value: 2 },
+      ]),
+    ).toSatisfy((segments: Segment[]) => solvedText(segments) === '4 + 2');
+    // A tag a conditional skipped has no part, so its label stays; so does a longer name holding a label.
+    expect(solvedText(solve('10 + DEX + Level + DEXTERITY', [{ label: 'DEX', value: 2 }]))).toBe(
+      '10 + 2 + Level + DEXTERITY',
+    );
+    expect(solve('10', [])).toEqual([{ text: '10' }]);
+    expect(solvedText(solve('10', []))).toBeUndefined();
+  });
+
+  it('gives each label a hue, the same one wherever it repeats', () => {
+    expect(
+      solve('DEX + PB + DEX', [
+        { label: 'DEX', value: 1 },
+        { label: 'PB', value: 3 },
+        { label: 'DEX', value: 1 },
+      ]),
+    ).toEqual([
+      { label: 'DEX', value: 1, hue: 0 },
+      { text: ' + ' },
+      { label: 'PB', value: 3, hue: 1 },
+      { text: ' + ' },
+      { label: 'DEX', value: 1, hue: 0 },
+    ]);
   });
 
   it('signs modifiers', () => {
@@ -132,9 +208,109 @@ describe('sheet', () => {
       round: 2,
       current: 'aria',
       order: [
-        { key: 'bram', initiative: 17 },
-        { key: 'aria', initiative: 14 },
+        { key: 'bram', initiative: 17, events: [] },
+        { key: 'aria', initiative: 14, events: [] },
       ],
     });
+  });
+
+  it('pairs each combatant with its initiative roll since the fight began, solved from the roll’s parts', () => {
+    const data = {
+      combat: { members: ['aria', 'bram'], initiative: { aria: 14, bram: 17 }, order: ['bram', 'aria'] },
+    };
+    const calculation = { formula: '1d20 + Initiative', parts: [{ label: 'Initiative', value: 3 }] };
+    const events: StateEvent[] = [
+      { version: 1, type: 'set', path: 'combat', value: "$tmpl('combat.yaml')" },
+      { version: 2, type: 'roll', path: 'combat.initiative', dice: '1d20', value: [2] },
+      { version: 3, type: 'set', path: 'combat', value: "$tmpl('combat.yaml')" },
+      { version: 4, type: 'roll', path: 'party.aria.start', dice: '4d6', value: [1, 2, 3, 4] },
+      { version: 4, type: 'roll', path: 'combat.initiative', dice: '1d20', value: [11], ...calculation },
+      { version: 4, type: 'roll', path: 'combat.initiative', dice: '1d20', value: [18] },
+    ];
+    const [bram, aria] = combatOf(data, events)?.order ?? [];
+    expect(aria?.events).toEqual([{ ':roll': '1d20', ':faces': [11], ':version': 4 }]);
+    expect(aria?.formula).toEqual({
+      formula: '1d20 + Initiative',
+      segments: [{ label: '1d20', value: 11, hue: 0 }, { text: ' + ' }, { label: 'Initiative', value: 3, hue: 1 }],
+    });
+    expect(bram?.formula).toBeUndefined();
+
+    // Labelled dice are a part themselves.
+    const parts = [
+      { label: 'd20', value: 9 },
+      { label: 'DEX', value: 2 },
+    ];
+    const labelled: StateEvent[] = [
+      { version: 1, type: 'roll', path: 'combat.initiative', dice: '1d20', value: [9], formula: 'd20 + DEX', parts },
+      { version: 1, type: 'roll', path: 'combat.initiative', dice: '1d20', value: [4] },
+    ];
+    const [, first] = combatOf(data, labelled)?.order ?? [];
+    expect(first?.formula?.segments).toEqual([
+      { label: 'd20', value: 9, hue: 0 },
+      { text: ' + ' },
+      { label: 'DEX', value: 2, hue: 1 },
+    ]);
+  });
+
+  it('reads a field’s events, skipping a first one that only declared an empty slot', () => {
+    const fighter = { ':source': 'class/fighter/fighter.yaml', ':line': 7, ':set': 12 };
+    const character = {
+      hit_points: { current: { ':value': 12, ':events': [{ ':source': 'character.yaml', ':set': 8 }, fighter] } },
+      hit_die: {
+        ':value': 'd10',
+        ':events': [{ ':set': { ':doc': 'filled by your class', ':type': 'die' } }, fighter],
+      },
+      armor: { ':value': ['shields'], ':events': [{ ':set': [] }, fighter] },
+      features: { second_wind: { ':label': 'Second Wind', ':events': [{ ':add': 'second_wind' }] } },
+      level: 5,
+    };
+    expect(eventsAt(character, 'hit_points.current')).toHaveLength(2);
+    expect(eventsAt(character, 'hit_die')).toEqual([fighter]);
+    expect(eventsAt(character, 'armor')).toEqual([fighter]);
+    expect(eventsAt(character, 'features.second_wind')).toEqual([{ ':add': 'second_wind' }]);
+    expect(eventsAt(character, 'level')).toEqual([]);
+    expect(eventsAt(character, 'missing.deeper')).toEqual([]);
+  });
+
+  it('describes what an event did and where it came from', () => {
+    expect(describeEvent({ ':set': 12 })).toBe('set to 12');
+    expect(describeEvent({ ':set': ['all_armor', 'shields'] })).toBe('set to All armor, Shields');
+    expect(describeEvent({ ':add': 1 })).toBe('+1');
+    expect(describeEvent({ ':add': ['darkvision'] })).toBe('added Darkvision');
+    expect(describeEvent({ ':add': 'second_wind' })).toBe('added');
+    expect(describeEvent({ ':subtract': 1 })).toBe('−1');
+    expect(describeEvent({ ':roll': '1d20', ':faces': [14] })).toBe('rolled 1d20: 14');
+    expect(sourceOf({ ':roll': '1d20', ':faces': [14], ':version': 4 })).toBe('turn 4');
+
+    expect(sourceOf({ ':source': 'class/fighter/fighter.yaml', ':line': 7, ':set': 12 })).toBe(
+      'class/fighter/fighter.yaml:7',
+    );
+    expect(sourceOf({ ':source': 'override', ':version': 4, ':set': 35 })).toBe('override (turn 4)');
+    expect(sourceOf({ ':source': 'class/fighter/fighter.yaml', ':subtract': 1 })).toBe('class/fighter/fighter.yaml');
+    expect(sourceOf({ ':set': 1 })).toBe('unknown');
+  });
+
+  it('maps derived fields under the character to their expressions', () => {
+    const node = (path: string, kind: InspectNode['kind'], expression?: string, value?: unknown): InspectNode => ({
+      path,
+      key: path.split('.').at(-1) ?? path,
+      kind,
+      expression,
+      value,
+      reads: [],
+      children: [],
+      private: false,
+    });
+    const derived = expressionsOf(
+      [
+        node('party.aria.armor_class', 'expression', '10 + .abilities.dexterity.modifier', 11),
+        node('party.aria.hit_die', 'expression', 'd10', 'd10'),
+        node('party.aria.rest.long', 'function', '() => @.hit_points.current = @.hit_points.max'),
+        node('party.aria.speed', 'value', undefined, 30),
+        node('party.bram.armor_class', 'expression', '10 + .abilities.dexterity.modifier', 12),
+      ],
+      'party.aria',
+    );
+    expect([...derived]).toEqual([['armor_class', '10 + .abilities.dexterity.modifier']]);
   });
 });

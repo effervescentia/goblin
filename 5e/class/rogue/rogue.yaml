@@ -2,9 +2,6 @@
 $if: "@.class == 'rogue'"
 
 '@.hit_die': d8
-'@.hit_points':
-  max: 8 + @.abilities.constitution.modifier
-  current: '@.hit_points.max'
 '@.proficiencies.weapon':
   - simple_weapons
   - finesse_or_light_martial_weapons
@@ -34,18 +31,24 @@ $if: "@.class == 'rogue'"
 '@.features':
   +expertise_1:
     :label: Expertise
+    :doc: Gain Expertise in two skills you're proficient in.
   +sneak_attack:
     :label: Sneak Attack
+    :doc: Once per turn, deal extra damage on a Finesse or Ranged weapon hit with Advantage or an ally next to the target; starts at 1d6 and grows by 1d6 every odd level.
   +thieves_cant:
     :label: Thieves' Cant
+    :doc: Know Thieves' Cant, the rogues' secret language, and one other language.
   +weapon_mastery:
     :label: Weapon Mastery
+    :doc: Mastery properties of two weapons; you can change one of them on a long rest.
   +cunning_action:
     $if: '@.level >= 2'
     :label: Cunning Action
+    :doc: Take the Dash, Disengage, or Hide action as a bonus action.
   +steady_aim:
     $if: '@.level >= 3'
     :label: Steady Aim
+    :doc: As a bonus action if you haven't moved, gain Advantage on your next attack roll this turn; your Speed becomes 0 until the turn ends.
   +ability_score_improvement_1:
     $if: '@.level >= 4'
     :label: Ability Score Improvement
@@ -54,18 +57,23 @@ $if: "@.class == 'rogue'"
   +cunning_strike:
     $if: '@.level >= 5'
     :label: Cunning Strike
+    :doc: Forgo Sneak Attack dice to add a Poison, Trip, or Withdraw effect to a Sneak Attack hit.
   +uncanny_dodge:
     $if: '@.level >= 5'
     :label: Uncanny Dodge
+    :doc: As a reaction, halve the damage of an attack from an attacker you can see.
   +expertise_2:
     $if: '@.level >= 6'
     :label: Expertise
+    :doc: Gain Expertise in two more skills you're proficient in.
   +evasion:
     $if: '@.level >= 7'
     :label: Evasion
+    :doc: When a Dexterity saving throw allows half damage, take none on a success and half on a failure.
   +reliable_talent:
     $if: '@.level >= 7'
     :label: Reliable Talent
+    :doc: Treat a d20 roll of 9 or lower as a 10 on ability checks using a skill or tool you're proficient in.
   +ability_score_improvement_2:
     $if: '@.level >= 8'
     :label: Ability Score Improvement
@@ -79,6 +87,7 @@ $if: "@.class == 'rogue'"
   +improved_cunning_strike:
     $if: '@.level >= 11'
     :label: Improved Cunning Strike
+    :doc: Apply up to two Cunning Strike effects to one Sneak Attack.
   +ability_score_improvement_4:
     $if: '@.level >= 12'
     :label: Ability Score Improvement
@@ -87,9 +96,11 @@ $if: "@.class == 'rogue'"
   +devious_strikes:
     $if: '@.level >= 14'
     :label: Devious Strikes
+    :doc: Add Daze, Knock Out, and Obscure to your Cunning Strike options.
   +slippery_mind:
     $if: '@.level >= 15'
     :label: Slippery Mind
+    :doc: Proficiency in Wisdom and Charisma saving throws.
   +ability_score_improvement_5:
     $if: '@.level >= 16'
     :label: Ability Score Improvement
@@ -98,9 +109,12 @@ $if: "@.class == 'rogue'"
   +elusive:
     $if: '@.level >= 18'
     :label: Elusive
+    :doc: Attack rolls against you can't have Advantage unless you're Incapacitated.
   +epic_boon:
     $if: '@.level >= 19'
     :label: Epic Boon
+    :doc: Gain an Epic Boon feat or another feat for which you qualify.
   +stroke_of_luck:
     $if: '@.level >= 20'
     :label: Stroke of Luck
+    :doc: Turn a failed d20 test into a 20. Restores on a short or long rest.

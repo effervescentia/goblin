@@ -2,9 +2,6 @@
 $if: "@.class == 'druid'"
 
 '@.hit_die': d8
-'@.hit_points':
-  max: 8 + @.abilities.constitution.modifier
-  current: '@.hit_points.max'
 '@.proficiencies.weapon':
   - simple_weapons
 '@.proficiencies.armor':
@@ -32,16 +29,21 @@ $if: "@.class == 'druid'"
 '@.features':
   +spellcasting:
     :label: Spellcasting
+    :doc: Cast Druid spells using Wisdom; cantrips, prepared spells, and slots increase with druid level. Slots restore on a long rest.
   +druidic:
     :label: Druidic
+    :doc: Know Druidic, the secret language of druids, and always have Speak with Animals prepared.
   +primal_order:
     :label: Primal Order
+    :doc: Choose Magician (an extra cantrip and your Wisdom modifier to Arcana and Nature checks) or Warden (Martial weapon proficiency and Medium armor training).
   +wild_shape:
     $if: '@.level >= 2'
     :label: Wild Shape
+    :doc: As a bonus action, shape-shift into a Beast form you know. Uses increase at levels 6 and 17; one restores on a short rest, all on a long rest.
   +wild_companion:
     $if: '@.level >= 2'
     :label: Wild Companion
+    :doc: Expend a spell slot or Wild Shape use to cast Find Familiar without Material components; the familiar is Fey.
   +ability_score_improvement_1:
     $if: '@.level >= 4'
     :label: Ability Score Improvement
@@ -50,9 +52,11 @@ $if: "@.class == 'druid'"
   +wild_resurgence:
     $if: '@.level >= 5'
     :label: Wild Resurgence
+    :doc: Once per turn, expend a spell slot to regain a Wild Shape use; once per long rest, expend a Wild Shape use for a level 1 spell slot.
   +elemental_fury:
     $if: '@.level >= 7'
     :label: Elemental Fury
+    :doc: Choose Potent Spellcasting (your Wisdom modifier to cantrip damage) or Primal Strike (an extra 1d8 elemental damage once per turn on a weapon or Beast form hit).
   +ability_score_improvement_2:
     $if: '@.level >= 8'
     :label: Ability Score Improvement
@@ -66,6 +70,7 @@ $if: "@.class == 'druid'"
   +improved_elemental_fury:
     $if: '@.level >= 15'
     :label: Improved Elemental Fury
+    :doc: Potent Spellcasting adds 300 feet to cantrip range, or Primal Strike deals 2d8.
   +ability_score_improvement_4:
     $if: '@.level >= 16'
     :label: Ability Score Improvement
@@ -74,9 +79,12 @@ $if: "@.class == 'druid'"
   +beast_spells:
     $if: '@.level >= 18'
     :label: Beast Spells
+    :doc: Cast spells while in Wild Shape, except those with a Material component that has a cost or is consumed.
   +epic_boon:
     $if: '@.level >= 19'
     :label: Epic Boon
+    :doc: Gain an Epic Boon feat or another feat for which you qualify.
   +archdruid:
     $if: '@.level >= 20'
     :label: Archdruid
+    :doc: Regain a Wild Shape use when you roll Initiative with none left, and once per long rest convert Wild Shape uses into spell slots. You also age slowly.

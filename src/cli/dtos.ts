@@ -28,3 +28,6 @@ export const ResolveParamsSchema = z.object({
 });
 
 export const RewindParamsSchema = z.object({ version: z.int().min(1) });
+
+/** A state to inspect: a stateless server's `in`, else the session head for `entry`. */
+export const InspectParamsSchema = z.object({ entry: z.string().optional(), in: z.unknown().optional() });
