@@ -7,12 +7,17 @@ $if: "@.species == 'aasimar'"
 '@.features':
   +celestial_resistance:
     :label: Celestial Resistance
+    :doc: You have resistance to Necrotic and Radiant damage.
   +darkvision:
     :label: Darkvision
+    :doc: You can see in dim light within 60 feet as if it were bright light, and in darkness as if it were dim light.
   +healing_hands:
     :label: Healing Hands
+    :doc: As a Magic action, touch a creature and roll d4s equal to your proficiency bonus; it regains that many hit points. Restores on a long rest.
   +light_bearer:
     :label: Light Bearer
+    :doc: You know the Light cantrip, using Charisma as your spellcasting ability for it.
   +celestial_revelation:
     $if: '@.level >= 3'
     :label: Celestial Revelation
+    :doc: As a bonus action, transform for 1 minute (Heavenly Wings, Inner Radiance, or Necrotic Shroud), dealing extra damage equal to your proficiency bonus once per turn. Restores on a long rest.
