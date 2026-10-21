@@ -6,7 +6,7 @@ import { Decoder, Encoder } from 'cbor-x';
 import type { Format } from './dtos';
 
 /** One message pulled off a stream, or why its bytes could not be read. */
-export type Frame = { message: unknown } | { error: string };
+type Frame = { message: unknown } | { error: string };
 
 export interface Codec {
   readonly name: string;

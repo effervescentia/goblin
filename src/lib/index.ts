@@ -5,13 +5,8 @@ import { LIST_LIB } from './list';
 import { MATH_LIB } from './math';
 import { SET_LIB } from './set';
 
-export { DICE_LIB } from './dice';
-export { LIST_LIB } from './list';
-export { MATH_LIB } from './math';
-export { SET_LIB } from './set';
-
 /** Native namespaces, by the name they answer to under `$lib`. */
-export const NATIVE_LIB: Record<string, Record<string, unknown>> = {
+const NATIVE_LIB: Record<string, Record<string, unknown>> = {
   dice: DICE_LIB,
   list: LIST_LIB,
   math: MATH_LIB,

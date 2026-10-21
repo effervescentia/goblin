@@ -23,7 +23,7 @@ import {
 } from './constants';
 import { isBareSigil, isMetaKey, isPathKey, isPrivateKey, isValidateKey } from './utils';
 
-export type InspectKind = 'record' | 'list' | 'param' | 'expression' | 'function' | 'value';
+type InspectKind = 'record' | 'list' | 'param' | 'expression' | 'function' | 'value';
 
 export interface InspectNode {
   /** Dotted path from the entry root; `''` is the root itself. */

@@ -467,21 +467,6 @@ export function compileBody(body: string, paramNames: string[] = []) {
   };
 }
 
-/** Walk a raw tree with function-key awareness; null when unresolvable. */
-export function walkRaw(
-  base: unknown,
-  path: string[],
-): { parent: Record<string, unknown>; key: string; value: unknown } | null {
-  let node: unknown = base;
-  let entry: { parent: Record<string, unknown>; key: string; value: unknown } | null = null;
-  for (const seg of path) {
-    entry = getChildEntry(node, seg);
-    if (entry === null) return null;
-    node = entry.value;
-  }
-  return entry;
-}
-
 export function parentOf(base: unknown, path: string[]): unknown {
   if (path.length <= 1) return base;
   return getPath(base, path.slice(0, -1));

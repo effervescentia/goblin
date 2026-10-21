@@ -11,11 +11,13 @@ Use `bun <file>` to run scripts and `bun add` / `bun install` for dependencies.
 
 Always validate code changes with **both** of the following before finishing:
 
-1. **Lint + types** — [Biome](https://biomejs.dev) for lint/format, `tsc` for types:
+1. **Lint + types + unused** — [Biome](https://biomejs.dev) for lint/format, `tsc` for types,
+   [Knip](https://knip.dev) for unused files, exports and dependencies:
    ```sh
    bun run check
    ```
-   This runs `check:format` (`biome check`) and `check:types` (`tsc --noEmit`).
+   This runs `check:format` (`biome check`), `check:types` (`tsc --noEmit`) and
+   `check:unused` (`knip`). Don't export what only its own file uses; entry points live in `knip.json`.
    Fix all errors. Pre-existing style warnings (e.g. `noNonNullAssertion`) are acceptable;
    do not add new ones if avoidable. Use `bun run format` to auto-fix formatting, import order and safe lint fixes.
 

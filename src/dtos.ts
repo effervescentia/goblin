@@ -11,16 +11,16 @@ export const InputSchema = z.discriminatedUnion('type', [
 
 const versioned = z.object({ version: VersionSchema });
 
-export const InputEventSchema = versioned.and(InputSchema);
+const InputEventSchema = versioned.and(InputSchema);
 
-export const WriteEventSchema = versioned.extend({
+const WriteEventSchema = versioned.extend({
   type: z.enum(['set', 'add', 'subtract']),
   path: z.string(),
   value: z.unknown(),
   rolled: z.boolean().optional(),
 });
 
-export const RollEventSchema = versioned
+const RollEventSchema = versioned
   .extend({ type: z.literal('roll'), path: z.string(), dice: z.string(), value: z.array(z.int().min(1)) })
   .refine(({ dice, value }) => {
     const [count, sides] = parseDice(dice) ?? [];

@@ -249,8 +249,8 @@ export class GoblinEngine {
   }
 
   /**
-   * Like walkRaw, but expression strings met along the path evaluate first
-   * so refs can descend through them (e.g. into a `$tmpl('…')` table).
+   * Walks the raw tree with function-key awareness, but expression strings met
+   * along the path evaluate first so refs can descend through them (e.g. into a `$tmpl('…')` table).
    * Descending into a `:param` record's `value` slot is refused — read the
    * node bare instead. Terminates: re-entering the same ref hits the
    * resolving guard with a stabilized scope.
