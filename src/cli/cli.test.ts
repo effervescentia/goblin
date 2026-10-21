@@ -234,6 +234,18 @@ describe('parseArgs --server', () => {
     expect(() => parseArgs(['a.yaml', '--stateless'])).toThrow('--stateless needs --server');
   });
 
+  it('takes --history, an integer >= 1, only with a stateful --server', () => {
+    expect(parseArgs(['--server', 'stdio']).history).toBeUndefined();
+    expect(parseArgs(['--history', '1', '--server', 'http']).history).toBe(1);
+    expect(parseArgs(['--server', 'websocket', '--history', '100']).history).toBe(100);
+    for (const bad of [[], ['0'], ['-1'], ['1.5'], ['ten']])
+      expect(() => parseArgs(['--server', 'stdio', '--history', ...bad])).toThrow('--history expects an integer >= 1');
+    expect(() => parseArgs(['--history', '5'])).toThrow('--history needs a stateful --server');
+    expect(() => parseArgs(['--server', 'http', '--stateless', '--history', '5'])).toThrow(
+      '--history needs a stateful --server',
+    );
+  });
+
   it('rejects a bad --port, or one without --server http or websocket', () => {
     expect(() => parseArgs(['--server', 'http', '--port'])).toThrow('--port expects a port number');
     expect(() => parseArgs(['--server', 'http', '--port', '-1'])).toThrow('--port expects a port number');
@@ -440,9 +452,10 @@ describe('rehydrate', () => {
 describe('USAGE', () => {
   it('documents the CLI', () => {
     expect(USAGE).toContain(
-      'goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--stateless] [--format cbor|json] [--port n] [--help]',
+      'goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--stateless] [--history n] [--format cbor|json] [--port n] [--help]',
     );
     expect(USAGE).toContain('--stateless');
+    expect(USAGE).toContain('--history');
     expect(USAGE).toContain('--out');
     expect(USAGE).toContain('--in');
     expect(USAGE).toContain('--compact');

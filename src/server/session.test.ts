@@ -22,7 +22,7 @@ describe('Session', () => {
   const head = async (session: Session) => JSON.parse(await readFile(join(session.dir, 'head.json'), 'utf8'));
 
   it('keeps each server instance under its own uuid, writing nothing until it answers', async () => {
-    const [a, b] = [new Session(root), new Session(root)];
+    const [a, b] = [new Session({ root }), new Session({ root })];
     expect(a.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(a.id).not.toBe(b.id);
     expect(a.dir).toBe(join(root, a.id));
@@ -30,7 +30,7 @@ describe('Session', () => {
   });
 
   it('chains turns through head.json, naming the state each continued from', async () => {
-    const session = new Session(root);
+    const session = new Session({ root });
     const first = await session.turn({ entry: 'a.yaml' }, run);
     expect(first).toEqual({ version: 1, previous: null, sessionID: session.id });
     const { entry, state: name } = await head(session);
@@ -45,7 +45,7 @@ describe('Session', () => {
   });
 
   it('starts from a given prior instead of the head, still saving the answer', async () => {
-    const session = new Session(root);
+    const session = new Session({ root });
     await session.turn({}, run);
     await session.turn({}, run);
     expect(await session.turn({ prior: { version: 10 } }, run)).toEqual({
@@ -57,7 +57,7 @@ describe('Session', () => {
   });
 
   it('starts fresh when the entry changes, and the head follows it', async () => {
-    const session = new Session(root);
+    const session = new Session({ root });
     await session.turn({ entry: 'a.yaml' }, run);
     expect(await session.turn({ entry: 'b.yaml' }, run)).toMatchObject({ version: 1, previous: null });
     expect((await head(session)).entry).toBe('b.yaml');
@@ -68,14 +68,25 @@ describe('Session', () => {
   });
 
   it('runs overlapping turns one at a time, each on the last', async () => {
-    const session = new Session(root);
+    const session = new Session({ root });
     const answers = await Promise.all([1, 2, 3].map((n) => session.turn({ n }, run)));
     expect(answers.map((answer) => (answer as { version: number }).version)).toEqual([1, 2, 3]);
     expect(new Set(await readdir(session.dir)).size).toBe(4);
   });
 
+  it('keeps only the latest --history states, deleting the oldest', async () => {
+    const session = new Session({ root, history: 2 });
+    for (let turn = 0; turn < 4; turn++) await session.turn({}, run);
+    const files = await readdir(session.dir);
+    const [oldest = '', latest] = files.filter((file) => file.startsWith('state_')).sort();
+    expect(files).toHaveLength(3);
+    expect(latest).toBe((await head(session)).state);
+    expect(JSON.parse(await readFile(join(session.dir, oldest), 'utf8'))).toEqual({ version: 3 });
+    expect(await session.turn({}, run)).toMatchObject({ version: 5 });
+  });
+
   it('saves no { errors } answer, and survives a failing turn', async () => {
-    const session = new Session(root);
+    const session = new Session({ root });
     await session.turn({}, run);
     const before = await head(session);
     expect(await session.turn({}, async () => ({ errors: ['bad'] }))).toMatchObject({ errors: ['bad'] });
