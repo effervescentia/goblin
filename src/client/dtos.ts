@@ -26,6 +26,9 @@ type Envelope =
 /** What `resolve` answers: the envelope, plus the session keys unless the server is `--stateless`. */
 export type Answer = Envelope & Partial<Turn>;
 
+/** What `rewind` answers: the version the session's head is now. */
+export type Rewound = { version: number; sessionID: string };
+
 /** How to start a `goblin --server`; the client adds `--server`, `--format` and `--port` itself. */
 export interface Spawn {
   /** The goblin binary, or a runtime to run `args` with (`bun`). */

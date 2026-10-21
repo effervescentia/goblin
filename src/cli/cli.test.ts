@@ -197,8 +197,8 @@ describe('parseArgs', () => {
 });
 
 describe('parseArgs --server', () => {
-  it('accepts --server stdio with an entry and --in', () => {
-    expect(parseArgs(['--server', 'stdio', 'a.yaml', '--in', 'state.json'])).toMatchObject({
+  it('accepts --server stdio --stateless with an entry and --in', () => {
+    expect(parseArgs(['--server', 'stdio', '--stateless', 'a.yaml', '--in', 'state.json'])).toMatchObject({
       server: 'stdio',
       entry: 'a.yaml',
       in: 'state.json',
@@ -243,6 +243,24 @@ describe('parseArgs --server', () => {
     expect(() => parseArgs(['--history', '5'])).toThrow('--history needs a stateful --server');
     expect(() => parseArgs(['--server', 'http', '--stateless', '--history', '5'])).toThrow(
       '--history needs a stateful --server',
+    );
+  });
+
+  it('takes --session, a session ID, only with a stateful --server', () => {
+    const id = '0b6c3a0e-6f1d-4c8e-9a51-2f4d7c9e1b3a';
+    expect(parseArgs(['--server', 'stdio']).session).toBeUndefined();
+    expect(parseArgs(['--server', 'http', '--session', id]).session).toBe(id);
+    for (const bad of [[], ['abc'], ['../../etc']])
+      expect(() => parseArgs(['--server', 'stdio', '--session', ...bad])).toThrow('--session expects a session ID');
+    expect(() => parseArgs(['--session', id])).toThrow('--session needs a stateful --server');
+    expect(() => parseArgs(['--server', 'http', '--stateless', '--session', id])).toThrow(
+      '--session needs a stateful --server',
+    );
+  });
+
+  it('rejects --in for a stateful --server, which keeps its own history', () => {
+    expect(() => parseArgs(['--server', 'stdio', '--in', 'state.json'])).toThrow(
+      'a stateful --server keeps its own history: in (--in) needs --stateless',
     );
   });
 
@@ -452,10 +470,11 @@ describe('rehydrate', () => {
 describe('USAGE', () => {
   it('documents the CLI', () => {
     expect(USAGE).toContain(
-      'goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--stateless] [--history n] [--format cbor|json] [--port n] [--help]',
+      'goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--stateless] [--session id] [--history n] [--format cbor|json] [--port n] [--help]',
     );
     expect(USAGE).toContain('--stateless');
     expect(USAGE).toContain('--history');
+    expect(USAGE).toContain('--session');
     expect(USAGE).toContain('--out');
     expect(USAGE).toContain('--in');
     expect(USAGE).toContain('--compact');
