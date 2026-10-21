@@ -13,6 +13,9 @@ export interface WriteEvent {
   value: unknown;
   /** The value came from dice (rolled by the write itself, not read from a rolled field). */
   rolled?: boolean;
+  /** The labelled expression an assignment wrote, with its parts (see `Calculation`). */
+  formula?: string;
+  parts?: Part[];
   source?: string;
   line?: number;
   column?: number;
@@ -32,6 +35,15 @@ export interface RollEvent {
   path: string;
   dice: string;
   value: number[];
+  /** The labelled expression that rolled it, with its parts (see `Calculation`). */
+  formula?: string;
+  parts?: Part[];
+}
+
+/** One `[Label](expr)` tag an expression evaluated, and what it came to. */
+export interface Part {
+  label: string;
+  value: unknown;
 }
 
 /** `XdY` → `[X, Y]`, or undefined when it is not one. */

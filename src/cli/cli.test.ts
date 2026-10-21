@@ -830,7 +830,7 @@ describe('cli', () => {
     expect(pc.hit_points).toEqual({ current: 11, max: 11 }); // con 13 → +1
     expect(pc.name).toBe('Aria');
     expect(pc.level).toBe(5);
-    expect(pc.initiative).toEqual({ base: 2, roll: '1d20 + .base' }); // dex 14 → +2
+    expect(pc.initiative).toEqual({ base: 2, roll: '1d20 + [Initiative](.base)' }); // dex 14 → +2
     expect((pc.features as Record<string, unknown>).second_wind).toBeNull();
   });
 });

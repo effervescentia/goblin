@@ -55,7 +55,7 @@ critical_hit: 20
 
 initiative:
   base: '[DEX](@.abilities.dexterity.modifier)'
-  'roll()': 1d20 + .base
+  'roll()': 1d20 + [Initiative](.base)
 
 hit_die:
   :doc: Hit die granted by your class; the adopted class patch fills this slot.
@@ -65,7 +65,7 @@ hit_points:
     - .current >= 0
     - .current <= .max
   current: '[Max HP](.max)'
-  max: '[Initial]($lib.dice.max(@.hit_die)) + [CON](@.abilities.constitution.modifier)'
+  max: '[Initial HP]($lib.dice.max(@.hit_die)) + [CON](@.abilities.constitution.modifier)'
 
 features: {}
 actions:

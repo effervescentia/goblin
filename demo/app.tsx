@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { match, P } from 'ts-pattern';
 import type { Answer, ResolveParams } from '@/client/dtos';
 import { createClient, type GoblinClient } from '@/client/main';
+import type { StateEvent } from '@/inputs';
 import type { MissingParam } from '@/nodes/record';
 import {
   at,
@@ -108,7 +109,7 @@ function App() {
           // Keyed by version so each turn's form starts blank.
           <Query key={answer.version} query={answer.query} turn={turn} />
         ) : (
-          <Sheet data={answer.data} expressions={expressions} turn={turn} />
+          <Sheet data={answer.data} events={answer.events} expressions={expressions} turn={turn} />
         )}
       </main>
     </>
@@ -319,8 +320,8 @@ function Tags({ items }: { items: unknown }) {
 }
 
 /** The fight in progress, in initiative order, or a button to start one. */
-function Combat({ data, turn }: { data: unknown; turn: Turn }) {
-  const combat = combatOf(data);
+function Combat({ data, events, turn }: { data: unknown; events: StateEvent[]; turn: Turn }) {
+  const combat = combatOf(data, events);
   const invoke = (path: string) => () => turn([call(path)]);
   if (!combat) {
     return (
@@ -336,10 +337,15 @@ function Combat({ data, turn }: { data: unknown; turn: Turn }) {
   return (
     <Section title={`Combat · Round ${String(combat.round)}`}>
       <ol class="order">
-        {combat.order.map(({ key, initiative }) => (
+        {combat.order.map(({ key, initiative, formula, events }) => (
           <li key={key} class={key === combat.current ? 'current' : undefined}>
             <span>{String(at(data, `party.${key}.name`) ?? humanize(key))}</span>
-            <span class="muted">initiative {String(initiative)}</span>
+            <span class="muted">
+              initiative{' '}
+              <History path={`combat.initiative.${key}`} formula={formula} value={initiative} events={events}>
+                {String(initiative)}
+              </History>
+            </span>
           </li>
         ))}
       </ol>
@@ -355,13 +361,23 @@ function Combat({ data, turn }: { data: unknown; turn: Turn }) {
   );
 }
 
-function Sheet({ data, expressions, turn }: { data: unknown; expressions: Map<string, string>; turn: Turn }) {
+function Sheet({
+  data,
+  events,
+  expressions,
+  turn,
+}: {
+  data: unknown;
+  events: StateEvent[];
+  expressions: Map<string, string>;
+  turn: Turn;
+}) {
   const sheet = at(data, CHARACTER);
   const get = (path: string) => at(sheet, path);
-  const events = (path: string) => eventsAt(sheet, path);
+  const eventsOf = (path: string) => eventsAt(sheet, path);
   const tip = (path: string) => ({
     path,
-    events: events(path),
+    events: eventsOf(path),
     formula: formulaAt(sheet, path),
     expression: expressions.get(path),
     value: get(path),
@@ -379,7 +395,7 @@ function Sheet({ data, expressions, turn }: { data: unknown; expressions: Map<st
         </p>
       </header>
 
-      <Combat data={data} turn={turn} />
+      <Combat data={data} events={events} turn={turn} />
 
       <div class="stats">
         <Stat label="Armor Class" formula={formulaAt(sheet, 'armor_class')}>
@@ -421,7 +437,7 @@ function Sheet({ data, expressions, turn }: { data: unknown; expressions: Map<st
               formula={formulaAt(sheet, `abilities.${name}.base`)}
               expression={expressions.get(`abilities.${name}.base`)}
               value={at(ability, 'base')}
-              events={events(`abilities.${name}.start`)}
+              events={eventsOf(`abilities.${name}.start`)}
               title="Starting score"
             >
               <span class="score">{String(at(ability, 'base'))}</span>
@@ -468,7 +484,7 @@ function Sheet({ data, expressions, turn }: { data: unknown; expressions: Map<st
                 <span class="muted">
                   <History
                     path={`actions.${name}.die`}
-                    events={[...events(`actions.${name}.type`), ...events(`actions.${name}.die`)]}
+                    events={[...eventsOf(`actions.${name}.type`), ...eventsOf(`actions.${name}.die`)]}
                   >
                     {[type && humanize(String(type)), at(action, 'die')].filter(Boolean).join(' · ')}
                   </History>

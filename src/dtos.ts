@@ -13,15 +13,26 @@ const versioned = z.object({ version: VersionSchema });
 
 const InputEventSchema = versioned.and(InputSchema);
 
+const PartSchema = z.object({ label: z.string(), value: z.unknown() });
+
+const calculation = { formula: z.string().optional(), parts: z.array(PartSchema).optional() };
+
 const WriteEventSchema = versioned.extend({
   type: z.enum(['set', 'add', 'subtract']),
   path: z.string(),
   value: z.unknown(),
   rolled: z.boolean().optional(),
+  ...calculation,
 });
 
 const RollEventSchema = versioned
-  .extend({ type: z.literal('roll'), path: z.string(), dice: z.string(), value: z.array(z.int().min(1)) })
+  .extend({
+    type: z.literal('roll'),
+    path: z.string(),
+    dice: z.string(),
+    value: z.array(z.int().min(1)),
+    ...calculation,
+  })
   .refine(({ dice, value }) => {
     const [count, sides] = parseDice(dice) ?? [];
     return sides !== undefined && value.length === count && value.every((face) => face <= sides);

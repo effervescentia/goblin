@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { StateEvent } from '@/inputs';
 import type { InspectNode } from '@/inspect';
 import {
   at,
@@ -190,10 +191,48 @@ describe('sheet', () => {
       round: 2,
       current: 'aria',
       order: [
-        { key: 'bram', initiative: 17 },
-        { key: 'aria', initiative: 14 },
+        { key: 'bram', initiative: 17, events: [] },
+        { key: 'aria', initiative: 14, events: [] },
       ],
     });
+  });
+
+  it('pairs each combatant with its initiative roll since the fight began, solved from the roll’s parts', () => {
+    const data = {
+      combat: { members: ['aria', 'bram'], initiative: { aria: 14, bram: 17 }, order: ['bram', 'aria'] },
+    };
+    const calculation = { formula: '1d20 + Initiative', parts: [{ label: 'Initiative', value: 3 }] };
+    const events: StateEvent[] = [
+      { version: 1, type: 'set', path: 'combat', value: "$tmpl('combat.yaml')" },
+      { version: 2, type: 'roll', path: 'combat.initiative', dice: '1d20', value: [2] },
+      { version: 3, type: 'set', path: 'combat', value: "$tmpl('combat.yaml')" },
+      { version: 4, type: 'roll', path: 'party.aria.start', dice: '4d6', value: [1, 2, 3, 4] },
+      { version: 4, type: 'roll', path: 'combat.initiative', dice: '1d20', value: [11], ...calculation },
+      { version: 4, type: 'roll', path: 'combat.initiative', dice: '1d20', value: [18] },
+    ];
+    const [bram, aria] = combatOf(data, events)?.order ?? [];
+    expect(aria?.events).toEqual([{ ':roll': '1d20', ':faces': [11], ':version': 4 }]);
+    expect(aria?.formula).toEqual({
+      formula: '1d20 + Initiative',
+      segments: [{ label: '1d20', value: 11, hue: 0 }, { text: ' + ' }, { label: 'Initiative', value: 3, hue: 1 }],
+    });
+    expect(bram?.formula).toBeUndefined();
+
+    // Labelled dice are a part themselves.
+    const parts = [
+      { label: 'd20', value: 9 },
+      { label: 'DEX', value: 2 },
+    ];
+    const labelled: StateEvent[] = [
+      { version: 1, type: 'roll', path: 'combat.initiative', dice: '1d20', value: [9], formula: 'd20 + DEX', parts },
+      { version: 1, type: 'roll', path: 'combat.initiative', dice: '1d20', value: [4] },
+    ];
+    const [, first] = combatOf(data, labelled)?.order ?? [];
+    expect(first?.formula?.segments).toEqual([
+      { label: 'd20', value: 9, hue: 0 },
+      { text: ' + ' },
+      { label: 'DEX', value: 2, hue: 1 },
+    ]);
   });
 
   it('reads a field’s events, skipping a first one that only declared an empty slot', () => {
@@ -223,6 +262,8 @@ describe('sheet', () => {
     expect(describeEvent({ ':add': ['darkvision'] })).toBe('added Darkvision');
     expect(describeEvent({ ':add': 'second_wind' })).toBe('added');
     expect(describeEvent({ ':subtract': 1 })).toBe('−1');
+    expect(describeEvent({ ':roll': '1d20', ':faces': [14] })).toBe('rolled 1d20: 14');
+    expect(sourceOf({ ':roll': '1d20', ':faces': [14], ':version': 4 })).toBe('turn 4');
 
     expect(sourceOf({ ':source': 'class/fighter/fighter.yaml', ':line': 7, ':set': 12 })).toBe(
       'class/fighter/fighter.yaml:7',

@@ -509,6 +509,40 @@ describe('labelled expressions', () => {
     expect(engine.validate(out)).toEqual([]);
   });
 
+  it('files the formula and parts of the labelled expression behind each roll and assignment', () => {
+    const engine = new GoblinEngine('.');
+    engine.register('hero.yaml', {
+      $actor: 'Hero',
+      dex: 2,
+      base: '[DEX](@.dex)',
+      // Unlabelled itself, so its roll cites no formula, though a labelled field reads it.
+      luck: '1d6 + @.dex',
+      lucky: '[Luck](@.luck)',
+      'roll()': '1d20 + [Initiative](.base)',
+      initiative: '.roll()',
+      hp: 1,
+      'heal()': '@.hp += [Potion](2d4) + [Level](1)',
+    });
+    const heal = invoke('heal', [], 2);
+    const state = engine.resolve('hero.yaml', [heal]) as { data: unknown };
+    const made = engine.events(engine.docs.get('hero.yaml'), state.data).map(({ event }) => event);
+    const byPath = Object.fromEntries(made.map(({ path, ...event }) => [path, event]));
+    const healed = {
+      formula: '@.hp += Potion + Level',
+      parts: [
+        { label: 'Potion', value: expect.any(Number) },
+        { label: 'Level', value: 1 },
+      ],
+    };
+    expect(byPath.luck).not.toHaveProperty('formula');
+    expect(byPath.initiative).toMatchObject({
+      formula: '1d20 + Initiative',
+      parts: [{ label: 'Initiative', value: 2 }],
+    });
+    expect(byPath.heal).toMatchObject({ type: 'roll', dice: '2d4', ...healed });
+    expect(byPath.hp).toMatchObject({ type: 'add', ...healed });
+  });
+
   it('prints parts beside the events of a patched field', () => {
     const engine = new GoblinEngine('.');
     engine.register('actor.yaml', { $actor: 'Hero', dex: 3, armor_class: 10 });

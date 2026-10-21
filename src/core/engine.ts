@@ -286,7 +286,7 @@ export class GoblinEngine {
     return entry;
   }
 
-  private hooks(scope: EvalRoots, labels?: Record<string, unknown>[]): ResolveHooks {
+  private hooks(scope: EvalRoots, labels: Record<string, unknown>[]): ResolveHooks {
     // Each statement's value is computed just before its assign: rolls since
     // the last one are that value's.
     let mark = this.journal.mark();
@@ -316,7 +316,7 @@ export class GoblinEngine {
         mark = this.journal.mark();
       },
       label: (label: string, value: unknown) => {
-        labels?.push({ [LABEL_KEY]: label, [PARAM_VALUE_KEY]: value });
+        labels.push({ [LABEL_KEY]: label, [PARAM_VALUE_KEY]: value });
         return value;
       },
     };
@@ -345,6 +345,7 @@ export class GoblinEngine {
         // Only the call's own assignments: lazy patch writes it triggers are not its doing.
         cause: this.journal.cause,
         rolled,
+        calculation: this.journal.calculation,
       });
     }
     let next = amount;
@@ -382,9 +383,12 @@ export class GoblinEngine {
       }
       return this.provenance.claim(clone, file);
     }
-    const { labels, ...inner } = scope;
+    const { labels = [], ...inner } = scope;
     const run = compileBody(trimmed, Object.keys(inner.params ?? {}));
-    return run(this.hooks(inner, labels), inner.params ?? {});
+    const formula = formulaOf(trimmed);
+    return this.journal.calculate(formula === undefined ? undefined : { formula, parts: labels }, () =>
+      run(this.hooks(inner, labels), inner.params ?? {}),
+    );
   }
 
   // -- deep evaluation ------------------------------------------------------

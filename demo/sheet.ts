@@ -2,6 +2,8 @@
  * Reading a resolved character out of the engine's `data`, metadata and all:
  * params and evented fields carry their value under `:value`, labels under `:label`.
  */
+
+import { isRollEvent, isWriteEvent, type RollEvent, type StateEvent } from '@/inputs';
 import type { InspectNode } from '@/inspect';
 import type { MissingParam } from '@/nodes/record';
 
@@ -213,6 +215,9 @@ export const templateInputs = ({ params }: Template) =>
 interface Combatant {
   key: string;
   initiative: unknown;
+  /** How the initiative was rolled (`1d20 + .base` → `14 + 3`), once its roll is in `events`. */
+  formula?: Formula;
+  events: FieldEvent[];
 }
 
 export interface Combat {
@@ -221,19 +226,43 @@ export interface Combat {
   order: Combatant[];
 }
 
-/** The fight in progress at `data.combat`, in turn order; null between fights. */
-export function combatOf(data: unknown): Combat | null {
+/** The fight in progress at `data.combat`, in turn order; null between fights. `events` (the envelope's) give each
+ * combatant its initiative roll: those since the fight began, one per member in `members` order. */
+export function combatOf(data: unknown, events: StateEvent[] = []): Combat | null {
   const combat = at(data, 'combat');
   if (!isRecord(combat)) return null;
   const order = at(combat, 'order');
+  const members = at(combat, 'members');
+  const start = events.findLastIndex((event) => isWriteEvent(event) && event.path === 'combat');
+  const rolls = events
+    .slice(start + 1)
+    .filter((event): event is RollEvent => isRollEvent(event) && event.path === 'combat.initiative');
   return {
     round: at(combat, 'round'),
     current: at(combat, 'current'),
-    order: (Array.isArray(order) ? order : []).map((key) => ({
-      key: String(key),
-      initiative: at(combat, `initiative.${key}`),
-    })),
+    order: (Array.isArray(order) ? order : []).map((key) => {
+      const roll = Array.isArray(members) ? rolls[members.indexOf(key)] : undefined;
+      return {
+        key: String(key),
+        initiative: at(combat, `initiative.${key}`),
+        ...(roll ? rollFormula(roll) : { events: [] }),
+      };
+    }),
   };
+}
+
+/** `roll` as the labelled expression that made it recorded it: its formula, with the dice (unless a tag holds
+ * them) standing for their total. */
+function rollFormula(roll: RollEvent): Pick<Combatant, 'formula' | 'events'> {
+  const events = [{ ':roll': roll.dice, ':faces': roll.value, ':version': roll.version }];
+  if (roll.formula === undefined) return { events };
+  const { formula, parts = [] } = roll;
+  const total = roll.value.reduce((sum, face) => sum + face, 0);
+  // `solve` takes parts in the order their labels appear.
+  const ordered = [...parts, { label: roll.dice, value: total }].sort(
+    (a, b) => formula.indexOf(a.label) - formula.indexOf(b.label),
+  );
+  return { formula: { formula, segments: solve(formula, ordered) }, events };
 }
 
 /** One entry of a field's `:events`: a `:set`, `:add` or `:subtract` and where it came from. */
@@ -258,8 +287,9 @@ export function eventsAt(node: unknown, path: string): FieldEvent[] {
 const show = (value: unknown) =>
   Array.isArray(value) ? value.map((item) => humanize(String(item))).join(', ') : String(value);
 
-/** What `event` did: `set to 12`, `+1`, `−1`, or `added` for a key a record addition introduced. */
+/** What `event` did: `set to 12`, `+1`, `−1`, `added` for a key a record addition introduced, or `rolled 1d20: 14`. */
 export function describeEvent(event: FieldEvent): string {
+  if (':roll' in event) return `rolled ${show(event[':roll'])}: ${show(event[':faces'])}`;
   if (':subtract' in event) return `−${show(event[':subtract'])}`;
   if (':add' in event) {
     const added = event[':add'];
@@ -271,8 +301,10 @@ export function describeEvent(event: FieldEvent): string {
 
 /** Where `event` came from: `class/fighter/fighter.yaml:7`, or the run an override was given in. */
 export function sourceOf(event: FieldEvent): string {
-  const source = typeof event[':source'] === 'string' ? event[':source'] : 'unknown';
-  if (typeof event[':version'] === 'number') return `${source} (turn ${event[':version']})`;
+  const source = typeof event[':source'] === 'string' ? event[':source'] : undefined;
+  if (typeof event[':version'] === 'number')
+    return source ? `${source} (turn ${event[':version']})` : `turn ${event[':version']}`;
+  if (source === undefined) return 'unknown';
   return typeof event[':line'] === 'number' ? `${source}:${event[':line']}` : source;
 }
 

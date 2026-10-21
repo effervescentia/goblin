@@ -193,7 +193,8 @@ A field whose expression has labels prints as
 
 Parts belong to the field whose own expression holds the tags: a labelled
 field another one reads, or a labelled function body it calls, keeps its
-parts to itself. References see through the wrapper (`@.armor_class` reads
+parts to itself. Rolls and assignments a labelled expression makes also
+carry its formula and parts in the event stream (see Resolution). References see through the wrapper (`@.armor_class` reads
 the number), `:events` sit beside the parts when a patch wrote the field,
 and `--strip-metadata` collapses it to the value. A `+@.path` addition
 composes labelled expressions like any other (`(10) + (Dexterity)`).
@@ -919,7 +920,7 @@ envelope that is either satisfied or asking:
   `--strip-metadata`, when given).
 - Every write the engine makes — the same writes field `:events` record —
   joins `events` as `{ version, type: 'set' | 'add' | 'subtract', path,
-  value, rolled?, source?, line?, column? }`: `path` runs from the entry
+  value, rolled?, formula?, parts?, source?, line?, column? }`: `path` runs from the entry
   root (`party.aria.hit_points.current`), `value` is resolved, as printed in
   that field's `:events`, and `rolled: true` marks a value dice produced
   (rolled by the write itself, not read from another rolled field).
@@ -938,6 +939,16 @@ envelope that is either satisfied or asking:
   itself — the invoke's `path`, under its `version`. Rolls count from the
   first within one evaluation of a field, and within one invoke call; rolls
   outside both (a `$if`, say) share the root context `''`.
+- A roll made by a labelled expression (see Labelled expressions), and a
+  write an assignment in one made, carry its calculation: `formula` (as
+  `:formula` reads it) and `parts`, each `{ label, value }` its tags
+  evaluated — the whole expression's, tags after the dice included. Only
+  the innermost expression counts: a call's labelled body files its own
+  (`'roll()': 1d20 + [Initiative](.base)` → `{ dice: '1d20', value: [14],
+  formula: '1d20 + Initiative', parts: [{ label: 'Initiative', value: 2 }] }`),
+  an unlabelled field another one reads files none, and patch writes have
+  none. Replayed, both recompute with the rest, so they always match the
+  value.
 - `--in state.json` (or `--in -` for stdin) rehydrates from a prior output
   and replays all of its events. Inputs replay in order (a later parameter
   or override for the same path wins); writes are made again by the inputs,
