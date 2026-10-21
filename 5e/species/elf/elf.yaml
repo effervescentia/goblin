@@ -7,9 +7,13 @@ $if: "@.species == 'elf'"
 '@.features':
   +darkvision:
     :label: Darkvision
+    :doc: You can see in dim light within 60 feet as if it were bright light, and in darkness as if it were dim light.
   +fey_ancestry:
     :label: Fey Ancestry
+    :doc: You have advantage on saving throws to avoid or end the Charmed condition.
   +keen_senses:
     :label: Keen Senses
+    :doc: You have proficiency in Insight, Perception, or Survival.
   +trance:
     :label: Trance
+    :doc: 'You don''t need to sleep and magic can''t put you to sleep; a long rest takes 4 hours of meditation, during which you stay conscious.'

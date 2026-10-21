@@ -27,11 +27,14 @@ $if: "@.class == 'cleric'"
 '@.features':
   +spellcasting:
     :label: Spellcasting
+    :doc: Cast Cleric spells using Wisdom; cantrips, prepared spells, and slots increase with cleric level. Slots restore on a long rest.
   +divine_order:
     :label: Divine Order
+    :doc: Choose Protector (Martial weapon proficiency and Heavy armor training) or Thaumaturge (an extra cantrip and your Wisdom modifier to Arcana and Religion checks).
   +channel_divinity:
     $if: '@.level >= 2'
     :label: Channel Divinity
+    :doc: Channel divine energy for Divine Spark or Turn Undead. Uses increase at levels 6 and 18; one restores on a short rest, all on a long rest.
   +ability_score_improvement_1:
     $if: '@.level >= 4'
     :label: Ability Score Improvement
@@ -40,9 +43,11 @@ $if: "@.class == 'cleric'"
   +sear_undead:
     $if: '@.level >= 5'
     :label: Sear Undead
+    :doc: When you Turn Undead, roll d8s equal to your Wisdom modifier and deal that much Radiant damage to each Undead that fails the save.
   +blessed_strikes:
     $if: '@.level >= 7'
     :label: Blessed Strikes
+    :doc: Choose Divine Strike (an extra 1d8 damage once per turn on a weapon hit) or Potent Spellcasting (your Wisdom modifier to cantrip damage).
   +ability_score_improvement_2:
     $if: '@.level >= 8'
     :label: Ability Score Improvement
@@ -51,6 +56,7 @@ $if: "@.class == 'cleric'"
   +divine_intervention:
     $if: '@.level >= 10'
     :label: Divine Intervention
+    :doc: Cast any Cleric spell of level 5 or lower without a spell slot or Material components. Restores on a long rest.
   +ability_score_improvement_3:
     $if: '@.level >= 12'
     :label: Ability Score Improvement
@@ -59,6 +65,7 @@ $if: "@.class == 'cleric'"
   +improved_blessed_strikes:
     $if: '@.level >= 14'
     :label: Improved Blessed Strikes
+    :doc: Divine Strike deals 2d8, or Potent Spellcasting also grants temporary hit points when you deal cantrip damage.
   +ability_score_improvement_4:
     $if: '@.level >= 16'
     :label: Ability Score Improvement
@@ -67,6 +74,8 @@ $if: "@.class == 'cleric'"
   +epic_boon:
     $if: '@.level >= 19'
     :label: Epic Boon
+    :doc: Gain an Epic Boon feat or another feat for which you qualify.
   +greater_divine_intervention:
     $if: '@.level >= 20'
     :label: Greater Divine Intervention
+    :doc: Divine Intervention can cast Wish; afterwards you can't use it again for 2d4 long rests.

@@ -31,16 +31,21 @@ $if: "@.class == 'ranger'"
 '@.features':
   +spellcasting:
     :label: Spellcasting
+    :doc: Cast Ranger spells using Wisdom; cantrips, prepared spells, and slots increase with ranger level. Slots restore on a long rest.
   +favored_enemy:
     :label: Favored Enemy
+    :doc: Always have Hunter's Mark prepared and cast it without a spell slot; free casts increase with ranger level and restore on a long rest.
   +weapon_mastery:
     :label: Weapon Mastery
+    :doc: Mastery properties of two weapons; you can change one of them on a long rest.
   +deft_explorer:
     $if: '@.level >= 2'
     :label: Deft Explorer
+    :doc: Gain Expertise in one skill you're proficient in and learn two languages.
   +fighting_style:
     $if: '@.level >= 2'
     :label: Fighting Style
+    :doc: Gain a Fighting Style feat, or Druidic Warrior for two Druid cantrips.
   +ability_score_improvement_1:
     $if: '@.level >= 4'
     :label: Ability Score Improvement
@@ -49,9 +54,11 @@ $if: "@.class == 'ranger'"
   +extra_attack:
     $if: '@.level >= 5'
     :label: Extra Attack
+    :doc: Attack twice instead of once whenever you take the Attack action.
   +roving:
     $if: '@.level >= 6'
     :label: Roving
+    :doc: Your Speed increases by 10 feet without Heavy armor, and you gain Climb and Swim Speeds equal to your Speed.
   +ability_score_improvement_2:
     $if: '@.level >= 8'
     :label: Ability Score Improvement
@@ -60,9 +67,11 @@ $if: "@.class == 'ranger'"
   +expertise:
     $if: '@.level >= 9'
     :label: Expertise
+    :doc: Gain Expertise in two skills you're proficient in.
   +tireless:
     $if: '@.level >= 10'
     :label: Tireless
+    :doc: As a Magic action, gain 1d8 + your Wisdom modifier temporary hit points (uses equal your Wisdom modifier, restoring on a long rest); short rests reduce Exhaustion by 1.
   +ability_score_improvement_3:
     $if: '@.level >= 12'
     :label: Ability Score Improvement
@@ -71,9 +80,11 @@ $if: "@.class == 'ranger'"
   +relentless_hunter:
     $if: '@.level >= 13'
     :label: Relentless Hunter
+    :doc: Taking damage can't break your Concentration on Hunter's Mark.
   +naturess_veil:
     $if: '@.level >= 14'
     :label: Nature's Veil
+    :doc: As a bonus action, become Invisible until the end of your next turn. Uses equal your Wisdom modifier and restore on a long rest.
   +ability_score_improvement_4:
     $if: '@.level >= 16'
     :label: Ability Score Improvement
@@ -82,12 +93,16 @@ $if: "@.class == 'ranger'"
   +precise_hunter:
     $if: '@.level >= 17'
     :label: Precise Hunter
+    :doc: Advantage on attack rolls against the creature marked by your Hunter's Mark.
   +feral_senses:
     $if: '@.level >= 18'
     :label: Feral Senses
+    :doc: Gain Blindsight with a range of 30 feet.
   +epic_boon:
     $if: '@.level >= 19'
     :label: Epic Boon
+    :doc: Gain an Epic Boon feat or another feat for which you qualify.
   +foe_slayer:
     $if: '@.level >= 20'
     :label: Foe Slayer
+    :doc: Your Hunter's Mark damage die becomes a d10.

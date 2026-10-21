@@ -25,17 +25,22 @@ $if: "@.class == 'monk'"
 '@.features':
   +martial_arts:
     :label: Martial Arts
+    :doc: Use Dexterity for unarmed strikes and Monk weapons, deal your Martial Arts die (d6, growing to d8, d10, and d12 at levels 5, 11, and 17), and make an unarmed strike as a bonus action.
   +unarmored_defense:
     :label: Unarmored Defense
+    :doc: Without armor or a Shield, your AC equals 10 + your Dexterity and Wisdom modifiers.
   +monks_focus:
     $if: '@.level >= 2'
     :label: Monk's Focus
+    :doc: Focus Points equal to your monk level fuel Flurry of Blows, Patient Defense, and Step of the Wind. Restores on a short or long rest.
   +unarmored_movement:
     $if: '@.level >= 2'
     :label: Unarmored Movement
+    :doc: Your Speed increases by 10 feet without armor or a Shield, rising to 30 feet by level 18.
   +deflect_attacks:
     $if: '@.level >= 3'
     :label: Deflect Attacks
+    :doc: As a reaction, reduce Bludgeoning, Piercing, or Slashing attack damage by 1d10 + your Dexterity modifier + monk level; if it drops to 0, spend 1 Focus Point to redirect it.
   +ability_score_improvement_1:
     $if: '@.level >= 4'
     :label: Ability Score Improvement
@@ -44,18 +49,23 @@ $if: "@.class == 'monk'"
   +slow_fall:
     $if: '@.level >= 4'
     :label: Slow Fall
+    :doc: As a reaction, reduce falling damage by five times your monk level.
   +extra_attack:
     $if: '@.level >= 5'
     :label: Extra Attack
+    :doc: Attack twice instead of once whenever you take the Attack action.
   +stunning_strike:
     $if: '@.level >= 5'
     :label: Stunning Strike
+    :doc: Once per turn after hitting with a Monk weapon or unarmed strike, spend 1 Focus Point to force a Constitution save or Stun the target.
   +empowered_strikes:
     $if: '@.level >= 6'
     :label: Empowered Strikes
+    :doc: Your unarmed strikes can deal Force damage instead of their normal type.
   +evasion:
     $if: '@.level >= 7'
     :label: Evasion
+    :doc: When a Dexterity saving throw allows half damage, take none on a success and half on a failure.
   +ability_score_improvement_2:
     $if: '@.level >= 8'
     :label: Ability Score Improvement
@@ -64,12 +74,15 @@ $if: "@.class == 'monk'"
   +acrobatic_movement:
     $if: '@.level >= 9'
     :label: Acrobatic Movement
+    :doc: Without armor or a Shield, move along vertical surfaces and across liquids on your turn.
   +heightened_focus:
     $if: '@.level >= 10'
     :label: Heightened Focus
+    :doc: Flurry of Blows, Patient Defense, and Step of the Wind each gain a stronger effect.
   +self_restoration:
     $if: '@.level >= 10'
     :label: Self Restoration
+    :doc: At the end of each turn, end Charmed, Frightened, or Poisoned on yourself; forgoing food and drink doesn't give you Exhaustion.
   +ability_score_improvement_3:
     $if: '@.level >= 12'
     :label: Ability Score Improvement
@@ -78,12 +91,15 @@ $if: "@.class == 'monk'"
   +deflect_energy:
     $if: '@.level >= 13'
     :label: Deflect Energy
+    :doc: Deflect Attacks works against attacks of any damage type.
   +disciplined_survivor:
     $if: '@.level >= 14'
     :label: Disciplined Survivor
+    :doc: Proficiency in all saving throws; spend 1 Focus Point to reroll a failed save.
   +perfect_focus:
     $if: '@.level >= 15'
     :label: Perfect Focus
+    :doc: When you roll Initiative with 3 or fewer Focus Points, regain them until you have 4.
   +ability_score_improvement_4:
     $if: '@.level >= 16'
     :label: Ability Score Improvement
@@ -92,9 +108,12 @@ $if: "@.class == 'monk'"
   +superior_defense:
     $if: '@.level >= 18'
     :label: Superior Defense
+    :doc: Spend 3 Focus Points to gain Resistance to all damage except Force for 1 minute.
   +epic_boon:
     $if: '@.level >= 19'
-    :label: Epic boon
+    :label: Epic Boon
+    :doc: Gain an Epic Boon feat or another feat for which you qualify.
   +body_and_mind:
     $if: '@.level >= 20'
     :label: Body and Mind
+    :doc: Your Dexterity and Wisdom scores increase by 4, to a maximum of 25.

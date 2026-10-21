@@ -24,14 +24,18 @@ $if: "@.class == 'sorcerer'"
 '@.features':
   +spellcasting:
     :label: Spellcasting
+    :doc: Cast Sorcerer spells using Charisma; cantrips, prepared spells, and slots increase with sorcerer level. Slots restore on a long rest.
   +innate_sorcery:
     :label: Innate Sorcery
+    :doc: As a bonus action, raise your spell save DC by 1 and gain Advantage on Sorcerer spell attacks for 1 minute. Two uses, restoring on a long rest.
   +font_of_magic:
     $if: '@.level >= 2'
     :label: Font of Magic
+    :doc: Sorcery Points equal to your sorcerer level, convertible to and from spell slots. Restores on a long rest.
   +metamagic_1:
     $if: '@.level >= 2'
     :label: Metamagic
+    :doc: Learn two Metamagic options, spending Sorcery Points to alter your spells.
   +ability_score_improvement_1:
     $if: '@.level >= 4'
     :label: Ability Score Improvement
@@ -40,9 +44,11 @@ $if: "@.class == 'sorcerer'"
   +sorcerous_restoration:
     $if: '@.level >= 5'
     :label: Sorcerous Restoration
+    :doc: On a short rest, regain Sorcery Points up to half your sorcerer level. Restores on a long rest.
   +sorcery_incarnate:
     $if: '@.level >= 7'
     :label: Sorcery Incarnate
+    :doc: Spend 2 Sorcery Points to use Innate Sorcery with no uses left; while it's active, apply two Metamagic options to a spell.
   +ability_score_improvement_2:
     $if: '@.level >= 8'
     :label: Ability Score Improvement
@@ -51,6 +57,7 @@ $if: "@.class == 'sorcerer'"
   +metamagic_2:
     $if: '@.level >= 10'
     :label: Metamagic
+    :doc: Learn two more Metamagic options.
   +ability_score_improvement_3:
     $if: '@.level >= 12'
     :label: Ability Score Improvement
@@ -64,9 +71,12 @@ $if: "@.class == 'sorcerer'"
   +metamagic_3:
     $if: '@.level >= 17'
     :label: Metamagic
+    :doc: Learn two more Metamagic options.
   +epic_boon:
     $if: '@.level >= 19'
     :label: Epic Boon
+    :doc: Gain an Epic Boon feat or another feat for which you qualify.
   +arcane_apotheosis:
     $if: '@.level >= 20'
     :label: Arcane Apotheosis
+    :doc: While Innate Sorcery is active, use one Metamagic option each turn without spending Sorcery Points.

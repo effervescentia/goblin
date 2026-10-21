@@ -38,14 +38,18 @@ $if: "@.class == 'bard'"
 '@.features':
   +bardic_inspiration:
     :label: Bardic Inspiration
+    :doc: As a bonus action, give a creature a Bardic Inspiration die to add to a failed d20 test; the die grows from d6 to d8, d10, and d12 at levels 5, 10, and 15. Uses equal your Charisma modifier and restore on a long rest.
   +spellcasting:
     :label: Spellcasting
+    :doc: Cast Bard spells using Charisma; cantrips, prepared spells, and slots increase with bard level. Slots restore on a long rest.
   +expertise_1:
     $if: '@.level >= 2'
     :label: Expertise
+    :doc: Gain Expertise in two skills you're proficient in.
   +jack_of_all_trades:
     $if: '@.level >= 2'
     :label: Jack of All Trades
+    :doc: Add half your Proficiency Bonus to ability checks using a skill you aren't proficient in.
   +ability_score_improvement_1:
     $if: '@.level >= 4'
     :label: Ability Score Improvement
@@ -54,9 +58,11 @@ $if: "@.class == 'bard'"
   +font_of_inspiration:
     $if: '@.level >= 5'
     :label: Font of Inspiration
+    :doc: Bardic Inspiration also restores on a short rest, and you can expend a spell slot to regain a use.
   +countercharm:
     $if: '@.level >= 7'
     :label: Countercharm
+    :doc: When a creature within 30 feet fails a save against being Charmed or Frightened, use your reaction to let it reroll with Advantage.
   +ability_score_improvement_2:
     $if: '@.level >= 8'
     :label: Ability Score Improvement
@@ -65,9 +71,11 @@ $if: "@.class == 'bard'"
   +expertise_2:
     $if: '@.level >= 9'
     :label: Expertise
+    :doc: Gain Expertise in two more skills you're proficient in.
   +magical_secrets:
     $if: '@.level >= 10'
     :label: Magical Secrets
+    :doc: Choose your prepared spells from the Bard, Cleric, Druid, and Wizard spell lists.
   +ability_score_improvement_3:
     $if: '@.level >= 12'
     :label: Ability Score Improvement
@@ -81,9 +89,12 @@ $if: "@.class == 'bard'"
   +superior_inspiration:
     $if: '@.level >= 18'
     :label: Superior Inspiration
+    :doc: When you roll Initiative, regain Bardic Inspiration uses until you have two if you have fewer.
   +epic_boon:
     $if: '@.level >= 19'
     :label: Epic Boon
+    :doc: Gain an Epic Boon feat or another feat for which you qualify.
   +words_of_creation:
     $if: '@.level >= 20'
     :label: Words of Creation
+    :doc: Always have Power Word Heal and Power Word Kill prepared; each can target a second creature within 10 feet of the first.
