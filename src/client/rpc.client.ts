@@ -3,7 +3,7 @@
  * back to their callers by id. Framing and encoding belong to the transport.
  */
 import { RpcError } from '@/errors';
-import { type Answer, type ResolveParams, ResponseSchema } from './dtos';
+import { type Answer, type ResolveParams, ResponseSchema, type Rewound } from './dtos';
 
 interface Waiting {
   resolve: (result: unknown) => void;
@@ -26,6 +26,11 @@ export abstract class RpcClient {
   /** Resolve a turn: the same envelope (and `hash`) a one-shot CLI run prints, plus a stateful server's session keys. */
   resolve(params: ResolveParams = {}): Promise<Answer> {
     return this.call('resolve', params) as Promise<Answer>;
+  }
+
+  /** Cut a stateful server's session back to `version`, so the next `resolve` continues from it. */
+  rewind(version: number): Promise<Rewound> {
+    return this.call('rewind', { version }) as Promise<Rewound>;
   }
 
   call(method: string, params?: unknown): Promise<unknown> {

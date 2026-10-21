@@ -1,4 +1,4 @@
-export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--stateless] [--history n] [--format cbor|json] [--port n] [--help]
+export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--stateless] [--session id] [--history n] [--format cbor|json] [--port n] [--help]
 
 Resolves a goblin document and prints the result as JSON: either
 { "hash", "version", "events", "data" } when all :param values are
@@ -55,24 +55,34 @@ Arguments:
                 frame with one, in order per connection, until killed,
                 logging its ws:// URL to stderr.
                 Method "resolve" takes { entry?, in?, inputs?, stripMetadata? }
-                — in is a prior envelope, inputs a list of { type:
-                "parameter" | "override" | "invoke", path, value } — and
-                answers the envelope a run would print, plus "previous"
-                and "sessionID" unless --stateless.
+                — in is a prior envelope (--stateless only), inputs a list
+                of { type: "parameter" | "override" | "invoke", path, value }
+                — and answers the envelope a run would print, plus
+                "previous" and "sessionID" unless --stateless.
                 Cannot be combined with --param, --set, --invoke, --out,
                 --strip-metadata or --compact.
   --stateless   Answer each --server call on its own (needs --server). By
                 default a server is a session: it gets a UUID ("sessionID"
-                in every answer) and saves each envelope a call answers
-                (bar { "errors" }) as ~/.goblin/sessions/<sessionID>/
-                state_<timestamp>.json, with head.json holding the latest
-                as { "entry", "state": "<file>" }. A call without "in"
-                continues from that latest state if it names the same
-                entry, else starts fresh; "previous" names the file it
-                continued from, or is null.
-  --history     How many state_<timestamp>.json files a --server session
-                keeps (an integer >= 1, default 30); once over, the oldest
-                are deleted. Cannot be combined with --stateless.
+                in every answer) and appends each turn a call answers (bar
+                { "errors" }) to ~/.goblin/sessions/<sessionID>/log.cbor, a
+                CBOR Sequence: a checkpoint holding every event so far, then
+                one { version, entry, events, hash } item per turn with only
+                its new events. manifest.json holds { "entry", "version",
+                "offsets" }, each version's byte offset in the log. A call
+                continues from the head if it names the same entry, else
+                starts a fresh log; "previous" is the version it continued
+                from, or null. A session keeps its own history, so it
+                refuses --in and a "resolve" with "in". Method "rewind"
+                takes { version } and cuts the log back to it, so the next
+                call continues from there.
+  --session     Continue a prior --server session by its sessionID: its
+                log is reopened, a half-written last turn cut off, and the
+                next call continues from its head. Fails if no such session
+                was saved. Cannot be combined with --stateless.
+  --history     How many versions, the latest among them, a --server
+                session can rewind to (an integer >= 1, default 30); older
+                ones fold into a new checkpoint. Cannot be combined with
+                --stateless.
   --format      Wire format for --server requests and responses: cbor
                 (default; one CBOR item per message, application/cbor over
                 http, binary frames over websocket) or json (one line per
@@ -88,6 +98,8 @@ export const DEFAULT_PORT = 8080;
 
 export const INVOKE_ALONE =
   '--invoke cannot be combined with --param or --set: invoke on a stable state, answer in another run';
+
+export const STATEFUL_IN = 'a stateful --server keeps its own history: in (--in) needs --stateless';
 
 /** Flags that shape a single run's inputs or output, meaningless to a server answering many. */
 export const ONE_SHOT = new Set(['--param', '--set', '--invoke', '--out', '--strip-metadata', '--compact']);

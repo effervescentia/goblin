@@ -3,7 +3,7 @@
  * Goblin CLI — resolves the application state and prints it as JSON.
  *
  * Usage:
- *   goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--stateless] [--history n] [--format cbor|json] [--port n] [--help]
+ *   goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--stateless] [--session id] [--history n] [--format cbor|json] [--port n] [--help]
  *
  * With no entry file, `.goblin.yaml` in the current directory is required.
  * An entry containing a directory (`examples/foo.yaml`) is resolved with
@@ -12,6 +12,7 @@
  * with a non-zero exit code.
  */
 import { createHash } from 'node:crypto';
+import { match, P } from 'ts-pattern';
 import z from 'zod';
 import { GoblinEngine } from '@/core/engine';
 import type { EngineEvent } from '@/core/journal';
@@ -25,8 +26,8 @@ import { INVALID_PARAMS, type Methods } from '@/server/rpc.server';
 import { Session } from '@/server/session';
 import { StdioServer } from '@/server/stdio.server';
 import { WebSocketServer } from '@/server/websocket.server';
-import { DEFAULT_PORT, INVOKE_ALONE, ONE_SHOT, USAGE } from './constants';
-import { ConfigSchema, ResolveParamsSchema, type ServerMode, ServerModeSchema } from './dtos';
+import { DEFAULT_PORT, INVOKE_ALONE, ONE_SHOT, STATEFUL_IN, USAGE } from './constants';
+import { ConfigSchema, ResolveParamsSchema, RewindParamsSchema, type ServerMode, ServerModeSchema } from './dtos';
 
 export interface CliArgs {
   entry?: string;
@@ -37,7 +38,9 @@ export interface CliArgs {
   server?: ServerMode;
   /** Answer each `--server` call on its own, keeping no session. */
   stateless: boolean;
-  /** How many saved states a `--server` session keeps; 30 unless given. */
+  /** A prior `--server` session to continue, by its ID. */
+  session?: string;
+  /** How many versions a `--server` session can rewind to; 30 unless given. */
   history?: number;
   /** The `--server` wire format; CBOR unless given. */
   format?: Format;
@@ -96,6 +99,12 @@ export function parseArgs(argv: string[]): CliArgs {
       args.server = mode.data;
     } else if (arg === '--stateless') {
       args.stateless = true;
+    } else if (arg === '--session') {
+      const id = argv[++i];
+      // Only a UUID: the ID names a directory, so it must not reach outside the sessions root.
+      if (id === undefined || !z.uuid().safeParse(id).success)
+        throw new Error(`--session expects a session ID (a UUID), got: ${id ?? '(nothing)'}`);
+      args.session = id;
     } else if (arg === '--history') {
       const history = argv[++i];
       if (history === undefined || !/^\d+$/.test(history) || Number(history) < 1)
@@ -142,6 +151,9 @@ export function parseArgs(argv: string[]): CliArgs {
   if (args.stateless && !args.server) throw new Error('--stateless needs --server');
   if (args.history !== undefined && (!args.server || args.stateless))
     throw new Error('--history needs a stateful --server');
+  if (args.session !== undefined && (!args.server || args.stateless))
+    throw new Error('--session needs a stateful --server');
+  if (args.in !== undefined && args.server && !args.stateless) throw new Error(STATEFUL_IN);
   return args;
 }
 
@@ -312,12 +324,23 @@ export function parseRunParams(params: unknown = {}): RunRequest {
 }
 
 /** The JSON-RPC methods `--server` answers, whichever the transport; with a
- * `session`, each `resolve` continues from and saves to it. */
+ * `session`, each `resolve` continues from and logs to it, and `rewind` cuts it back. */
 export const serverMethods = (cwd: string, session?: Session): Methods => ({
   resolve: (params) => {
     const request = parseRunParams(params);
-    return session === undefined ? run(cwd, request) : session.turn(request, (turn) => run(cwd, turn));
+    if (session === undefined) return run(cwd, request);
+    if (request.prior !== undefined) throw new RpcError(INVALID_PARAMS, STATEFUL_IN);
+    return session.turn(request, (turn) => run(cwd, turn));
   },
+  ...(session === undefined
+    ? {}
+    : {
+        rewind: (params) => {
+          const parsed = RewindParamsSchema.safeParse(params);
+          if (!parsed.success) throw new RpcError(INVALID_PARAMS, 'rewind expects { version: integer >= 1 }');
+          return session.rewind(parsed.data.version);
+        },
+      }),
 });
 
 // Entry point only — no-op when imported (e.g. by tests).
@@ -328,8 +351,11 @@ if (import.meta.main) {
       process.stdout.write(`${USAGE}\n`);
       process.exit(0);
     }
-    // A session writes nothing until its first answer, so a one-shot run can hold one unused.
-    const methods = serverMethods(process.cwd(), args.stateless ? undefined : new Session({ history: args.history }));
+    const session = await match(args)
+      .with({ server: P.nullish }, { stateless: true }, () => undefined)
+      .with({ session: P.string }, ({ session: id, history }) => Session.resume({ id, history }))
+      .otherwise(({ history }) => new Session({ history }));
+    const methods = serverMethods(process.cwd(), session);
     if (args.server === 'stdio') {
       const server = new StdioServer(methods, args.format);
       await server.serve(process.stdin, (bytes) => process.stdout.write(bytes));

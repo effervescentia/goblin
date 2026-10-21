@@ -26,3 +26,5 @@ export const ResolveParamsSchema = z.object({
     }),
   stripMetadata: z.boolean().default(false),
 });
+
+export const RewindParamsSchema = z.object({ version: z.int().min(1) });
