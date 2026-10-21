@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseRunParams } from '@/cli/cli';
-import { INVALID_PARAMS, INVALID_REQUEST, METHOD_NOT_FOUND, RpcError, RpcServer } from './rpc.server';
+import { RpcError } from '@/errors';
+import { INVALID_PARAMS, INVALID_REQUEST, METHOD_NOT_FOUND, RpcServer } from './rpc.server';
 
 const server = new RpcServer({
   echo: (params: unknown) => params,

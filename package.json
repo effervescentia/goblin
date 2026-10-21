@@ -1,5 +1,9 @@
 {
   "name": "goblin",
+  "exports": {
+    ".": "./src/main.ts",
+    "./client": "./src/client/main.ts"
+  },
   "scripts": {
     "check": "bun run check:format && bun run check:types",
     "check:format": "biome check --use-editorconfig true",

@@ -64,6 +64,13 @@ apart. Treat a missing spec update as an incomplete change.
   (default `cbor`, `--server` only) picks the encoding for all three — binary or text frames over websocket — via `src/server/codec.ts`. Its `resolve`
   method calls the same `run` as a one-shot invocation, so its result is the exact envelope
   (and `hash`) the CLI prints; add methods to `serverMethods` in `src/cli/cli.ts`, not a transport.
+- `goblin/client` (`src/client/main.ts`, a `package.json` sub-export) is the JSON-RPC
+  client for `--server`: `createClient({ transport: 'stdio' | 'http' | 'websocket', format?, … })` is
+  its single entrypoint, connecting to a running server (`url`, or a `stream` for stdio) or spawning
+  one (`spawn: { command?, args?, cwd? }`; the client adds `--server`/`--format`/`--port 0` and reads
+  the logged URL). Id matching, failure and `close` (waits out in-flight calls) live in
+  `src/client/rpc.client.ts`; each transport only frames, reusing `src/server/codec.ts`. Keep it free
+  of Bun APIs — `node:child_process` loads lazily, only to spawn.
 - `bun run ui` serves the inspector (`ui/`, Bun-only) at localhost:3000: it
   resolves an entry via `resolveApp` in `src/cli/cli.ts`, answers `{ query }`
   turns with a form, and renders `inspect()` (`src/inspect.ts`, pure) —
@@ -105,7 +112,8 @@ apart. Treat a missing spec update as an incomplete change.
   so helpers it depends on must not be moved onto a node class that imports
   back from `src/utils.ts`.
 - Server modules in `src/server/` use a `.server.ts` suffix (`rpc.server.ts`,
-  `http.server.ts`, …); shared helpers like `codec.ts` and `dtos.ts` don't.
+  `http.server.ts`, …), and client ones in `src/client/` a `.client.ts` suffix; shared
+  helpers like `codec.ts`, `spawn.ts` and `dtos.ts` don't.
 
 ## Dependencies
 

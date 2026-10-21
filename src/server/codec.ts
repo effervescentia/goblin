@@ -26,6 +26,14 @@ const reason = (err: unknown) => (err instanceof Error ? err.message : String(er
 
 const EMPTY = new Uint8Array(0);
 
+/** Append a chunk to the bytes still waiting on a stream. */
+export function concat(pending: Uint8Array, chunk: Uint8Array): Uint8Array<ArrayBuffer> {
+  const joined = new Uint8Array(pending.length + chunk.length);
+  joined.set(pending);
+  joined.set(chunk, pending.length);
+  return joined;
+}
+
 class CborCodec implements Codec {
   readonly name = 'CBOR';
   readonly contentType = 'application/cbor';

@@ -2,7 +2,7 @@
  * JSON-RPC 2.0 over stdio, each message (request, response or batch) one CBOR
  * item, or one line of JSON. Either way the stream needs no other framing.
  */
-import { type Codec, codecFor } from './codec';
+import { type Codec, codecFor, concat } from './codec';
 import type { Format } from './dtos';
 import { failure, type Methods, PARSE_ERROR, RpcServer } from './rpc.server';
 
@@ -20,10 +20,7 @@ export class StdioServer {
   async serve(input: AsyncIterable<Uint8Array>, write: (bytes: Uint8Array) => unknown): Promise<void> {
     let pending = new Uint8Array(0);
     for await (const chunk of input) {
-      const joined = new Uint8Array(pending.length + chunk.length);
-      joined.set(pending);
-      joined.set(chunk, pending.length);
-      pending = await this.answer(joined, false, write);
+      pending = await this.answer(concat(pending, chunk), false, write);
     }
     if (pending.length > 0) await this.answer(pending, true, write);
   }
