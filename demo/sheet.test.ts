@@ -18,6 +18,7 @@ import {
   slotsOf,
   solve,
   solvedText,
+  solveRefs,
   sourceOf,
   templateInputs,
   unwrap,
@@ -31,6 +32,16 @@ describe('sheet', () => {
       ':value': 12,
       ':formula': '10 + Dexterity',
       ':parts': [{ ':label': 'Dexterity', ':value': 2 }],
+    },
+    abilities: {
+      wisdom: {
+        start: { ':value': 13, ':events': [] },
+        base: {
+          ':value': 15,
+          ':formula': '.start + Improvements',
+          ':parts': [{ ':label': 'Improvements', ':value': 2 }],
+        },
+      },
     },
     hit_points: { '!validate': ['.current >= 0'], current: { ':value': 11, ':events': [] }, max: 11 },
     features: { ':doc': 'all of them', _hidden: 1, darkvision: { ':label': 'Darkvision' }, extra_attack: {} },
@@ -63,6 +74,20 @@ describe('sheet', () => {
     });
     expect(formulaAt(sheet, 'speed')).toBeUndefined();
     expect(formulaAt(sheet, 'hit_points.current')).toBeUndefined();
+  });
+
+  it('reads the unlabelled refs in a formula: beside the field, or on the character', () => {
+    const segments = formulaAt(sheet, 'abilities.wisdom.base')?.segments ?? [];
+    expect(segments).toEqual([
+      { ref: '.start', value: 13 },
+      { text: ' + ' },
+      { label: 'Improvements', value: 2, hue: 0 },
+    ]);
+    expect(solvedText(segments)).toBe('13 + 2');
+    const read = (ref: string) => ({ '.a': 1, '@.b.c': 2 })[ref];
+    expect(solvedText(solveRefs([{ text: '.a + @.b.c + #.a + $lib.a + x.a + .missing + 1.5' }], read))).toBe(
+      '1 + 2 + #.a + $lib.a + x.a + .missing + 1.5',
+    );
   });
 
   it('solves a formula with its parts, in the order their tags finished', () => {

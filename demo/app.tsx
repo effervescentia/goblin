@@ -8,6 +8,7 @@
 import type { ComponentChildren } from 'preact';
 import { render } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { match, P } from 'ts-pattern';
 import type { Answer, ResolveParams } from '@/client/dtos';
 import { createClient, type GoblinClient } from '@/client/main';
 import type { MissingParam } from '@/nodes/record';
@@ -211,14 +212,16 @@ function Segments({ segments, solved = false }: { segments: Segment[]; solved?: 
     <code>
       ={' '}
       {segments.map((segment, i) =>
-        'text' in segment ? (
-          segment.text
-        ) : (
-          // biome-ignore lint/suspicious/noArrayIndexKey: segments are positional
-          <span key={i} class={`part hue-${segment.hue % HUES}`}>
-            {solved ? String(segment.value) : segment.label}
-          </span>
-        ),
+        match(segment)
+          .with({ text: P.string }, ({ text }) => text)
+          .with({ ref: P.string }, ({ ref, value }) => (solved ? String(value) : ref))
+          .with({ label: P.string }, ({ label, value, hue }) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: segments are positional
+            <span key={i} class={`part hue-${hue % HUES}`}>
+              {solved ? String(value) : label}
+            </span>
+          ))
+          .exhaustive(),
       )}
     </code>
   );
@@ -402,7 +405,7 @@ function Sheet({ data, expressions, turn }: { data: unknown; expressions: Map<st
           <History {...tip('attacks')}>{String(get('attacks'))}</History>
         </Stat>
         <Stat label="Critical Hit">
-          <History {...tip('critical_hit')}>{String(get('critical_hit'))}–20</History>
+          <History {...tip('critical_hit')}>{get('critical_hit') === 20 ? '20' : `${get('critical_hit')}–20`}</History>
         </Stat>
       </div>
 
@@ -415,6 +418,7 @@ function Sheet({ data, expressions, turn }: { data: unknown; expressions: Map<st
             </span>
             <History
               path={`abilities.${name}.base`}
+              formula={formulaAt(sheet, `abilities.${name}.base`)}
               expression={expressions.get(`abilities.${name}.base`)}
               value={at(ability, 'base')}
               events={events(`abilities.${name}.start`)}

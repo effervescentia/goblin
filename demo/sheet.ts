@@ -41,9 +41,13 @@ export const humanize = (name: string) => {
 export const labelOf = (node: unknown, key: string) =>
   isRecord(node) && typeof node[':label'] === 'string' ? node[':label'] : humanize(key);
 
-/** A run of a formula: text as written, or a label with its part's value. `hue` numbers the labels in order of
- * appearance (the same label, the same hue), so a label and its value can be marked alike. */
-export type Segment = { text: string } | { label: string; value: unknown; hue: number };
+/** A run of a formula: text as written, a label with its part's value, or an unlabelled ref (`.start`) with the
+ * value it reads. `hue` numbers the labels in order of appearance (the same label, the same hue), so a label and
+ * its value can be marked alike. */
+export type Segment =
+  | { text: string }
+  | { label: string; value: unknown; hue: number }
+  | { ref: string; value: unknown };
 
 /** A labelled field's `:formula`, and it in segments, to show it solved (`10 + DEX` → `10 + 2`). */
 export interface Formula {
@@ -84,9 +88,30 @@ export function solve(formula: string, parts: { label: string; value: unknown }[
   return segments;
 }
 
-/** Segments as text, each label read as its value; undefined when none has one (nothing was solved). */
+/** `.start` (beside the field) or `@.abilities.dexterity.modifier` (on the character); not `#.x`, `$lib.x` or `a.b`. */
+const REF = /(?<![\w.#)\]])@?\.[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*/g;
+
+/** `segments` with each unlabelled ref in their text read through `read`; one it can't read stays text. */
+export function solveRefs(segments: Segment[], read: (ref: string) => unknown): Segment[] {
+  return segments.flatMap((segment) => {
+    if (!('text' in segment)) return [segment];
+    const runs: Segment[] = [];
+    let from = 0;
+    for (const match of segment.text.matchAll(REF)) {
+      const value = read(match[0]);
+      if (value === undefined) continue;
+      if (match.index > from) runs.push({ text: segment.text.slice(from, match.index) });
+      runs.push({ ref: match[0], value });
+      from = match.index + match[0].length;
+    }
+    if (from < segment.text.length) runs.push({ text: segment.text.slice(from) });
+    return runs;
+  });
+}
+
+/** Segments as text, each label or ref read as its value; undefined when none has one (nothing was solved). */
 export function solvedText(segments: Segment[]): string | undefined {
-  if (!segments.some((segment) => 'label' in segment)) return undefined;
+  if (segments.every((segment) => 'text' in segment)) return undefined;
   return segments.map((segment) => ('text' in segment ? segment.text : String(segment.value))).join('');
 }
 
@@ -98,7 +123,8 @@ export function formulaAt(node: unknown, path: string): Formula | undefined {
   const parts = (Array.isArray(field[':parts']) ? field[':parts'] : [])
     .filter(isRecord)
     .map((part) => ({ label: String(part[':label']), value: part[':value'] }));
-  return { formula: field[':formula'], segments: solve(field[':formula'], parts) };
+  const read = (ref: string) => (ref.startsWith('@') ? at(node, ref.slice(2)) : at(parent, ref.slice(1)));
+  return { formula: field[':formula'], segments: solveRefs(solve(field[':formula'], parts), read) };
 }
 
 export const signed = (n: unknown) => (typeof n === 'number' && n >= 0 ? `+${n}` : String(n));
