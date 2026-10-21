@@ -1,12 +1,15 @@
 # Mixins: a mixin call (below) merges a document into the actor of the
 # nearest document up the template chain declaring the actor its `@` names —
-# here this one, via `$actor`. The key holding the call is consumed; the mixin's writes land
-# like a patch's, with `:events` citing it (see 14-mixin-boon.yaml). Keep
-# call shapes out of comments: discovery scans the text.
+# here this one, via `$actor`. The key holding the call stays, as null, so
+# `$lib.record.keys` can list the mixins; the mixin's writes land like a
+# patch's, with `:events` citing it (see 14-mixin-boon.yaml). Keep call shapes
+# out of comments: discovery scans the text.
 
 $actor: Adventurer
 
 speed: 30
 gold: 10
-boon: $mixin('14-mixin-boon.yaml') # → gone; speed 40, gold 15
-curse: $mixin('14-mixin-curse.yaml') # → gone; its root `$if` fails, so gold stays 15
+_gifts:
+  boon: $mixin('14-mixin-boon.yaml') # → null; speed 40, gold 15
+  curse: $mixin('14-mixin-curse.yaml') # → null; its root `$if` fails, so gold stays 15
+gifts: $lib.record.keys(._gifts) # → [boon, curse]

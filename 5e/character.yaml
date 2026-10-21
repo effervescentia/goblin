@@ -20,7 +20,7 @@ ability_method:
   :doc: 'point_buy: spend 27 points on scores from 8 to 15. standard_array: assign 15, 14, 13, 12, 10 and 8. roll: roll 4d6 per ability, dropping the lowest die. roll_assign: roll six scores that way, then assign each to an ability.'
   :param: true
   :type: string
-  :options: [point_buy, standard_array, roll, roll_assign]
+  :options: $lib.record.keys(._ability_methods)
 
 # Pick lists filled by the features that grant them; an ability counts its own
 # name across all of them, so twice is +2 and once each is +1 apiece.
@@ -88,17 +88,7 @@ species:
   :doc: Choose a species for your character.
   :param: true
   :type: string
-  :options:
-    - aasimar
-    - dragonborn
-    - dwarf
-    - elf
-    - gnome
-    - goliath
-    - halfling
-    - human
-    - orc
-    - tiefling
+  :options: $lib.record.keys(._species)
 
 _species:
   aasimar: $mixin('species/aasimar/aasimar.yaml')
@@ -117,8 +107,7 @@ background:
   :doc: Choose a background for your character.
   :param: true
   :type: string
-  :options:
-    - acolyte
+  :options: $lib.record.keys(._backgrounds)
 
 _backgrounds:
   acolyte: $mixin('background/acolyte.yaml')
@@ -129,19 +118,7 @@ class:
   :doc: Choose a class for your character.
   :param: true
   :type: string
-  :options:
-    - barbarian
-    - bard
-    - cleric
-    - druid
-    - fighter
-    - monk
-    - paladin
-    - ranger
-    - rogue
-    - sorcerer
-    - warlock
-    - wizard
+  :options: $lib.record.keys(._classes)
 
 _classes:
   barbarian: $mixin('class/barbarian/barbarian.yaml')
