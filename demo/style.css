@@ -7,6 +7,10 @@
   --accent: #8a2f24;
   --accent-soft: #f5e4df;
   --bad: #a3352b;
+  --hue-0: #2563a8;
+  --hue-1: #2f7d4a;
+  --hue-2: #7a3fa0;
+  --hue-3: #9a6200;
   --sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
   --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
   color-scheme: light;
@@ -22,6 +26,10 @@
     --accent: #e48a77;
     --accent-soft: #3a2420;
     --bad: #f08b7f;
+    --hue-0: #82b4ee;
+    --hue-1: #7dcb94;
+    --hue-2: #c69de3;
+    --hue-3: #e2b552;
     color-scheme: dark;
   }
 }
@@ -406,4 +414,25 @@ button.quiet {
 
 .tooltip .expression + * {
   margin-top: 6px;
+}
+
+/* A label and the value it solves to share a hue; bold too, so colour is not the only cue. */
+.tooltip .part {
+  font-weight: 600;
+}
+
+.tooltip .hue-0 {
+  color: var(--hue-0);
+}
+
+.tooltip .hue-1 {
+  color: var(--hue-1);
+}
+
+.tooltip .hue-2 {
+  color: var(--hue-2);
+}
+
+.tooltip .hue-3 {
+  color: var(--hue-3);
 }

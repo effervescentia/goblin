@@ -41,26 +41,53 @@ export const humanize = (name: string) => {
 export const labelOf = (node: unknown, key: string) =>
   isRecord(node) && typeof node[':label'] === 'string' ? node[':label'] : humanize(key);
 
-/** A labelled field's `:formula`, and it solved: each label read as its part's value (`10 + DEX` → `10 + 2`). */
+/** A run of a formula: text as written, or a label with its part's value. `hue` numbers the labels in order of
+ * appearance (the same label, the same hue), so a label and its value can be marked alike. */
+export type Segment = { text: string } | { label: string; value: unknown; hue: number };
+
+/** A labelled field's `:formula`, and it in segments, to show it solved (`10 + DEX` → `10 + 2`). */
 export interface Formula {
   formula: string;
-  solved: string;
+  segments: Segment[];
 }
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/** `formula` with each label swapped for its part's value. Parts come in the order their tags finished (inner
- * before outer), so each label takes the next part of its name; one a conditional skipped keeps its label. */
-export function solve(formula: string, parts: { label: string; value: unknown }[]): string {
+/** `formula` split at each label, paired with its part's value. Parts come in the order their tags finished
+ * (inner before outer), so each label takes the next part of its name; one a conditional skipped stays text. */
+export function solve(formula: string, parts: { label: string; value: unknown }[]): Segment[] {
   const labels = [...new Set(parts.map(({ label }) => label))].sort((a, b) => b.length - a.length);
-  if (labels.length === 0) return formula;
+  if (labels.length === 0) return [{ text: formula }];
+  const segments: Segment[] = [];
+  const hues = new Map<string, number>();
+  const text = (run: string) => {
+    const last = segments.at(-1);
+    if (last && 'text' in last) last.text += run;
+    else if (run) segments.push({ text: run });
+  };
   let next = 0;
-  return formula.replace(new RegExp(`(?<!\\w)(?:${labels.map(escapeRegExp).join('|')})(?!\\w)`, 'g'), (label) => {
+  let from = 0;
+  for (const match of formula.matchAll(new RegExp(`(?<!\\w)(?:${labels.map(escapeRegExp).join('|')})(?!\\w)`, 'g'))) {
+    const label = match[0];
+    text(formula.slice(from, match.index));
+    from = match.index + label.length;
     const at = parts.findIndex((part, i) => i >= next && part.label === label);
-    if (at === -1) return label;
+    if (at === -1) {
+      text(label);
+      continue;
+    }
     next = at + 1;
-    return String(parts[at]?.value);
-  });
+    if (!hues.has(label)) hues.set(label, hues.size);
+    segments.push({ label, value: parts[at]?.value, hue: hues.get(label) ?? 0 });
+  }
+  text(formula.slice(from));
+  return segments;
+}
+
+/** Segments as text, each label read as its value; undefined when none has one (nothing was solved). */
+export function solvedText(segments: Segment[]): string | undefined {
+  if (!segments.some((segment) => 'label' in segment)) return undefined;
+  return segments.map((segment) => ('text' in segment ? segment.text : String(segment.value))).join('');
 }
 
 export function formulaAt(node: unknown, path: string): Formula | undefined {
@@ -71,7 +98,7 @@ export function formulaAt(node: unknown, path: string): Formula | undefined {
   const parts = (Array.isArray(field[':parts']) ? field[':parts'] : [])
     .filter(isRecord)
     .map((part) => ({ label: String(part[':label']), value: part[':value'] }));
-  return { formula: field[':formula'], solved: solve(field[':formula'], parts) };
+  return { formula: field[':formula'], segments: solve(field[':formula'], parts) };
 }
 
 export const signed = (n: unknown) => (typeof n === 'number' && n >= 0 ? `+${n}` : String(n));

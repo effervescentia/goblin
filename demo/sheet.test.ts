@@ -13,9 +13,11 @@ import {
   parseParam,
   picksAny,
   readParam,
+  type Segment,
   signed,
   slotsOf,
   solve,
+  solvedText,
   sourceOf,
   templateInputs,
   unwrap,
@@ -55,7 +57,10 @@ describe('sheet', () => {
   });
 
   it('reads a labelled field’s formula and parts', () => {
-    expect(formulaAt(sheet, 'armor_class')).toEqual({ formula: '10 + Dexterity', solved: '10 + 2' });
+    expect(formulaAt(sheet, 'armor_class')).toEqual({
+      formula: '10 + Dexterity',
+      segments: [{ text: '10 + ' }, { label: 'Dexterity', value: 2, hue: 0 }],
+    });
     expect(formulaAt(sheet, 'speed')).toBeUndefined();
     expect(formulaAt(sheet, 'hit_points.current')).toBeUndefined();
   });
@@ -66,7 +71,7 @@ describe('sheet', () => {
         { label: 'Proficiency', value: 3 },
         { label: 'STR or DEX', value: -1 },
       ]),
-    ).toBe('8 + 3 + -1');
+    ).toSatisfy((segments: Segment[]) => solvedText(segments) === '8 + 3 + -1');
     // An inner tag finishes before the outer one around it, and is not in the formula.
     expect(
       solve('Bonus + DEX', [
@@ -74,10 +79,29 @@ describe('sheet', () => {
         { label: 'Bonus', value: 4 },
         { label: 'DEX', value: 2 },
       ]),
-    ).toBe('4 + 2');
+    ).toSatisfy((segments: Segment[]) => solvedText(segments) === '4 + 2');
     // A tag a conditional skipped has no part, so its label stays; so does a longer name holding a label.
-    expect(solve('10 + DEX + Level + DEXTERITY', [{ label: 'DEX', value: 2 }])).toBe('10 + 2 + Level + DEXTERITY');
-    expect(solve('10', [])).toBe('10');
+    expect(solvedText(solve('10 + DEX + Level + DEXTERITY', [{ label: 'DEX', value: 2 }]))).toBe(
+      '10 + 2 + Level + DEXTERITY',
+    );
+    expect(solve('10', [])).toEqual([{ text: '10' }]);
+    expect(solvedText(solve('10', []))).toBeUndefined();
+  });
+
+  it('gives each label a hue, the same one wherever it repeats', () => {
+    expect(
+      solve('DEX + PB + DEX', [
+        { label: 'DEX', value: 1 },
+        { label: 'PB', value: 3 },
+        { label: 'DEX', value: 1 },
+      ]),
+    ).toEqual([
+      { label: 'DEX', value: 1, hue: 0 },
+      { text: ' + ' },
+      { label: 'PB', value: 3, hue: 1 },
+      { text: ' + ' },
+      { label: 'DEX', value: 1, hue: 0 },
+    ]);
   });
 
   it('signs modifiers', () => {

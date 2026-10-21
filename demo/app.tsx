@@ -27,8 +27,10 @@ import {
   labelOf,
   picksAny,
   readParam,
+  type Segment,
   signed,
   slotsOf,
+  solvedText,
   sourceOf,
   TEMPLATES,
   templateInputs,
@@ -36,6 +38,9 @@ import {
 } from './sheet';
 
 type Input = NonNullable<ResolveParams['inputs']>[number];
+
+/** How many part colours `style.css` defines (`.hue-0` …); more labels than that reuse them. */
+const HUES = 4;
 
 type Turn = (inputs?: Input[]) => void;
 
@@ -200,12 +205,37 @@ function Control({ param, value, onChange }: { param: MissingParam; value: strin
 
 // -- the sheet ----------------------------------------------------------------
 
-function Derivation({ formula, expression }: { formula?: Formula; expression?: string }) {
-  if (formula === undefined) return expression === undefined ? null : <code class="expression">= {expression}</code>;
+/** A formula's segments, each label (or, `solved`, its value) marked in its part's hue. */
+function Segments({ segments, solved = false }: { segments: Segment[]; solved?: boolean }) {
+  return (
+    <code>
+      ={' '}
+      {segments.map((segment, i) =>
+        'text' in segment ? (
+          segment.text
+        ) : (
+          // biome-ignore lint/suspicious/noArrayIndexKey: segments are positional
+          <span key={i} class={`part hue-${segment.hue % HUES}`}>
+            {solved ? String(segment.value) : segment.label}
+          </span>
+        ),
+      )}
+    </code>
+  );
+}
+
+/** The derivation's lines: the formula, it solved (labels as values), then the value it all comes to —
+ * each left out when it would only repeat the line before. */
+function Derivation({ formula, expression, value }: { formula?: Formula; expression?: string; value?: unknown }) {
+  const written = formula?.formula ?? expression;
+  if (written === undefined) return null;
+  const solved = formula && solvedText(formula.segments);
+  const final = value === undefined ? undefined : String(value);
   return (
     <span class="expression">
-      <code>= {formula.formula}</code>
-      {formula.solved === formula.formula ? null : <code>= {formula.solved}</code>}
+      {formula ? <Segments segments={formula.segments} /> : <code>= {expression}</code>}
+      {solved === undefined ? null : <Segments segments={formula?.segments ?? []} solved />}
+      {final === undefined || final === (solved ?? written) ? null : <code>= {final}</code>}
     </span>
   );
 }
@@ -216,12 +246,15 @@ function History({
   events = [],
   formula,
   expression,
+  value,
   title,
   children,
 }: {
   events?: FieldEvent[];
   formula?: Formula;
   expression?: string;
+  /** What the derivation comes to, shown last. */
+  value?: unknown;
   title?: string;
   children: ComponentChildren;
 }) {
@@ -231,7 +264,7 @@ function History({
     <span class="history" tabIndex={0}>
       {children}
       <span class="tooltip" role="tooltip">
-        <Derivation formula={formula} expression={expression} />
+        <Derivation formula={formula} expression={expression} value={value} />
         {title && events.length > 0 ? <span class="title">{title}</span> : null}
         {events.length > 0 ? (
           <ol>
@@ -323,6 +356,7 @@ function Sheet({ data, expressions, turn }: { data: unknown; expressions: Map<st
     events: events(path),
     formula: formulaAt(sheet, path),
     expression: expressions.get(path),
+    value: get(path),
   });
   const invoke = (path: string) => () => turn([call(`${CHARACTER}.${path}`)]);
   const saves = (get('proficiencies.saving_throws') as string[] | undefined) ?? [];
@@ -376,6 +410,7 @@ function Sheet({ data, expressions, turn }: { data: unknown; expressions: Map<st
             </span>
             <History
               expression={expressions.get(`abilities.${name}.base`)}
+              value={at(ability, 'base')}
               events={events(`abilities.${name}.start`)}
               title="Starting score"
             >
