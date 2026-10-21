@@ -240,9 +240,10 @@ function Derivation({ formula, expression, value }: { formula?: Formula; express
   );
 }
 
-/** `children`, with a tooltip on hover or focus: how they are derived — a labelled `formula` and it solved, else
- * the raw `expression` — and the `events` that set or changed them. */
+/** `children`, with a tooltip on hover or focus: their `path` on the character, how they are derived — a labelled
+ * `formula` and it solved, else the raw `expression` — and the `events` that set or changed them. */
 function History({
+  path,
   events = [],
   formula,
   expression,
@@ -250,6 +251,8 @@ function History({
   title,
   children,
 }: {
+  /** Where the field sits, relative to the character. */
+  path?: string;
   events?: FieldEvent[];
   formula?: Formula;
   expression?: string;
@@ -264,6 +267,7 @@ function History({
     <span class="history" tabIndex={0}>
       {children}
       <span class="tooltip" role="tooltip">
+        {path ? <code class="path">{path}</code> : null}
         <Derivation formula={formula} expression={expression} value={value} />
         {title && events.length > 0 ? <span class="title">{title}</span> : null}
         {events.length > 0 ? (
@@ -353,6 +357,7 @@ function Sheet({ data, expressions, turn }: { data: unknown; expressions: Map<st
   const get = (path: string) => at(sheet, path);
   const events = (path: string) => eventsAt(sheet, path);
   const tip = (path: string) => ({
+    path,
     events: events(path),
     formula: formulaAt(sheet, path),
     expression: expressions.get(path),
@@ -409,6 +414,7 @@ function Sheet({ data, expressions, turn }: { data: unknown; expressions: Map<st
               <History {...tip(`abilities.${name}.modifier`)}>{signed(at(ability, 'modifier'))}</History>
             </span>
             <History
+              path={`abilities.${name}.base`}
               expression={expressions.get(`abilities.${name}.base`)}
               value={at(ability, 'base')}
               events={events(`abilities.${name}.start`)}
@@ -456,7 +462,10 @@ function Sheet({ data, expressions, turn }: { data: unknown; expressions: Map<st
               <div key={name} class="action">
                 <History {...tip(`actions.${name}`)}>{labelOf(action, name)}</History>
                 <span class="muted">
-                  <History events={[...events(`actions.${name}.type`), ...events(`actions.${name}.die`)]}>
+                  <History
+                    path={`actions.${name}.die`}
+                    events={[...events(`actions.${name}.type`), ...events(`actions.${name}.die`)]}
+                  >
                     {[type && humanize(String(type)), at(action, 'die')].filter(Boolean).join(' · ')}
                   </History>
                 </span>

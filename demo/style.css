@@ -373,6 +373,14 @@ button.quiet {
   display: block;
 }
 
+.tooltip .path {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+
 .tooltip .title {
   display: block;
   margin-bottom: 4px;
