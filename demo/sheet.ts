@@ -41,17 +41,37 @@ export const humanize = (name: string) => {
 export const labelOf = (node: unknown, key: string) =>
   isRecord(node) && typeof node[':label'] === 'string' ? node[':label'] : humanize(key);
 
-/** A labelled field's `:formula`, and each `[Label](…)` part's value (`Dexterity +2`). */
-export function formulaAt(node: unknown, path: string): { formula: string; parts: string[] } | undefined {
+/** A labelled field's `:formula`, and it solved: each label read as its part's value (`10 + DEX` → `10 + 2`). */
+export interface Formula {
+  formula: string;
+  solved: string;
+}
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** `formula` with each label swapped for its part's value. Parts come in the order their tags finished (inner
+ * before outer), so each label takes the next part of its name; one a conditional skipped keeps its label. */
+export function solve(formula: string, parts: { label: string; value: unknown }[]): string {
+  const labels = [...new Set(parts.map(({ label }) => label))].sort((a, b) => b.length - a.length);
+  if (labels.length === 0) return formula;
+  let next = 0;
+  return formula.replace(new RegExp(`(?<!\\w)(?:${labels.map(escapeRegExp).join('|')})(?!\\w)`, 'g'), (label) => {
+    const at = parts.findIndex((part, i) => i >= next && part.label === label);
+    if (at === -1) return label;
+    next = at + 1;
+    return String(parts[at]?.value);
+  });
+}
+
+export function formulaAt(node: unknown, path: string): Formula | undefined {
   const keys = path.split('.');
   const parent = keys.length > 1 ? at(node, keys.slice(0, -1).join('.')) : node;
   const field = isRecord(parent) ? parent[keys.at(-1) ?? ''] : undefined;
   if (!isRecord(field) || typeof field[':formula'] !== 'string') return undefined;
-  const parts = Array.isArray(field[':parts']) ? field[':parts'] : [];
-  return {
-    formula: field[':formula'],
-    parts: parts.filter(isRecord).map((part) => `${String(part[':label'])} ${signed(part[':value'])}`),
-  };
+  const parts = (Array.isArray(field[':parts']) ? field[':parts'] : [])
+    .filter(isRecord)
+    .map((part) => ({ label: String(part[':label']), value: part[':value'] }));
+  return { formula: field[':formula'], solved: solve(field[':formula'], parts) };
 }
 
 export const signed = (n: unknown) => (typeof n === 'number' && n >= 0 ? `+${n}` : String(n));

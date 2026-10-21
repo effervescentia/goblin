@@ -20,6 +20,7 @@ import {
   eventsAt,
   expressionsOf,
   type FieldEvent,
+  type Formula,
   fields,
   formulaAt,
   humanize,
@@ -199,25 +200,38 @@ function Control({ param, value, onChange }: { param: MissingParam; value: strin
 
 // -- the sheet ----------------------------------------------------------------
 
-/** `children`, with a tooltip on hover or focus: the `expression` that derives them and the `events` that set or changed them. */
+function Derivation({ formula, expression }: { formula?: Formula; expression?: string }) {
+  if (formula === undefined) return expression === undefined ? null : <code class="expression">= {expression}</code>;
+  return (
+    <span class="expression">
+      <code>= {formula.formula}</code>
+      {formula.solved === formula.formula ? null : <code>= {formula.solved}</code>}
+    </span>
+  );
+}
+
+/** `children`, with a tooltip on hover or focus: how they are derived — a labelled `formula` and it solved, else
+ * the raw `expression` — and the `events` that set or changed them. */
 function History({
   events = [],
+  formula,
   expression,
   title,
   children,
 }: {
   events?: FieldEvent[];
+  formula?: Formula;
   expression?: string;
   title?: string;
   children: ComponentChildren;
 }) {
-  if (events.length === 0 && expression === undefined) return <>{children}</>;
+  if (events.length === 0 && formula === undefined && expression === undefined) return <>{children}</>;
   return (
     // biome-ignore lint/a11y/noNoninteractiveTabindex: focus shows the tooltip to keyboard users
     <span class="history" tabIndex={0}>
       {children}
       <span class="tooltip" role="tooltip">
-        {expression === undefined ? null : <code class="expression">= {expression}</code>}
+        <Derivation formula={formula} expression={expression} />
         {title && events.length > 0 ? <span class="title">{title}</span> : null}
         {events.length > 0 ? (
           <ol>
@@ -235,17 +249,9 @@ function History({
   );
 }
 
-function Stat({
-  label,
-  formula,
-  children,
-}: {
-  label: string;
-  formula?: { formula: string; parts: string[] };
-  children: ComponentChildren;
-}) {
+function Stat({ label, formula, children }: { label: string; formula?: Formula; children: ComponentChildren }) {
   return (
-    <div class="stat" title={formula?.parts.join(', ')}>
+    <div class="stat">
       <span class="value">{children}</span>
       <span>{label}</span>
     </div>
@@ -313,7 +319,11 @@ function Sheet({ data, expressions, turn }: { data: unknown; expressions: Map<st
   const sheet = at(data, CHARACTER);
   const get = (path: string) => at(sheet, path);
   const events = (path: string) => eventsAt(sheet, path);
-  const tip = (path: string) => ({ events: events(path), expression: expressions.get(path) });
+  const tip = (path: string) => ({
+    events: events(path),
+    formula: formulaAt(sheet, path),
+    expression: expressions.get(path),
+  });
   const invoke = (path: string) => () => turn([call(`${CHARACTER}.${path}`)]);
   const saves = (get('proficiencies.saving_throws') as string[] | undefined) ?? [];
 

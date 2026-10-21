@@ -15,6 +15,7 @@ import {
   readParam,
   signed,
   slotsOf,
+  solve,
   sourceOf,
   templateInputs,
   unwrap,
@@ -54,9 +55,29 @@ describe('sheet', () => {
   });
 
   it('reads a labelled field’s formula and parts', () => {
-    expect(formulaAt(sheet, 'armor_class')).toEqual({ formula: '10 + Dexterity', parts: ['Dexterity +2'] });
+    expect(formulaAt(sheet, 'armor_class')).toEqual({ formula: '10 + Dexterity', solved: '10 + 2' });
     expect(formulaAt(sheet, 'speed')).toBeUndefined();
     expect(formulaAt(sheet, 'hit_points.current')).toBeUndefined();
+  });
+
+  it('solves a formula with its parts, in the order their tags finished', () => {
+    expect(
+      solve('8 + Proficiency + STR or DEX', [
+        { label: 'Proficiency', value: 3 },
+        { label: 'STR or DEX', value: -1 },
+      ]),
+    ).toBe('8 + 3 + -1');
+    // An inner tag finishes before the outer one around it, and is not in the formula.
+    expect(
+      solve('Bonus + DEX', [
+        { label: 'DEX', value: 1 },
+        { label: 'Bonus', value: 4 },
+        { label: 'DEX', value: 2 },
+      ]),
+    ).toBe('4 + 2');
+    // A tag a conditional skipped has no part, so its label stays; so does a longer name holding a label.
+    expect(solve('10 + DEX + Level + DEXTERITY', [{ label: 'DEX', value: 2 }])).toBe('10 + 2 + Level + DEXTERITY');
+    expect(solve('10', [])).toBe('10');
   });
 
   it('signs modifiers', () => {

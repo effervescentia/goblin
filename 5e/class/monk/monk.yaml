@@ -2,9 +2,6 @@
 $if: "@.class == 'monk'"
 
 '@.hit_die': d8
-'@.hit_points':
-  max: 8 + @.abilities.constitution.modifier
-  current: '@.hit_points.max'
 '@.proficiencies.weapon':
   - simple_weapons
   - light_martial_weapons

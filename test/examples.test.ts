@@ -205,6 +205,8 @@ describe('examples', () => {
     expect(rest).toEqual({
       floored: 2,
       smallest: 3,
+      damage: '2d6',
+      best_damage: 12,
       picks: { first: 'athletics', second: 'athletics' },
       athletics_picks: 2,
       picks_made: 2,

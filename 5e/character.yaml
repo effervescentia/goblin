@@ -47,13 +47,14 @@ _ability_methods:
 proficiency_bonus: '$.level.proficiency_for(.level)'
 
 armor_class: '10 + [DEX](.abilities.dexterity.modifier)'
-speed: 30
+speed:
+  :type: integer
 attacks: 1
 # The lowest d20 roll that scores a critical hit; a Champion widens it.
 critical_hit: 20
 
 initiative:
-  base: '@.abilities.dexterity.modifier'
+  base: '[DEX](@.abilities.dexterity.modifier)'
   'roll()': 1d20 + .base
 
 hit_die:
@@ -63,8 +64,8 @@ hit_points:
   '!validate':
     - .current >= 0
     - .current <= .max
-  current: 8
-  max: 8
+  current: .max
+  max: $lib.dice.max(@.hit_die) + [CON](@.abilities.constitution.modifier)
 
 features: {}
 actions:

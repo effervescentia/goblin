@@ -117,6 +117,13 @@ describe('dice', () => {
     expect(engine.evalExpr('$lib.dice.keep_highest(5, 1, 1)', scope)).toBe(1);
     expect(engine.evalExpr('$lib.dice.keep_highest(3, 1, 3)', scope)).toBe(3);
   });
+
+  it('reads a die field’s highest roll with $lib.dice.max', () => {
+    const { engine, scope } = testEngine();
+    const dice = { hit_die: 'd10', damage: '2d6' };
+    expect(engine.evalExpr('$lib.dice.max(.hit_die)', { ...scope, current: dice })).toBe(10);
+    expect(engine.evalExpr('$lib.dice.max(.damage) + 1', { ...scope, current: dice })).toBe(13);
+  });
 });
 
 describe('expressions', () => {

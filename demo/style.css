@@ -399,7 +399,7 @@ button.quiet {
 }
 
 .tooltip .expression {
-  display: block;
+  display: grid;
   font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
   overflow-wrap: anywhere;
 }

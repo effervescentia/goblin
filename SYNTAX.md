@@ -291,6 +291,9 @@ table takes precedence for `$lib.…` refs. Native namespaces:
   and sums the `keep` highest — 5e's rolled scores are
   `$lib.dice.keep_highest(4, 6, 3)` (4d6, drop the lowest). It takes numbers,
   since inline `NdM` rolls to a sum before a call could see each die.
+  `max(die)` is the most a die can roll (`2d6` → 12) — 5e's level-1 hit
+  points are `$lib.dice.max(@.hit_die) + …`. It takes a die *field*, for the
+  same reason: inline dice roll before the call sees them.
 - `list`: `count(value, item)`, `has(value, item)` (1 or 0, for arithmetic),
   `size(value)` — reading choices back out of a list, or out of a table of
   `:param` choice records, where a record counts its `:value` and never its
@@ -321,6 +324,7 @@ table takes precedence for `$lib.…` refs. Native namespaces:
 floored: $lib.math.floor(2.9)                 # → 2
 smallest: $lib.math.min(3, 9)                 # → 3
 ability_roll: $lib.dice.keep_highest(4, 6, 3) # → 3..18
+best_damage: $lib.dice.max(#.damage)          # damage: 2d6 → 12
 athletics_picks: $lib.list.count(@.picks, 'athletics')
 ranking: $lib.record.rank(@.scores)           # { ash: 12, bree: 17 } → [bree, ash]
 doubles: "$lib.record.from(['ash'], #.doubled)" # → { ash: 24 }
