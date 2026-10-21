@@ -9,6 +9,7 @@ import {
   ADD_KEY,
   COLUMN_KEY,
   EVENTS_KEY,
+  LABEL_KEY,
   LINE_KEY,
   PARAM_VALUE_KEY,
   SET_KEY,
@@ -21,12 +22,14 @@ import {
   type InputEvent,
   isRollEvent,
   isWriteEvent,
+  type Part,
   parseDice,
   type RollEvent,
   type StateEvent,
   type WriteEvent,
 } from '@/inputs';
 import { Die, type RollFrame } from '@/nodes/die';
+import { debug } from '@/nodes/serialize';
 import { deepClone, getChild, sameValue } from '@/utils';
 import type { Location } from './locations';
 import type { Provenance } from './provenance';
@@ -44,6 +47,7 @@ interface LoggedWrite {
   /** The latest invoke to start before it was made. */
   phase?: InputEvent;
   rolled: boolean;
+  calculation?: Calculation;
   /** The recorded write whose value it reused. */
   replayed?: WriteEvent;
 }
@@ -57,6 +61,15 @@ interface Roll {
   version?: number;
   /** Already in this run's log (a field re-evaluated reads it again). */
   logged?: boolean;
+  /** The labelled expression that last used it. */
+  calculation?: Calculation;
+}
+
+/** A labelled expression being evaluated: its `formula`, and the `{ :label, :value }` parts its tags have
+ * evaluated so far (filled in as it runs, so a roll ahead of a tag still sees it). */
+export interface Calculation {
+  formula: string;
+  parts: Record<string, unknown>[];
 }
 
 /** A roll as the engine logged it, the first time this run used it. */
@@ -91,6 +104,18 @@ export interface WriteOptions {
   at?: Location;
   cause?: InputEvent;
   rolled?: boolean;
+  /** The labelled expression an assignment wrote; patch writes have none. */
+  calculation?: Calculation;
+}
+
+/** `calculation` as stream event fields, each part's value serialized like `data`. */
+function calculationFields(calculation: Calculation | undefined): { formula?: string; parts?: Part[] } {
+  if (calculation === undefined) return {};
+  const parts = calculation.parts.map((part) => ({
+    label: String(part[LABEL_KEY]),
+    value: debug(part[PARAM_VALUE_KEY]),
+  }));
+  return { formula: calculation.formula, parts };
 }
 
 function writeType(kind: string): WriteEvent['type'] {
@@ -141,6 +166,8 @@ export class Journal {
   /** Source names for the apply in progress (the patch, and the actor under it). */
   private applySource: string | undefined;
   private actorSource: string | undefined;
+  /** The innermost expression being evaluated, when it is labelled. */
+  private calculating: Calculation | undefined;
 
   constructor(private readonly provenance: Provenance) {}
 
@@ -186,6 +213,22 @@ export class Journal {
       return Die.within(frame, call);
     } finally {
       this.invoking = outer;
+    }
+  }
+
+  /** The labelled expression being evaluated, if the innermost one is. */
+  get calculation(): Calculation | undefined {
+    return this.calculating;
+  }
+
+  /** Run one expression's evaluation: rolls it makes cite `calculation` (none, for an unlabelled one). */
+  calculate<T>(calculation: Calculation | undefined, evaluate: () => T): T {
+    const outer = this.calculating;
+    this.calculating = calculation;
+    try {
+      return evaluate();
+    } finally {
+      this.calculating = outer;
     }
   }
 
@@ -235,10 +278,21 @@ export class Journal {
       at = this.writingAt,
       cause,
       rolled = false,
+      calculation,
     } = options;
     const event = entry(source, kind, value, at);
     this.seed(target, key, origin).push(event);
-    const logged: LoggedWrite = { seq: this.seq++, record: target, key, kind, event, cause, phase: this.phase, rolled };
+    const logged: LoggedWrite = {
+      seq: this.seq++,
+      record: target,
+      key,
+      kind,
+      event,
+      cause,
+      phase: this.phase,
+      rolled,
+      calculation,
+    };
     this.writeLog.push(logged);
     const replayed = cause !== undefined && this.recorded.length > 0 && this.replayInvokeWrite(logged);
     return replayed ? deepClone(logged.event[kind]) : value;
@@ -346,6 +400,8 @@ export class Journal {
       roll = { count, sides, faces: Die.fresh(count, sides) };
       rolls[n] = roll;
     }
+    // A field re-evaluated rolls again from its latest evaluation's parts.
+    roll.calculation = this.calculating;
     if (!roll.logged) {
       roll.logged = true;
       this.rollLog.push({ seq: this.seq++, path, roll, cause, phase: this.phase });
@@ -428,7 +484,7 @@ export class Journal {
       return node;
     };
     const writes = this.writeLog.flatMap((entry) => {
-      const { seq, record, key, kind, event, cause, phase } = entry;
+      const { seq, record, key, kind, event, cause, phase, calculation } = entry;
       const at = paths.get(record);
       const log = this.fieldEvents.get(record)?.get(key);
       const index = log?.indexOf(event) ?? -1;
@@ -452,6 +508,7 @@ export class Journal {
           ? this.rolledFields.get(record)?.has(key)
           : this.rolledFields.get(event)?.has(kind));
       if (rolled) write.rolled = true;
+      Object.assign(write, calculationFields(calculation));
       if (typeof printed[SOURCE_KEY] === 'string') write.source = printed[SOURCE_KEY];
       if (typeof printed[LINE_KEY] === 'number') write.line = printed[LINE_KEY];
       if (typeof printed[COLUMN_KEY] === 'number') write.column = printed[COLUMN_KEY];
@@ -464,7 +521,13 @@ export class Journal {
       cause,
       phase,
       version: roll.version,
-      event: { type: 'roll' as const, path, dice: `${roll.count}d${roll.sides}`, value: [...roll.faces] },
+      event: {
+        type: 'roll' as const,
+        path,
+        dice: `${roll.count}d${roll.sides}`,
+        value: [...roll.faces],
+        ...calculationFields(roll.calculation),
+      },
     }));
     return [...writes, ...rolls].sort((a, b) => a.seq - b.seq).map(({ seq: _, ...rest }) => rest);
   }

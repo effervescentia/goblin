@@ -2,9 +2,6 @@
 $if: "@.class == 'rogue'"
 
 '@.hit_die': d8
-'@.hit_points':
-  max: 8 + @.abilities.constitution.modifier
-  current: '@.hit_points.max'
 '@.proficiencies.weapon':
   - simple_weapons
   - finesse_or_light_martial_weapons

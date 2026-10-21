@@ -12,7 +12,7 @@
 'entry(ability, label)':
   start:
     :doc: Starting {label} score, filled in by the chosen ability score method.
-  base: .start + $lib.list.count(@.improvements, ability)
+  base: '[Initial](.start) + [Improvements]($lib.list.count(@.improvements, ability))'
   modifier: '#.modifier(.base)'
 
 # Point buy: 8, plus the points bought for it.

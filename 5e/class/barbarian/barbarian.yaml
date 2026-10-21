@@ -2,9 +2,6 @@
 $if: "@.class == 'barbarian'"
 
 '@.hit_die': d12
-'@.hit_points':
-  max: 12 + @.abilities.constitution.modifier
-  current: '@.hit_points.max'
 '@.proficiencies.weapon':
   - simple_weapons
   - martial_weapons

@@ -2,9 +2,6 @@
 $if: "@.class == 'ranger'"
 
 '@.hit_die': d10
-'@.hit_points':
-  max: 10 + @.abilities.constitution.modifier
-  current: '@.hit_points.max'
 '@.proficiencies.weapon':
   - simple_weapons
   - martial_weapons

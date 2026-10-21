@@ -2,9 +2,6 @@
 $if: "@.class == 'wizard'"
 
 '@.hit_die': d6
-'@.hit_points':
-  max: 6 + @.abilities.constitution.modifier
-  current: '@.hit_points.max'
 '@.proficiencies.weapon':
   - simple_weapons
 '@.proficiencies.saving_throws':
