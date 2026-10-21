@@ -595,15 +595,15 @@ interface JsonNodeProps {
 
 /**
  * One value in the tree: a record or array folds open to its entries, opening by default above depth `open`.
- * Without `metadata`, the node shows as its plain value, with its `:doc` as a tooltip.
+ * Without `metadata`, the node shows as its plain value, with its `:doc` as a tooltip on its key.
  */
 function JsonNode({ name, node, metadata, depth, open }: JsonNodeProps) {
   const value = metadata ? node : plainStep(node);
   const doc = metadata ? undefined : docOf(node);
-  const key = name === undefined ? null : <span class={doc ? 'key documented' : 'key'}>{JSON.stringify(name)}: </span>;
+  const key = name === undefined ? null : <JsonKey name={name} doc={doc} />;
   if (value === null || typeof value !== 'object') {
     return (
-      <div title={doc}>
+      <div>
         {key}
         <span class={`literal ${value === null ? 'null' : typeof value}`}>{JSON.stringify(value)}</span>
       </div>
@@ -616,7 +616,7 @@ function JsonNode({ name, node, metadata, depth, open }: JsonNodeProps) {
   const [start, end] = list ? ['[', ']'] : ['{', '}'];
   if (entries.length === 0) {
     return (
-      <div title={doc}>
+      <div>
         {key}
         {start}
         {end}
@@ -625,7 +625,7 @@ function JsonNode({ name, node, metadata, depth, open }: JsonNodeProps) {
   }
   return (
     <details open={depth < open}>
-      <summary title={doc}>
+      <summary>
         {key}
         {start}
         <span class="folded">
@@ -644,6 +644,26 @@ function JsonNode({ name, node, metadata, depth, open }: JsonNodeProps) {
       </div>
       {end}
     </details>
+  );
+}
+
+function JsonKey({ name, doc }: { name: string; doc?: string }) {
+  const key = <span class="key">{JSON.stringify(name)}</span>;
+  return (
+    <>
+      {doc ? (
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: focus shows the tooltip to keyboard users
+        <span class="history" tabIndex={0}>
+          {key}
+          <span class="tooltip" role="tooltip">
+            {doc}
+          </span>
+        </span>
+      ) : (
+        key
+      )}
+      {': '}
+    </>
   );
 }
 

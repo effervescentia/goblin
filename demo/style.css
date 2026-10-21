@@ -371,9 +371,9 @@ button.quiet {
   color: var(--accent);
 }
 
-.tree .documented {
-  text-decoration: underline dotted;
-  cursor: help;
+.tree .tooltip {
+  left: 0;
+  transform: none;
 }
 
 .tree .literal.number,
@@ -465,6 +465,10 @@ button.quiet {
 
 .session code {
   user-select: all;
+}
+
+.session + .views {
+  margin-left: 0;
 }
 
 .tooltip .expression {
