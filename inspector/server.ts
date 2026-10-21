@@ -2,7 +2,7 @@
  * Goblin inspector server (Bun-only): serves the UI and resolves entries
  * through the same path as the CLI, adding the flattened node list.
  *
- *   bun run ui            # http://localhost:3000
+ *   bun run inspector     # http://localhost:3000
  */
 import { resolve as resolvePath } from 'node:path';
 import z from 'zod';

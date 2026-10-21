@@ -11,7 +11,8 @@
     "check:unused": "knip",
     "format": "biome check --write --use-editorconfig true",
     "dev": "bun src/cli/cli.ts",
-    "ui": "PORT=1337 bun ui/server.ts",
+    "inspector": "PORT=1337 bun inspector/server.ts",
+    "demo": "bun demo/server.ts",
     "test": "vitest run",
     "build": "bun build --compile src/cli/cli.ts --outfile build/goblin && rm -f .*.bun-build"
   },
