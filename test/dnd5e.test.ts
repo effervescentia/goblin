@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { TEMPLATES } from '../demo/sheet';
 import { COMPANION_PARAMS } from './dnd5e.fixtures';
 
 // End-to-end over the real 5e/ documents (parsed by Bun, so shelled out like
@@ -726,6 +727,15 @@ describe('5e', () => {
     expect(labels['abilities.strength.bought']).toBe('Strength');
     expect(labels['abilities.charisma.bought']).toBe('Charisma');
     expect(labels['improvements.level_4']).toBe('Ability Score Improvement (level 4)');
+  });
+
+  it.each(TEMPLATES)('answers every choice from the $label template', ({ params }) => {
+    const args = Object.entries(params).flatMap(([path, value]) => [
+      '--param',
+      `${path}=${typeof value === 'string' ? value : JSON.stringify(value)}`,
+    ]);
+    const { data } = cli('5e/main.yaml', ...args) as { data: Record<string, unknown> };
+    expect(data).toMatchObject({ species: { ':value': params.species }, class: { ':value': params.class } });
   });
 
   it('rejects a fighting style outside the options', () => {

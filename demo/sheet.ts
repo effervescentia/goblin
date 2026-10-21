@@ -77,3 +77,53 @@ export function readParam(param: MissingParam, raw: (string | undefined)[]): unk
   const values = picks.map((pick) => options[Number(pick)]);
   return param.type === 'array' ? values : values[0];
 }
+
+/** The alias `aria`'s params go by. */
+const PARAMS = 'aria';
+
+export type Template = { label: string; params: Record<string, unknown> };
+
+/** Premade characters: an answer to every choice, by path under `PARAMS`. */
+export const TEMPLATES: Template[] = [
+  {
+    label: 'Dwarf Fighter',
+    params: {
+      name: 'Brom',
+      species: 'dwarf',
+      class: 'fighter',
+      background: 'acolyte',
+      'improvements.background': ['wisdom', 'wisdom', 'intelligence'],
+      ability_method: 'standard_array',
+      'abilities.strength.assigned': 15,
+      'abilities.dexterity.assigned': 10,
+      'abilities.constitution.assigned': 14,
+      'abilities.intelligence.assigned': 8,
+      'abilities.wisdom.assigned': 13,
+      'abilities.charisma.assigned': 12,
+      'features.fighting_style': 'defense',
+      'skills.trained': ['athletics', 'intimidation'],
+    },
+  },
+  {
+    label: 'Elf Ranger',
+    params: {
+      name: 'Elowen',
+      species: 'elf',
+      class: 'ranger',
+      background: 'acolyte',
+      'improvements.background': ['wisdom', 'wisdom', 'intelligence'],
+      ability_method: 'standard_array',
+      'abilities.strength.assigned': 12,
+      'abilities.dexterity.assigned': 15,
+      'abilities.constitution.assigned': 13,
+      'abilities.intelligence.assigned': 10,
+      'abilities.wisdom.assigned': 14,
+      'abilities.charisma.assigned': 8,
+      'skills.trained': ['perception', 'stealth', 'survival'],
+    },
+  },
+];
+
+/** A template's params as the inputs a `resolve` sends. */
+export const templateInputs = ({ params }: Template) =>
+  Object.entries(params).map(([path, value]) => ({ type: 'parameter' as const, path: `${PARAMS}.${path}`, value }));

@@ -100,6 +100,13 @@ main {
   gap: 16px;
 }
 
+.templates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
 .query > button {
   justify-self: start;
 }
