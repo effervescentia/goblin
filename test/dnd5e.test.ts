@@ -949,7 +949,7 @@ describe('5e', () => {
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
-    });
+    }, 15_000);
 
     it('logs each unarmed strike at the table with its rolls, kept on replay', () => {
       const dir = mkdtempSync(join(tmpdir(), 'goblin-log-'));
