@@ -31,3 +31,9 @@ export const RewindParamsSchema = z.object({ version: z.int().min(1) });
 
 /** A state to inspect: a stateless server's `in`, else the session head for `entry`. */
 export const InspectParamsSchema = z.object({ entry: z.string().optional(), in: z.unknown().optional() });
+
+/** An actor to export: from a stateless server's `in`, else the session head for `entry`. */
+export const ExportParamsSchema = InspectParamsSchema.extend({ actor: z.string().min(1) });
+
+/** An `--export` output to import into the actor at `path`, as one turn. */
+export const ImportParamsSchema = InspectParamsSchema.extend({ path: z.string().min(1), export: z.unknown() });

@@ -3,7 +3,7 @@
  * Goblin CLI — resolves the application state and prints it as JSON.
  *
  * Usage:
- *   goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--stateless] [--session id] [--history n] [--format cbor|json] [--port n] [--help]
+ *   goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--export actor] [--import path=export.json|-] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--stateless] [--session id] [--history n] [--format cbor|json] [--port n] [--help]
  *
  * With no entry file, `.goblin.yaml` in the current directory is required.
  * An entry containing a directory (`examples/foo.yaml`) is resolved with
@@ -15,10 +15,18 @@ import { createHash } from 'node:crypto';
 import { match, P } from 'ts-pattern';
 import z from 'zod';
 import { GoblinEngine } from '@/core/engine';
+import { exportActor, locateActor } from '@/core/exporter';
 import type { EngineEvent } from '@/core/journal';
-import { StateEventSchema, VersionSchema } from '@/dtos';
+import { ActorExportSchema, StateEventSchema, VersionSchema } from '@/dtos';
 import { RpcError } from '@/errors';
-import { type InputEvent, isInputEvent, type StateEvent } from '@/inputs';
+import {
+  type ActorExport,
+  type ActorSet,
+  type ImportValue,
+  type InputEvent,
+  isInputEvent,
+  type StateEvent,
+} from '@/inputs';
 import { type InspectNode, inspect } from '@/inspect';
 import { print } from '@/nodes/serialize';
 import { type Format, FormatSchema } from '@/server/dtos';
@@ -27,9 +35,11 @@ import { INVALID_PARAMS, type Methods } from '@/server/rpc.server';
 import { Session } from '@/server/session';
 import { StdioServer } from '@/server/stdio.server';
 import { WebSocketServer } from '@/server/websocket.server';
-import { DEFAULT_PORT, INVOKE_ALONE, ONE_SHOT, STATEFUL_IN, USAGE } from './constants';
+import { DEFAULT_PORT, EXPORT_ALONE, IMPORT_ALONE, INVOKE_ALONE, ONE_SHOT, STATEFUL_IN, USAGE } from './constants';
 import {
   ConfigSchema,
+  ExportParamsSchema,
+  ImportParamsSchema,
   InspectParamsSchema,
   ResolveParamsSchema,
   RewindParamsSchema,
@@ -56,6 +66,10 @@ export interface CliArgs {
   port?: number;
   in?: string;
   out?: string;
+  /** Print this actor's state (a namespace or tree path) as an export instead of the envelope. */
+  export?: string;
+  /** Import the export in `file` (- for stdin) into the actor at `path`, as this run's only input. */
+  import?: { path: string; file: string };
   /** Every --param / --set / --invoke in the order given; the run stamps their version. */
   events: Omit<InputEvent, 'version'>[];
 }
@@ -137,6 +151,18 @@ export function parseArgs(argv: string[]): CliArgs {
       if (path === undefined || (path.startsWith('-') && path !== '-'))
         throw new Error(`--in expects a file path or -, got: ${path ?? '(nothing)'}`);
       args.in = path;
+    } else if (arg === '--export') {
+      const actor = argv[++i];
+      if (actor === undefined || actor.startsWith('-'))
+        throw new Error(`--export expects an actor (a namespace or path), got: ${actor ?? '(nothing)'}`);
+      args.export = actor;
+    } else if (arg === '--import') {
+      if (args.import !== undefined) throw new Error('--import may be given once per run');
+      const pair = argv[++i];
+      const eq = pair?.indexOf('=') ?? -1;
+      if (pair === undefined || eq <= 0 || eq === pair.length - 1)
+        throw new Error(`--import expects path=export.json, got: ${pair ?? '(nothing)'}`);
+      args.import = { path: pair.slice(0, eq), file: pair.slice(eq + 1) };
     } else if (arg === '--param' || arg === '--set') {
       const [path, value] = parseKeyValue(arg, argv[++i]);
       args.events.push({ type: arg === '--param' ? 'parameter' : 'override', path, value });
@@ -152,6 +178,9 @@ export function parseArgs(argv: string[]): CliArgs {
       throw new Error(`unexpected argument: ${arg}`);
     }
   }
+  if (args.import !== undefined && args.events.length > 0) throw new Error(IMPORT_ALONE);
+  if (args.export !== undefined && (args.events.length > 0 || args.import !== undefined)) throw new Error(EXPORT_ALONE);
+  if (args.import?.file === '-' && args.in === '-') throw new Error('--in and --import cannot both read stdin');
   if (args.server && oneShot.length > 0) throw new Error(`--server cannot be combined with ${oneShot[0]}`);
   if (args.port !== undefined && args.server !== 'http' && args.server !== 'websocket')
     throw new Error('--port needs --server http or websocket');
@@ -223,7 +252,7 @@ export function rehydrate(state: unknown): { version: number; events: StateEvent
   // Validate only: the raw events keep their key order, which the hash below covers.
   if (!z.array(StateEventSchema).safeParse(events).success)
     throw new Error(
-      '--in events must be { version, type, path, value } objects of type parameter, override, invoke, set, add, subtract or roll (with dice)',
+      '--in events must be { version, type, path, value } objects of type parameter, override, invoke, import, set, add, subtract or roll (with dice)',
     );
   // Stringify drops an undefined version or result, so states without them still verify.
   const body = stable ? { version, events, result, data } : { version, events, query };
@@ -292,12 +321,20 @@ export async function run(
   // An invoke acts on a settled sheet: a saved one, or an entry that needs no input.
   const invoked = inputs.some((event) => event.type === 'invoke');
   if (invoked && inputs.length > 1) throw new Error(INVOKE_ALONE);
+  const imports = inputs.filter((event) => event.type === 'import');
+  if (imports.length > 0 && inputs.length > 1) throw new Error(IMPORT_ALONE);
   if (invoked && !prior.stable) throw new Error('--invoke needs a stable state: --in still asks for params');
   if (invoked && saved === undefined && !('data' in (await resolveAppState(cwd, entry))))
     throw new Error('--invoke needs a stable state: the entry asks for params or fails validation');
   const version = prior.version + 1;
   const events: StateEvent[] = [...prior.events, ...inputs.map((event) => ({ version, ...event }))];
   const { state, actor, engine } = await resolveApp(cwd, entry, events);
+  for (const { path, value } of imports) {
+    const { application } = value as ImportValue;
+    if (application !== engine.application())
+      throw new Error(`--import: the export is from another application (${application}), not ${engine.application()}`);
+    if (locateActor(engine, actor, path) === undefined) throw new Error(`--import: no actor at ${path}`);
+  }
   // Only this run's invoke answers with a result; earlier ones just replay their writes.
   const show = stripMetadata ? print : (value: unknown) => value;
   const shown =
@@ -313,6 +350,27 @@ export async function run(
   return withHash(shown, stream, version);
 }
 
+/** Export `actor` (a namespace or tree path) from `prior` replayed, or from the bare entry; it must resolve to `{ data }`. */
+export async function exportState(cwd: string, { entry, prior, actor }: ExportRequest): Promise<ActorExport> {
+  const { events } = prior === undefined ? { events: [] } : rehydrate(prior);
+  const { state, actor: root, engine } = await resolveApp(cwd, entry, events);
+  if (!('data' in state)) throw new Error('--export needs a stable state: it asks for params or fails validation');
+  const at = locateActor(engine, root, actor);
+  if (at === undefined) throw new Error(`--export: no actor ${actor}`);
+  const body = { application: engine.application(), actor, events: exportActor(engine, root, state.data, events, at) };
+  return { hash: hashOf(body), ...body };
+}
+
+/** The `import` event value an `--export` output carries, once its hash checks out. */
+export function readExport(payload: unknown): ImportValue {
+  const parsed = ActorExportSchema.safeParse(payload);
+  if (!parsed.success) throw new Error(`--import expects an --export output\n${z.prettifyError(parsed.error)}`);
+  const { hash, application, actor, events } = parsed.data;
+  if (hash !== undefined && hash !== hashOf({ application, actor, events }))
+    throw new Error('--import export hash does not match its contents');
+  return { application, events: events as ActorSet[] };
+}
+
 /** `inspect()` of `prior` (a saved envelope) replayed, or of the bare entry; none while it asks or fails validation. */
 export async function inspectState(cwd: string, entry?: string, prior?: unknown): Promise<InspectNode[]> {
   const { events } = prior === undefined ? { events: [] } : rehydrate(prior);
@@ -326,6 +384,12 @@ export interface RunRequest {
   prior?: unknown;
   inputs: Omit<InputEvent, 'version'>[];
   stripMetadata?: boolean;
+}
+
+export interface ExportRequest {
+  entry?: string;
+  prior?: unknown;
+  actor: string;
 }
 
 const RESOLVE_PARAMS = 'resolve expects { entry?, in?, inputs?: [{ type, path, value }], stripMetadata? }';
@@ -354,6 +418,23 @@ export const serverMethods = (cwd: string, session?: Session): Methods => ({
     if (session === undefined) return inspectState(cwd, entry, prior);
     if (prior !== undefined) throw new RpcError(INVALID_PARAMS, STATEFUL_IN);
     return inspectState(cwd, entry, await session.head(entry));
+  },
+  export: async (params) => {
+    const parsed = ExportParamsSchema.safeParse(params);
+    if (!parsed.success) throw new RpcError(INVALID_PARAMS, 'export expects { entry?, in?, actor }');
+    const { entry, in: prior, actor } = parsed.data;
+    if (session === undefined) return exportState(cwd, { entry, prior, actor });
+    if (prior !== undefined) throw new RpcError(INVALID_PARAMS, STATEFUL_IN);
+    return exportState(cwd, { entry, prior: await session.head(entry), actor });
+  },
+  import: (params) => {
+    const parsed = ImportParamsSchema.safeParse(params);
+    if (!parsed.success) throw new RpcError(INVALID_PARAMS, 'import expects { entry?, in?, path, export }');
+    const { entry, in: prior, path, export: payload } = parsed.data;
+    const request: RunRequest = { entry, prior, inputs: [{ type: 'import', path, value: readExport(payload) }] };
+    if (session === undefined) return run(cwd, request);
+    if (prior !== undefined) throw new RpcError(INVALID_PARAMS, STATEFUL_IN);
+    return session.turn(request, (turn) => run(cwd, turn));
   },
   ...(session === undefined
     ? {}
@@ -394,16 +475,17 @@ if (import.meta.main) {
       const server = Bun.serve({ hostname: '127.0.0.1', port: args.port ?? DEFAULT_PORT, fetch, websocket });
       console.error(`listening on ${server.url.href.replace(/^http/, 'ws')}`);
     } else {
-      const prior =
-        args.in === undefined
-          ? undefined
-          : JSON.parse(args.in === '-' ? await Bun.stdin.text() : await Bun.file(args.in).text());
-      const out = await run(process.cwd(), {
-        entry: args.entry,
-        prior,
-        inputs: args.events,
-        stripMetadata: args.stripMetadata,
-      });
+      const read = async (file: string) =>
+        JSON.parse(file === '-' ? await Bun.stdin.text() : await Bun.file(file).text());
+      const prior = args.in === undefined ? undefined : await read(args.in);
+      const inputs =
+        args.import === undefined
+          ? args.events
+          : [{ type: 'import' as const, path: args.import.path, value: readExport(await read(args.import.file)) }];
+      const out =
+        args.export === undefined
+          ? await run(process.cwd(), { entry: args.entry, prior, inputs, stripMetadata: args.stripMetadata })
+          : await exportState(process.cwd(), { entry: args.entry, prior, actor: args.export });
       const json = `${JSON.stringify(out, null, args.compact ? 0 : 2)}\n`;
       // A state that resolves or asks can be saved; Bun.write replaces the file.
       if (args.out !== undefined && !(out !== null && typeof out === 'object' && 'errors' in out))

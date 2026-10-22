@@ -1,5 +1,5 @@
 import z from 'zod';
-import type { InspectParamsSchema, ResolveParamsSchema } from '@/cli/dtos';
+import type { ExportParamsSchema, ImportParamsSchema, InspectParamsSchema, ResolveParamsSchema } from '@/cli/dtos';
 import type { StateEvent } from '@/inputs';
 import type { MissingParam } from '@/nodes/record';
 import type { Format } from '@/server/dtos';
@@ -28,6 +28,14 @@ export type Answer = Envelope & Partial<Turn>;
 
 /** The `inspect` params: an `in` state for a `--stateless` server; a stateful one inspects its head. */
 export type InspectParams = z.input<typeof InspectParamsSchema>;
+
+/** The `export` params: the actor (a namespace or tree path), and an `in` state for a `--stateless` server. */
+export type ExportParams = z.input<typeof ExportParamsSchema>;
+
+export type { ActorExport } from '@/inputs';
+
+/** The `import` params: an `export` answer, the actor `path` it lands in, and an `in` state for a `--stateless` server. */
+export type ImportParams = z.input<typeof ImportParamsSchema>;
 
 /** What `rewind` answers: the version the session's head is now. */
 export type Rewound = { version: number; sessionID: string };

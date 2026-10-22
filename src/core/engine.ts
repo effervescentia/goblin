@@ -38,8 +38,17 @@ import {
   VALIDATE_KEY,
   VALUE_KEY,
 } from '@/constants';
-import { type InputEvent, isInputEvent, isWriteEvent, latest, nest, type StateEvent } from '@/inputs';
 import { Calculation } from '@/nodes/calculation';
+import {
+  type InputEvent,
+  isInputEvent,
+  isUnpacked,
+  isWriteEvent,
+  latest,
+  nest,
+  type StateEvent,
+  unpackImports,
+} from '@/inputs';
 import { Die, DieNode } from '@/nodes/die';
 import { ExpressionNode } from '@/nodes/expression';
 import { FunctionNode } from '@/nodes/function';
@@ -119,6 +128,11 @@ export class GoblinEngine {
   /** `$tmpl('other.yaml')` helper + any registered template loader. */
   loadTemplate(file: string): Promise<unknown> {
     return this.registry.loadTemplate(file);
+  }
+
+  /** A content hash of every goblin file loaded: what an exported actor must be imported into. */
+  application(): string {
+    return this.registry.application();
   }
 
   // -- reference resolution -------------------------------------------------
@@ -581,7 +595,8 @@ export class GoblinEngine {
    */
   applyOverrides(actorRaw: unknown, inputs: readonly InputEvent[]): void {
     this.journal.asSource(OVERRIDE_SOURCE, actorRaw, () => {
-      for (const { path: key, value, version } of latest(inputs, 'override')) {
+      for (const event of latest(inputs, 'override')) {
+        const { path: key, value, version } = event;
         const normalized = /^[.@#$]/.test(key) ? key : `@.${key}`;
         const { root, path } = parseRef(normalized);
         if (path.length === 0) continue;
@@ -592,6 +607,7 @@ export class GoblinEngine {
         if (crossesScalar(base, path)) continue;
         const existing = getPath(base, path);
         if (existing !== null && typeof existing === 'object' && PARAM_KEY in (existing as Record<string, unknown>)) {
+          if (isUnpacked(event)) continue;
           const record = existing as Record<string, unknown>;
           const type = record[TYPE_KEY];
           if (typeof type === 'string' && type) RecordNode.checkParamType(type, value, path.join('.'));
@@ -628,7 +644,7 @@ export class GoblinEngine {
     actorRaw: unknown,
     events: StateEvent[] = [],
   ): { data: unknown; result?: unknown } | { query: MissingParam[] } {
-    const inputs = events.filter(isInputEvent);
+    const inputs = unpackImports(events.filter(isInputEvent));
     // Actors an invoke wrote in (`$.party[name] = $tmpl(…)`) declare their
     // namespaces through the recorded writes.
     const written = events

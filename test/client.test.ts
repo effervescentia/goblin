@@ -99,6 +99,63 @@ describe.each(TRANSPORTS.flatMap((transport) => FORMATS.map((format) => [transpo
   },
 );
 
+describe('createClient exporting and importing an actor', () => {
+  const actors = 'examples/16-actor-namespaces.yaml';
+  const named = [
+    { type: 'parameter', path: 'party.scout.name', value: 'Sam' },
+    { type: 'parameter', path: 'bree.name', value: 'Bree' },
+    { type: 'override', path: 'party.scout.gold', value: 99 },
+  ] as const;
+
+  it('exports from the session head and imports as a logged turn, like --export and --import', async () => {
+    const client = await createClient({ transport: 'stdio', spawn });
+    try {
+      const { previous: _, sessionID, ...settled } = await client.resolve({ entry: actors, inputs: [...named] });
+      const exported = await client.export({ entry: actors, actor: 'party.scout' });
+      const state = join(home, `${sessionID}-state.json`);
+      writeFileSync(state, JSON.stringify(settled));
+      expect(exported).toEqual(cli(actors, '--in', state, '--export', 'party.scout'));
+      expect(exported.events).toEqual([
+        { type: 'set', path: 'gold', value: 99 },
+        { type: 'set', path: 'name', value: 'Sam' },
+      ]);
+
+      const { previous, ...imported } = await client.import({ entry: actors, path: 'bree', export: exported });
+      expect(previous).toBe(1);
+      const file = join(home, `${sessionID}-export.json`);
+      writeFileSync(file, JSON.stringify(exported));
+      expect({ ...imported, sessionID: undefined }).toEqual({
+        ...cli(actors, '--in', state, '--import', `bree=${file}`),
+        sessionID: undefined,
+      });
+      expect(JSON.parse(readFileSync(join(sessionDir(String(sessionID)), 'manifest.json'), 'utf8'))).toMatchObject({
+        version: 2,
+      });
+      await expect(client.export({ entry: actors, actor: 'nobody' })).rejects.toMatchObject({ code: -32000 });
+      await expect(client.import({ entry: actors, path: 'bree', export: { data: {} } })).rejects.toMatchObject({
+        code: -32000,
+      });
+      await expect(client.export({ entry: actors, in: settled, actor: 'bree' })).rejects.toMatchObject({
+        code: -32602,
+      });
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('exports from and imports into an `in` state with --stateless', async () => {
+    const client = await createClient({ transport: 'stdio', spawn: stateless });
+    try {
+      const settled = await client.resolve({ entry: actors, inputs: [...named] });
+      const exported = await client.export({ entry: actors, in: settled, actor: 'party.scout' });
+      const imported = await client.import({ entry: actors, in: settled, path: 'bree', export: exported });
+      expect(imported).toMatchObject({ version: 2, data: { party: { guide: { name: { ':value': 'Sam' } } } } });
+    } finally {
+      await client.close();
+    }
+  });
+});
+
 describe('createClient resuming a session', () => {
   it("continues a closed server's session with --session", async () => {
     const first = await createClient({ transport: 'stdio', spawn });
