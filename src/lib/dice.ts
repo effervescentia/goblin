@@ -10,6 +10,8 @@ export const DICE_LIB: Record<string, (...args: never[]) => number> = {
       .sort((a, b) => b - a)
       .slice(0, keep)
       .reduce((total, face) => total + face, 0),
+  /** Roll a die field (`d4` → 1..4), for when it stands alone — in a label, say — where it would stay a spec. */
+  roll: (die: Die) => die.roll(),
   /** The most `die` can roll, every face its top (`2d6` → 12). Give it a die field, not inline dice, which roll first. */
   max: (die: Die) => die.count * die.sides,
 };

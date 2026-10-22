@@ -6,6 +6,7 @@ smallest: $lib.math.min(3, 9) # → 3
 ability_roll: $lib.dice.keep_highest(4, 6, 3) # 4d6 drop lowest → 3..18
 damage: 2d6
 best_damage: $lib.dice.max(#.damage) # a die field's highest roll → 12
+rolled_damage: $lib.dice.roll(#.damage) # a die field rolled where it would stay a spec → 2..12
 
 # `list` reads choices back out of a table of `:param` picks — what was
 # taken, never the `:options` on offer.
@@ -22,6 +23,8 @@ picks:
     :default: athletics
 athletics_picks: $lib.list.count(@.picks, 'athletics') # → 2
 picks_made: $lib.list.size(@.picks) # → 2
+rows: [{ name: ash }, { name: bree }]
+row_count: $lib.list.length(@.rows) # items in the list, each record once → 2
 trained_in_stealth: $lib.list.has(@.picks, 'stealth') # → 0
 
 # `set` treats lists as sets: no repeats, first appearance first.
@@ -37,6 +40,7 @@ picked_athletics: $lib.set.subset(['athletics'], @.picks) # → 1
 # named by its ref, and calls it with each key.
 scores: { ash: 12, bree: 17, cade: 9 }
 names: $lib.record.keys(@.scores) # → [ash, bree, cade]
+values: $lib.record.values(@.scores) # → [12, 17, 9]
 ranking: $lib.record.rank(@.scores) # → [bree, ash, cade]
 # Later records break ties: ash and dov both scored 12.
 rivals: { ash: 12, dov: 12 }

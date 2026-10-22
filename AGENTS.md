@@ -90,7 +90,7 @@ apart. Treat a missing spec update as an incomplete change.
 - `bun run demo` serves a character sheet (`demo/`, Bun-only) at localhost:1338
   for `aria` in `5e/main.yaml`: `demo/server.ts` spawns a stateful
   `--server websocket`, and the page (Preact) talks to it only through `goblin/client`,
-  answering `{ query }` with form inputs and invoking rests and actions. Hovering a value shows
+  answering `{ query }` with form inputs, invoking rests and actions, and listing the table's `log` (attacks, fights starting, initiative), each roll's formula on hover, in a right-hand panel. Hovering a value shows
   its expression (from the `inspect` method) and its `:events`, minus an empty first slot (only once the Events checkbox in the header is ticked).
   Reading the resolved tree (`:value`, `:label`) lives in `demo/sheet.ts`, pure.
 - Engine inputs are the same `InputEvent` stream the CLI saves (`src/inputs.ts`):
@@ -101,6 +101,12 @@ apart. Treat a missing spec update as an incomplete change.
   property access in expression strings.
 - Keep test fixtures in `src/core/engine.test.ts` runtime-agnostic by seeding
   `engine.docs` directly instead of using `loadFile`.
+
+- Every function the demo's character sheet can invoke (actions, rests, combat
+  controls, …) appends an entry to the root `log` — `$.log += [{ actor: @.name,
+  action: '<key>', … }]` (no `actor` for table events) — with rolled values
+  labelled (`[d20](1d20) + [STR](…)`) so the entry keeps their formula for the
+  log panel's tooltip. A new one without its log entry is incomplete.
 
 ## Code layout
 

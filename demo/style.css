@@ -308,6 +308,77 @@ button.quiet {
   border-top: 1px solid var(--line);
 }
 
+/* The sheet takes what's left; the log sits on the right edge and stays in view while it scrolls. */
+main.with-log {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  max-width: none;
+  padding: 0;
+}
+
+main.with-log .sheet {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+}
+
+.log-panel {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 24px 16px;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+}
+
+/* The panel scrolls, which would clip an absolute tooltip; fixed ones escape it, placed by `placeTooltip` in app.tsx. */
+.log-panel .tooltip {
+  position: fixed;
+  top: var(--tip-top, auto);
+  bottom: var(--tip-bottom, auto);
+  right: var(--tip-right, 8px);
+  left: auto;
+  transform: none;
+}
+
+@media (max-width: 900px) {
+  main.with-log {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .log-panel {
+    position: static;
+    height: auto;
+    border-left: none;
+    border-top: 1px solid var(--line);
+  }
+}
+
+.log {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.log .rolled {
+  display: flex;
+  gap: 8px;
+}
+
+.log li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  padding: 4px 0;
+  border-top: 1px solid var(--line);
+}
+
 .tags {
   display: flex;
   flex-wrap: wrap;

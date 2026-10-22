@@ -10,3 +10,6 @@ attack: '[Proficiency](#.proficiency) + [Strength](#.strength)' # → 4
 # → 1d8 rolled, plus 1; its `roll` event carries formula "Weapon + Strength" and both parts.
 damage: '[Weapon](1d8) + [Strength](#.strength)'
 touch: '#.armor_class - #.dexterity' # → 10: reads through the label
+# `{ref}` in a label reads that ref: the formula reads "d8 + Strength", the part is labelled d8.
+weapon_die: d8
+weapon_damage: '[{#.weapon_die}]($lib.dice.roll(#.weapon_die)) + [Strength](#.strength)'

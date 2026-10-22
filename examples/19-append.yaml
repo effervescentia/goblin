@@ -1,0 +1,12 @@
+# Appending: `+=` on a field holding a list appends the right side's items,
+# filed as an `:add` of them. Invoke `strike.roll` to log a strike; its labelled
+# values keep their formula: attack → { :value, :formula: "d20 + STR", :parts }.
+
+$actor: Brawler
+
+strength: 2
+log: [] # → [{ action: 'strike', attack: { :value: 3..22, … }, damage: { :value: 3..6, … } }, …] after rolls
+
+strike:
+  die: d4
+  'roll()': "@.log += [{ action: 'strike', attack: [d20](1d20) + [STR](@.strength), damage: [{.die}]($lib.dice.roll(.die)) + [STR](@.strength) }]"

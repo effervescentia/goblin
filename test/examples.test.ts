@@ -199,9 +199,11 @@ describe('examples', () => {
     const state = cli('examples/09-stdlib.yaml', '--strip-metadata') as {
       data: Record<string, unknown>;
     };
-    const { ability_roll, ...rest } = state.data;
+    const { ability_roll, rolled_damage, ...rest } = state.data;
     expect(ability_roll).toBeGreaterThanOrEqual(3);
     expect(ability_roll).toBeLessThanOrEqual(18);
+    expect(rolled_damage).toBeGreaterThanOrEqual(2);
+    expect(rolled_damage).toBeLessThanOrEqual(12);
     expect(rest).toEqual({
       floored: 2,
       smallest: 3,
@@ -210,6 +212,8 @@ describe('examples', () => {
       picks: { first: 'athletics', second: 'athletics' },
       athletics_picks: 2,
       picks_made: 2,
+      rows: [{ name: 'ash' }, { name: 'bree' }],
+      row_count: 2,
       trained_in_stealth: 0,
       melee: ['athletics', 'intimidation'],
       scouting: ['athletics', 'perception', 'survival'],
@@ -220,6 +224,7 @@ describe('examples', () => {
       picked_athletics: 1,
       scores: { ash: 12, bree: 17, cade: 9 },
       names: ['ash', 'bree', 'cade'],
+      values: [12, 17, 9],
       ranking: ['bree', 'ash', 'cade'],
       rivals: { ash: 12, dov: 12 },
       speed: { ash: 2, dov: 5 },

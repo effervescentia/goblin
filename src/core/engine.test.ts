@@ -409,6 +409,147 @@ describe('wildcards', () => {
     });
   });
 
+  it('appends with `+=` on a list, filing the items as an `:add`', () => {
+    const engine = new GoblinEngine('.');
+    engine.register('log.yaml', {
+      log: [],
+      'strike()': "@.log += [{ action: 'strike', damage: 1d1 + 2 }]",
+    });
+    const doc = engine.docs.get('log.yaml') as { log: unknown[] };
+    (engine.evaluateDoc('log.yaml') as { strike: () => void }).strike();
+    (engine.evaluateDoc('log.yaml') as { strike: () => void }).strike();
+    const entry = { action: 'strike', damage: 3 };
+    expect(doc.log).toEqual([entry, entry]);
+    const out = engine.evaluateDoc('log.yaml') as { log: unknown };
+    expect(out.log).toEqual({
+      ':value': [entry, entry],
+      ':events': [
+        { ':source': 'log.yaml', ':set': [] },
+        { ':source': 'log.yaml', ':add': [entry] },
+        { ':source': 'log.yaml', ':add': [entry] },
+      ],
+    });
+  });
+
+  it("writes through `$` onto the entry's own top-level field, from a nested actor", () => {
+    const engine = new GoblinEngine('.');
+    engine.register('table.yaml', { log: [], party: { ash: "$tmpl('hero.yaml', 'ash')" } });
+    engine.register('hero.yaml', { $actor: 'Hero', 'act()': "$.log += ['ash acts']" });
+    const state = engine.resolve('table.yaml', [invoke('party.ash.act', [], 1), invoke('party.ash.act', [], 2)]) as {
+      data: { log: unknown };
+    };
+    expect(state.data.log).toEqual({
+      ':value': ['ash acts', 'ash acts'],
+      ':events': [
+        { ':source': 'table.yaml', ':set': [] },
+        { ':source': 'hero.yaml', ':add': ['ash acts'] },
+        { ':source': 'hero.yaml', ':add': ['ash acts'] },
+      ],
+    });
+  });
+
+  it('keeps the formula of a labelled value in a function body that is an object literal', () => {
+    const engine = new GoblinEngine('.');
+    engine.register('hero.yaml', { bonus: 2, 'entry()': '{ roll: [d20](1d1) + [Bonus](#.bonus) }' });
+    const entry = (engine.evaluateDoc('hero.yaml') as { entry: () => unknown }).entry();
+    expect(entry).toEqual({
+      roll: {
+        ':value': 3,
+        ':formula': 'd20 + Bonus',
+        ':parts': [
+          { ':label': 'd20', ':value': 1 },
+          { ':label': 'Bonus', ':value': 2 },
+        ],
+      },
+    });
+  });
+
+  it("fills a label's `{ref}` with what it reads, in the field's formula and parts", () => {
+    const engine = new GoblinEngine('.');
+    engine.register('hero.yaml', { weapon: 'longsword', bonus: 2, attack: '[{#.weapon}](#.bonus) + 1' });
+    const out = engine.evaluateDoc('hero.yaml') as { attack: unknown };
+    expect(out.attack).toEqual({
+      ':value': 3,
+      ':formula': 'longsword + 1',
+      ':parts': [{ ':label': 'longsword', ':value': 2 }],
+    });
+  });
+
+  it('keeps the formula and parts of a labelled object-literal value', () => {
+    const engine = new GoblinEngine('.');
+    engine.register('log.yaml', {
+      str: 3,
+      die: 'd1',
+      log: [],
+      'strike()':
+        "@.log += [{ action: 'strike', attack: [d20](1d1 + 9) + [STR](@.str), damage: [{@.die}]($lib.dice.roll(@.die)) + 2, plain: 1 + 1 }]",
+    });
+    const doc = engine.docs.get('log.yaml') as { log: unknown[] };
+    (engine.evaluateDoc('log.yaml') as { strike: () => void }).strike();
+    expect(doc.log).toEqual([
+      {
+        action: 'strike',
+        attack: {
+          ':value': 13,
+          ':formula': 'd20 + STR',
+          ':parts': [
+            { ':label': 'd20', ':value': 10 },
+            { ':label': 'STR', ':value': 3 },
+          ],
+        },
+        // `{@.die}` in a label reads the die it rolled.
+        damage: { ':value': 3, ':formula': 'd1 + 2', ':parts': [{ ':label': 'd1', ':value': 1 }] },
+        plain: 2,
+      },
+    ]);
+  });
+
+  it('keeps a local for one call, without writing state or logging it', () => {
+    const engine = new GoblinEngine('.');
+    engine.register('hero.yaml', {
+      hp: 3,
+      'heal(bonus)': 'amount = 4 + bonus\namount += 1\nbonus = 0\n@.hp += amount\namount * 10 + bonus',
+    });
+    const doc = engine.docs.get('hero.yaml') as Record<string, unknown>;
+    const heal = (engine.evaluateDoc('hero.yaml') as { heal: (bonus: number) => unknown }).heal;
+    expect(heal(2)).toBe(70);
+    expect(doc.hp).toBe(10);
+    expect(doc).not.toHaveProperty('amount');
+    expect((engine.evaluateDoc('hero.yaml') as { hp: unknown }).hp).toEqual({
+      ':value': 10,
+      ':events': [
+        { ':source': 'hero.yaml', ':set': 3 },
+        { ':source': 'hero.yaml', ':add': 7 },
+      ],
+    });
+  });
+
+  it("keeps a labelled local's formula: a number in arithmetic, the record once written", () => {
+    const engine = new GoblinEngine('.');
+    engine.register('hero.yaml', {
+      bonus: 2,
+      hp: 0,
+      log: [],
+      'heal()': 'roll = [d1](1d1) + [Bonus](@.bonus)\n@.hp += roll * 2\n@.log += [{ roll: roll, big: roll > 2 }]',
+    });
+    const doc = engine.docs.get('hero.yaml') as Record<string, unknown>;
+    (engine.evaluateDoc('hero.yaml') as { heal: () => void }).heal();
+    expect(doc.hp).toBe(6);
+    expect(doc.log).toEqual([
+      {
+        roll: {
+          ':value': 3,
+          ':formula': 'd1 + Bonus',
+          ':parts': [
+            { ':label': 'd1', ':value': 1 },
+            { ':label': 'Bonus', ':value': 2 },
+          ],
+        },
+        big: true,
+      },
+    ]);
+  });
+
   it('adds and takes with `+=` / `-=`, per match on a wildcard', () => {
     const engine = new GoblinEngine('.');
     const doc = pools();

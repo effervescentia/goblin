@@ -322,15 +322,15 @@ describe('5e', () => {
       ':value': 2,
       ':events': [
         // Each write cites the key behind it: `attacks: 1`, then `'+@.attacks'`.
-        { ':source': 'character.yaml', ':line': 53, ':column': 1, ':set': 1 },
-        { ':source': 'class/fighter/fighter.yaml', ':line': 110, ':column': 5, ':add': 1 },
+        { ':source': 'character.yaml', ':line': 55, ':column': 1, ':set': 1 },
+        { ':source': 'class/fighter/fighter.yaml', ':line': 114, ':column': 5, ':add': 1 },
       ],
     });
     // A `+key` addition is itself a change: the feature records who added it.
     expect(data.data.features.extra_attack).toEqual({
       ':label': 'Extra Attack',
       ':doc': 'Strike twice whenever you take the Attack action.',
-      ':events': [{ ':source': 'class/fighter/fighter.yaml', ':line': 106, ':column': 3, ':add': 'extra_attack' }],
+      ':events': [{ ':source': 'class/fighter/fighter.yaml', ':line': 110, ':column': 3, ':add': 'extra_attack' }],
     });
     expect(data.data.features.fighting_style).toEqual({
       ':label': 'Fighting Style',
@@ -829,7 +829,7 @@ describe('5e', () => {
     expect(data.data.level).toEqual({
       ':value': 5,
       ':events': [
-        { ':source': 'character.yaml', ':line': 15, ':column': 1, ':set': 1 },
+        { ':source': 'character.yaml', ':line': 17, ':column': 1, ':set': 1 },
         // An override has no document line to cite.
         { ':source': 'override', ':version': 1, ':set': 5 },
       ],
@@ -888,7 +888,10 @@ describe('5e', () => {
         }
         expect(refused).toContain('param options mismatch: members[0] expected one of ["aria", "bram"], got "zed"');
 
-        const fight = turn(state, '--param', 'combat.members=["bram","aria"]').data?.combat as Combat;
+        // Members are in, but there's no turn order until initiative is rolled.
+        const waiting = turn(state, '--param', 'combat.members=["bram","aria"]').data?.combat as Combat;
+        expect([waiting.initiative, waiting.order]).toEqual([{}, []]);
+        const fight = turn(state, '--invoke', 'combat.roll_initiative()').data?.combat as Combat;
         expect(fight.members[':value']).toEqual(['bram', 'aria']);
         // d20 + dexterity: aria's +2, bram's +1.
         expect(fight.initiative.aria).toBeGreaterThanOrEqual(3);
@@ -920,9 +923,95 @@ describe('5e', () => {
         expect(turn(state, '--invoke', 'game.start_combat()').query?.map((param) => param.path)).toEqual([
           'combat.members',
         ]);
-        const next = turn(state, '--param', 'combat.members=["aria"]').data?.combat as Combat;
+        turn(state, '--param', 'combat.members=["aria"]');
+        const next = turn(state, '--invoke', 'combat.roll_initiative()').data?.combat as Combat;
         expect(Object.keys(next.initiative)).toEqual(['aria']);
         expect([next.current, plain(next.round), plain(next.turn)]).toEqual(['aria', 1, 0]);
+        // Each fight's start and every initiative roll is logged at the table, in order, with its formula.
+        const log = (turn(state).data as unknown as { log: { ':value': Record<string, unknown>[] } }).log[':value'];
+        // Turns ended log whose they were and in which round; combat ending logs too.
+        const [leader, follower] = ranked.map((key) => (key === 'aria' ? 'Aria' : 'Bram'));
+        expect(log.map(({ actor, action, round }) => [actor, action, round])).toEqual([
+          [undefined, 'start_combat', undefined],
+          ['Bram', 'initiative', undefined],
+          ['Aria', 'initiative', undefined],
+          [leader, 'end_turn', 1],
+          [follower, 'end_turn', 1],
+          [undefined, 'end_combat', undefined],
+          [undefined, 'start_combat', undefined],
+          ['Aria', 'initiative', undefined],
+        ]);
+        expect(log[2]?.initiative).toMatchObject({
+          ':value': fight.initiative.aria,
+          ':formula': 'd20 + Initiative',
+          ':parts': [{ ':label': 'd20' }, { ':label': 'Initiative', ':value': 2 }],
+        });
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('logs each unarmed strike at the table with its rolls, kept on replay', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'goblin-log-'));
+      const state = join(dir, 'state.json');
+      type Rolled = { ':value': number; ':formula': string; ':parts': { ':label': string; ':value': number }[] };
+      type Entry = { actor: string; action: string; attack: Rolled; damage: Rolled };
+      type Sheet = { data?: { log: unknown; party: { aria: Record<string, unknown> } } };
+      const log = (out: unknown) => ((out as Sheet).data?.log as { ':value': Entry[] })[':value'];
+      try {
+        const start = run('5e/main.yaml', ...ARIA, '--out', state) as Sheet;
+        expect(start.data?.log).toEqual([]);
+        const aria = start.data?.party.aria as {
+          abilities: { strength: { modifier: { ':value': number } } };
+          proficiency_bonus: { ':value': number };
+        };
+        const strength = aria.abilities.strength.modifier[':value'];
+        const proficiency = aria.proficiency_bonus[':value'];
+
+        turn(state, '--invoke', 'party.aria.actions.unarmed_strike.roll()');
+        const entries = log(turn(state, '--invoke', 'party.aria.actions.unarmed_strike.roll()'));
+        expect(entries).toHaveLength(2);
+        for (const { actor, action, attack, damage } of entries) {
+          expect([actor, action]).toEqual(['Aria', 'unarmed_strike']);
+          // d20 + Strength + proficiency to hit; d4 + Strength on a hit — each with the formula that made it.
+          const [d20, str, prof] = attack[':parts'];
+          expect(attack[':formula']).toBe('d20 + STR + Proficiency');
+          expect([str, prof]).toEqual([
+            { ':label': 'STR', ':value': strength },
+            { ':label': 'Proficiency', ':value': proficiency },
+          ]);
+          expect(d20?.[':value']).toBeGreaterThanOrEqual(1);
+          expect(d20?.[':value']).toBeLessThanOrEqual(20);
+          expect(attack[':value']).toBe((d20?.[':value'] ?? 0) + strength + proficiency);
+          const [die] = damage[':parts'];
+          expect(die?.[':label']).toBe('d4');
+          expect(damage[':formula']).toBe('d4 + STR');
+          expect(die?.[':value']).toBeGreaterThanOrEqual(1);
+          expect(die?.[':value']).toBeLessThanOrEqual(4);
+          expect(damage[':value']).toBe((die?.[':value'] ?? 0) + strength);
+        }
+        expect(log(turn(state))).toEqual(entries);
+
+        // Rests log too, with the hit points they left.
+        turn(state, '--invoke', 'party.aria.rest.short()');
+        const rested = log(turn(state, '--invoke', 'party.aria.rest.long()')) as unknown as Record<string, unknown>[];
+        const max = (start.data?.party.aria.hit_points as { max: { ':value': number } }).max[':value'];
+        expect(rested.slice(2).map(({ actor, action }) => [actor, action])).toEqual([
+          ['Aria', 'short_rest'],
+          ['Aria', 'long_rest'],
+        ]);
+        expect(rested.at(-1)?.hit_points).toBe(max);
+
+        // Second Wind logs the roll it heals, while a use remains; XP awards log what they gave.
+        turn(state, '--set', 'party.aria.hit_points.current=1');
+        turn(state, '--invoke', 'party.aria.actions.second_wind.use()');
+        const after = turn(state, '--invoke', 'party.aria.add_xp(300)') as Sheet;
+        const [wind, xp] = log(after).slice(4) as unknown as Record<string, unknown>[];
+        expect(wind).toMatchObject({ actor: 'Aria', action: 'second_wind', roll: { ':formula': 'd10 + Level' } });
+        const roll = (wind?.roll as { ':value': number })[':value'];
+        const healed = (after.data?.party.aria.hit_points as { current: { ':value': number } }).current[':value'];
+        expect(healed).toBe(Math.min(1 + roll, max));
+        expect(xp).toEqual({ actor: 'Aria', action: 'add_xp', xp: 300 });
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }

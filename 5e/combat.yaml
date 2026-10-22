@@ -16,8 +16,15 @@ members:
   '!validate':
     - $lib.list.size(.) > 0
 
-'roll(name)': $.party[name].initiative.roll()
-initiative: $lib.record.from(@.members, .roll)
+# Each member's initiative roll as a log entry: d20 plus their initiative bonus.
+'_roll(name)': "{ actor: $.party[name].name, action: 'initiative', initiative: [d20](1d20) + [Initiative]($.party[name].initiative.base) }"
+# Rolled once members are in, by `roll_initiative()`; until then, empty.
+rolls: {}
+'roll_initiative()': |
+  @.rolls = $lib.record.from(@.members, ._roll)
+  $.log += $lib.record.values(@.rolls)
+'_score(name)': .rolls[name].initiative
+initiative: $lib.record.from($lib.record.keys(.rolls), ._score)
 # Tied initiative goes to the higher Dexterity score.
 '_dexterity_of(name)': $.party[name].abilities.dexterity.base
 _dexterity: $lib.record.from(@.members, ._dexterity_of)
@@ -28,7 +35,8 @@ round: 1
 turn: 0
 current: '.order[.turn]'
 
-# Wrapping past the last combatant starts the next round.
+# Logs whose turn ended; wrapping past the last combatant starts the next round.
 'end_turn()': |
+  $.log += [{ actor: $.party[@.current].name, action: 'end_turn', round: @.round }]
   @.round += $lib.math.floor((@.turn + 1) / $lib.list.size(@.order))
   @.turn = (@.turn + 1) % $lib.list.size(@.order)

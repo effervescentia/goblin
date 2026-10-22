@@ -10,7 +10,9 @@ xp:
   :param: true
   :type: integer
   :default: 0
-add_xp(xp): '@.xp += xp'
+add_xp(xp): |
+  @.xp += xp
+  $.log += [{ actor: @.name, action: 'add_xp', xp: xp }]
 
 level: '$.level.level_for([XP](.xp))'
 
@@ -74,6 +76,10 @@ actions:
     :label: Unarmed Strike
     die: d4
     type: action
+    # Attack with Strength and proficiency; the hit deals the die plus Strength.
+    # Logged at the table, under whoever made it.
+    'roll()': |
+      $.log += [{ actor: @.name, action: 'unarmed_strike', attack: [d20](1d20) + [STR](@.abilities.strength.modifier) + [Proficiency](@.proficiency_bonus), damage: [{.die}]($lib.dice.roll(.die)) + [STR](@.abilities.strength.modifier) }]
 proficiencies:
   armor: []
   weapon: []
@@ -136,10 +142,13 @@ _classes:
   wizard: $mixin('class/wizard/wizard.yaml')
 
 # A short rest refills the `short` resources; a long rest refills everything.
+# Each logs the hit points it left the character on.
 rest:
   'short()': |
     @.hit_points.current = $lib.math.min(@.hit_points.current + @.hit_die, @.hit_points.max)
     @.resources.{.recover == 'short'}.current = .max
+    $.log += [{ actor: @.name, action: 'short_rest', hit_points: @.hit_points.current }]
   'long()': |
     @.hit_points.current = @.hit_points.max
     @.resources.*.current = .max
+    $.log += [{ actor: @.name, action: 'long_rest', hit_points: @.hit_points.current }]

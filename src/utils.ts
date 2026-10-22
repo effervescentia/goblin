@@ -216,7 +216,7 @@ function splitStatements(body: string): string[] {
 }
 
 /** Transpile one goblin statement to JS. Assignments become `__assign` calls. */
-function transpileStatement(stmt: string): { code: string; isAssign: boolean } {
+function transpileStatement(stmt: string): { code: string; isAssign: boolean; local?: string } {
   // Protect string literals from ref/dice rewriting.
   const literals: string[] = [];
   // Protect $lib refs so they aren't normalized to $.lib by DOTLESS_SIGIL.
@@ -229,7 +229,7 @@ function transpileStatement(stmt: string): { code: string; isAssign: boolean } {
     literals.push(m);
     return `__STR${literals.length - 1}__`;
   });
-  const protected_ = rewriteLabels(quoted, literals)
+  const protected_ = rewriteLabels(rewriteCalculations(rewriteLocal(quoted, literals), literals), literals)
     // `$tmpl(…)` is a call, not an app ref (must come before DOTLESS_SIGIL).
     .replace(/[$]tmpl\(/g, '__tmpl(')
     // Protect $lib refs (must come before DOTLESS_SIGIL).
@@ -249,6 +249,12 @@ function transpileStatement(stmt: string): { code: string; isAssign: boolean } {
     const compound = lhs.match(/[+-]$/)?.[0];
     if (compound) lhs = lhs.slice(0, -1).trim();
     const op = JSON.stringify(compound ?? '=');
+    // A bare name is a local: it lives for this call and is never state, so it logs nothing.
+    if (LOCAL_NAME.test(lhs)) {
+      const value = rewriteExpr(rewriteIndexing(rhs, literals), unmark);
+      const code = compound ? `${lhs} = ${lhs} ${compound} (${value})` : `${lhs} = (${value})`;
+      return { code: restoreLiterals(code, literals), isAssign: true, local: lhs };
+    }
     // `ref[key]…` writes the field each key names, computed per call.
     const indexed = splitIndexes(lhs);
     if (indexed) {
@@ -378,9 +384,76 @@ function rewriteLabels(code: string, literals: string[]): string {
   }, code);
 }
 
+const LOCAL_NAME = /^[A-Za-z_]\w*$/;
+
+/** `name = [A](x) + …`, a local given a labelled value → `name = __calc('…', () => (…))`, so it keeps its formula. */
+function rewriteLocal(code: string, literals: string[]): string {
+  const at = code.search(ASSIGN_OP);
+  if (
+    at < 0 ||
+    !LOCAL_NAME.test(
+      code
+        .slice(0, at)
+        .replace(/[+-]\s*$/, '')
+        .trim(),
+    )
+  )
+    return code;
+  const value = code.slice(at + 1).trim();
+  if (formulaOf(value) === undefined) return code;
+  literals.push(JSON.stringify(restoreLiterals(value, literals)));
+  return `${code.slice(0, at + 1)} __calc(__STR${literals.length - 1}__, () => (${value}))`;
+}
+
+/** In an object literal, a labelled property value (`attack: [d20](1d20) + [STR](…)`) →
+ * `__calc('d20 + STR', () => (…))`, so the value keeps its formula and parts. Innermost literals first. */
+function rewriteCalculations(code: string, literals: string[]): string {
+  let out = code;
+  // `open > 0` before stepping back: `lastIndexOf` clamps -1 to 0, which would find a leading `{` forever.
+  for (let open = out.lastIndexOf('{'); open >= 0; open = open > 0 ? out.lastIndexOf('{', open - 1) : -1) {
+    // `.{…}` is a wildcard predicate, not a literal.
+    if (out.slice(0, open).trimEnd().endsWith('.')) continue;
+    const close = matchBracket(out, open, 1);
+    const properties = splitTopLevel(out.slice(open + 1, close)).map((property) => {
+      const key = property.match(/^\s*(?:\w+|__STR\d+__)\s*:/)?.[0];
+      const value = key === undefined ? '' : property.slice(key.length);
+      const labelled = key !== undefined && !value.trim().startsWith('{') && formulaOf(value) !== undefined;
+      if (!labelled) return property;
+      // The source travels, not the formula: its labels may read refs (`[{.die}]`) only known when it runs.
+      literals.push(JSON.stringify(restoreLiterals(value.trim(), literals)));
+      return `${key} __calc(__STR${literals.length - 1}__, () => (${value.trim()}))`;
+    });
+    out = `${out.slice(0, open + 1)}${properties.join(',')}${out.slice(close)}`;
+  }
+  return out;
+}
+
+/** `code` split at its commas outside any brackets. */
+function splitTopLevel(code: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < code.length; i++) {
+    const c = code.charAt(i);
+    if ('([{'.includes(c)) depth += 1;
+    else if (')]}'.includes(c)) depth -= 1;
+    else if (c === ',' && depth === 0) {
+      parts.push(code.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(code.slice(start));
+  return parts;
+}
+
+/** A label's text with each `{ref}` read (`{.die}` → `d4`); without `read`, as written. */
+export function fillLabel(label: string, read?: (ref: string) => unknown): string {
+  return read === undefined ? label : label.replace(/\{([^{}]+)\}/g, (_m, ref: string) => String(read(ref.trim())));
+}
+
 /** `expr` with each outermost `[Label](…)` tag read as its label
- * (`10 + [Dexterity](@.dex)` → `10 + Dexterity`); undefined when it has none. */
-export function formulaOf(expr: string): string | undefined {
+ * (`10 + [Dexterity](@.dex)` → `10 + Dexterity`), each filled by `read`; undefined when it has none. */
+export function formulaOf(expr: string, read?: (ref: string) => unknown): string | undefined {
   const literals: string[] = [];
   const code = expr.trim().replace(STRING_LITERAL, (m) => {
     literals.push(m);
@@ -389,7 +462,8 @@ export function formulaOf(expr: string): string | undefined {
   const outer = labelTags(code).filter((tag, i, tags) => !tags.slice(0, i).some((o) => tag.open < o.end));
   if (outer.length === 0) return undefined;
   const formula = outer.reduceRight(
-    (out, { open, close, end }) => `${out.slice(0, open)}${out.slice(open + 1, close).trim()}${out.slice(end + 1)}`,
+    (out, { open, close, end }) =>
+      `${out.slice(0, open)}${fillLabel(restoreLiterals(out.slice(open + 1, close).trim(), literals), read)}${out.slice(end + 1)}`,
     code,
   );
   return restoreLiterals(formula, literals);
@@ -489,6 +563,8 @@ export interface ResolveHooks {
   assignEach: (ref: string, expr: string, op: AssignOp) => void;
   /** A `[label](…)` part's value, passed through unchanged. */
   label: (label: string, value: unknown) => unknown;
+  /** A labelled object-literal value (`source`) as `{ :value, :formula, :parts }`, its parts the labels `run` reached. */
+  calc: (source: string, run: () => unknown) => unknown;
 }
 
 /**
@@ -499,9 +575,14 @@ export function compileBody(body: string, paramNames: string[] = []) {
   const statements = splitStatements(body);
   const codes = statements.map((s) => transpileStatement(s));
   const hasAssign = codes.some((c) => c.isAssign);
+  // Locals are declared up front, once each; a parameter already is one.
+  const locals = [...new Set(codes.flatMap((c) => (c.local === undefined ? [] : [c.local])))].filter(
+    (name) => !paramNames.includes(name),
+  );
+  const declared = locals.length > 0 ? `let ${locals.join(', ')};\n` : '';
   const js =
     codes.length > 1 || hasAssign
-      ? `${codes
+      ? `${declared}${codes
           .map((c, i) => (i === codes.length - 1 && !c.isAssign ? `return (${c.code});` : `${c.code};`))
           .join('\n')}`
       : `return (${codes[0]?.code ?? 'undefined'});`;
@@ -518,6 +599,7 @@ export function compileBody(body: string, paramNames: string[] = []) {
     '__path',
     '__tmpl',
     '__label',
+    '__calc',
     ...paramNames,
     js,
   ) as (...args: unknown[]) => unknown;
@@ -534,6 +616,7 @@ export function compileBody(body: string, paramNames: string[] = []) {
       (ref: string, path: string, ...keys: unknown[]) => hooks.resolve(`${refPath(ref, keys, 'path')}${path}`),
       templateCall,
       hooks.label,
+      hooks.calc,
       ...paramNames.map((p) => params[p]),
     ];
     return fn(...args);

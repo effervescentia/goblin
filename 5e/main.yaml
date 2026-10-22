@@ -27,10 +27,18 @@ party:
 
 'recruit(name)': $.party[name] = $tmpl('character.yaml', name)
 
+# Every action taken at the table, oldest first: each entry names its `actor`,
+# its `action` and what it rolled.
+log: []
+
 # The fight in progress: start with `game.start_combat()`, end with `game.end_combat()`.
 combat: null
 
 # Table-level actions; `#` is still this document, so they reach `combat`.
 game:
-  'start_combat()': "#.combat = $tmpl('combat.yaml')"
-  'end_combat()': '#.combat = null'
+  'start_combat()': |
+    #.combat = $tmpl('combat.yaml')
+    $.log += [{ action: 'start_combat' }]
+  'end_combat()': |
+    #.combat = null
+    $.log += [{ action: 'end_combat' }]
