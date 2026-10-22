@@ -104,16 +104,16 @@ const script = `
 
   const levels = {};
   for (const xp of [0, 299, 300, 899, 900, 2699, 2700, 6499, 6500, 354999, 355000, 999999]) {
-    levels[xp] = run(xp).lv;
+    levels[xp] = val(run(xp).lv);
   }
   levels.none = (() => {
     const a = fresh();
-    return e.evaluate(a, scopeOf(a, { name: 'X' })).level;
+    return val(e.evaluate(a, scopeOf(a, { name: 'X' })).level);
   })();
 
   const r = (xp) => run(xp).v;
   const attacks = { 0: val(r(0).attacks), 6500: val(r(6500).attacks), 85000: val(r(85000).attacks), 355000: val(r(355000).attacks) };
-  const prof = { 0: r(0).proficiency_bonus, 6500: r(6500).proficiency_bonus, 48000: r(48000).proficiency_bonus, 225000: r(225000).proficiency_bonus };
+  const prof = Object.fromEntries([0, 6500, 48000, 225000].map((xp) => [xp, val(r(xp).proficiency_bonus)]));
   const v5 = r(6500);
 
   // Second Wind: at level 5 there are three uses; after they run out it does nothing.
@@ -298,13 +298,17 @@ describe('5e', () => {
       'improvements.level_4=["strength","strength"]',
     ) as {
       data: {
-        level: number;
+        level: unknown;
         attacks: Record<string, unknown>;
         armor_class: unknown;
         features: Record<string, unknown>;
       };
     };
-    expect(data.data.level).toBe(5);
+    expect(data.data.level).toEqual({
+      ':value': 5,
+      ':formula': '$.level.level_for(XP)',
+      ':parts': [{ ':label': 'XP', ':value': 6500 }],
+    });
     // A labelled formula names its parts for the sheet: 10 + dex 14.
     expect(data.data.armor_class).toEqual({
       ':value': 12,
@@ -318,7 +322,7 @@ describe('5e', () => {
       ':value': 2,
       ':events': [
         // Each write cites the key behind it: `attacks: 1`, then `'+@.attacks'`.
-        { ':source': 'character.yaml', ':line': 52, ':column': 1, ':set': 1 },
+        { ':source': 'character.yaml', ':line': 53, ':column': 1, ':set': 1 },
         { ':source': 'class/fighter/fighter.yaml', ':line': 110, ':column': 5, ':add': 1 },
       ],
     });
@@ -825,7 +829,7 @@ describe('5e', () => {
     expect(data.data.level).toEqual({
       ':value': 5,
       ':events': [
-        { ':source': 'character.yaml', ':line': 14, ':column': 1, ':set': 1 },
+        { ':source': 'character.yaml', ':line': 15, ':column': 1, ':set': 1 },
         // An override has no document line to cite.
         { ':source': 'override', ':version': 1, ':set': 5 },
       ],

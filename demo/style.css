@@ -173,6 +173,16 @@ main {
   color: var(--muted);
 }
 
+.add-xp {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.add-xp input {
+  width: 96px;
+}
+
 .stats {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));

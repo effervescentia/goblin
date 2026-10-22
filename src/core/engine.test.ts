@@ -562,6 +562,21 @@ describe('labelled expressions', () => {
       ],
     });
   });
+
+  it("starts a written param's events with the value it was filled with, not its declaration", () => {
+    const engine = new GoblinEngine('.');
+    engine.register('hero.yaml', {
+      $actor: 'Hero',
+      xp: { ':param': true, ':type': 'integer', ':default': 0 },
+      gold: { ':param': true, ':type': 'integer' },
+      'reward()': '@.xp += 300; @.gold += 5',
+    });
+    const state = engine.resolve('hero.yaml', [parameter('gold', 10), invoke('reward', [], 2)]) as {
+      data: { xp: unknown; gold: unknown };
+    };
+    expect(state.data.xp).toMatchObject({ ':value': 300, ':events': [{ ':set': 0 }, { ':add': 300 }] });
+    expect(state.data.gold).toMatchObject({ ':value': 15, ':events': [{ ':set': 10 }, { ':add': 5 }] });
+  });
 });
 
 describe('event locations', () => {
@@ -1812,7 +1827,8 @@ describe('parameters', () => {
       name: {
         ':value': 'Aria',
         ':events': [
-          { ':set': { ':doc': 'Your name.', ':param': true } },
+          // Unanswered before the override, so the param held nothing.
+          { ':set': null },
           { ':source': 'override', ':version': 1, ':set': 'Aria' },
         ],
       },

@@ -539,7 +539,9 @@ patch touched print bare, as before.
   sheet shows; one a later write replaced still resolves (an overridden
   `level` logs what `$.level.level_for(@.xp)` gave). A plain list
   (`- all_armor`) is the document stating the list itself, so it files as
-  `:set` holding that list, each item resolved.
+  `:set` holding that list, each item resolved. A `:param` field's first
+  `:set` is the value it was filled with (its answer, else `:default`, else
+  `null`), not its declaration.
 - `:add` names what an addition added: the value a `+@.path` key added
   (resolved, like `:set`),
   the items a `+item` list appended, or the key a `+key` record addition
