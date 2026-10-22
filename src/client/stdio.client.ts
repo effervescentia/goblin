@@ -31,6 +31,8 @@ export class StdioClient extends RpcClient {
       const code = await exited;
       if (code !== 0) throw exitError(code, stderr());
     }
+    // Writing to a server that already exited raises EPIPE here; the read loop fails pending calls with why it exited.
+    child.stdin.on('error', () => {});
     return new StdioClient(
       { readable: readable(), write: (bytes) => child.stdin.write(bytes), end: () => child.stdin.end() },
       codec,
