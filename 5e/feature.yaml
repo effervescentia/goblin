@@ -1,8 +1,8 @@
 # Feature definitions shared across classes, attached as `$.feature` by
 # 5e/main.yaml and called from the feature that grants one.
 
-'ability_improvement(level)':
-  :label: Ability Score Improvement (level {level})
+'ability_improvement(source, level)':
+  :label: Ability Score Improvement ({source} {level})
   :doc: 'Pick two: one ability twice for +2, or two abilities for +1 each.'
   :param: true
   :type: array

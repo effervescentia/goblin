@@ -9,14 +9,16 @@
 #         --param $P.class=fighter --param $P.species=dwarf \
 #         --param $P.ability_method=point_buy \
 #         --param $P.abilities.strength.bought=7 … (points over 8, 27 total) \
-#         --param $P.features.fighting_style=dueling \
-#         --param $P.features.martial_archetype=champion \
+#         --param $P.features.fighter.fighting_style=dueling \
+#         --param $P.features.fighter.martial_archetype=champion \
 #         --param $P.skills.trained='["athletics", "perception"]' \
-#         --param $P.improvements.level_4='["strength", "strength"]'
+#         --param $P.improvements.fighter_4='["strength", "strength"]'
 #   (or ability_method=standard_array with abilities.<name>.assigned=15 …,
 #    or ability_method=roll to roll 4d6 drop lowest for each,
 #    or ability_method=roll_assign with abilities.<name>.roll=1..6)
 # Missing choices come back as { query }; a full tree as { data }.
+# Each level goes to the starting class unless `level_up` gives it to another:
+#       goblin 5e/main.yaml --in s.json --invoke 'party.aria.level_up("rogue")'
 
 level: $tmpl('level.yaml')
 feature: $tmpl('feature.yaml')

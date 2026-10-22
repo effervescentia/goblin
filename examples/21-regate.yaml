@@ -1,0 +1,13 @@
+# Gating on an invoke's writes: `level_up()` raises `level`, and the mixin
+# gated on it applies in the same run, adding its feature and its gold.
+#   goblin examples/21-regate.yaml --out s.json
+#   … --in s.json --invoke level_up → level 2, features.dash, gold 15
+
+$actor: Adventurer
+
+level: 1
+gold: 10
+features: {}
+'level_up()': '@.level += 1'
+_ranks:
+  veteran: $mixin('21-regate-veteran.yaml') # → null until level 2

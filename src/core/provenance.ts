@@ -68,6 +68,29 @@ export class Provenance {
     return copy;
   }
 
+  /** A copy of `tree` to `reset` it to later; owners carry over too. */
+  snapshot<T extends object>(tree: T): T {
+    const copy = this.clone(tree);
+    this.copyOwners(tree, copy);
+    return copy;
+  }
+
+  /** Put `tree` back as `snapshot` held it, in place: its own provenance
+   * stays, and its children are a fresh copy. */
+  reset(tree: Record<string, unknown>, snapshot: Record<string, unknown>): void {
+    const fresh = this.snapshot(snapshot);
+    for (const key of Object.keys(tree)) delete tree[key];
+    Object.assign(tree, fresh);
+  }
+
+  private copyOwners(from: unknown, to: unknown): void {
+    if (from === null || typeof from !== 'object' || to === null || typeof to !== 'object' || from instanceof Die)
+      return;
+    const owner = this.owners.get(from);
+    if (owner !== undefined) this.owners.set(to, owner);
+    for (const [key, child] of Object.entries(from)) this.copyOwners(child, (to as Record<string, unknown>)[key]);
+  }
+
   /** Homes and actor namespaces follow a copy of the records they mark. */
   private copyHomes(from: unknown, to: unknown): void {
     if (from === null || typeof from !== 'object' || to === null || typeof to !== 'object') return;

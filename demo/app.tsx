@@ -15,6 +15,8 @@ import type { MissingParam } from '@/nodes/record';
 import {
   at,
   CHARACTER,
+  classesOf,
+  classOptions,
   combatOf,
   describeEvent,
   docOf,
@@ -23,6 +25,7 @@ import {
   expressionsOf,
   type FieldEvent,
   type Formula,
+  featureGroups,
   fields,
   formulaAt,
   humanize,
@@ -32,6 +35,7 @@ import {
   readParam,
   type Segment,
   signed,
+  skillsOf,
   slotsOf,
   solvedText,
   sourceOf,
@@ -400,6 +404,27 @@ function AddXP({ onAdd }: { onAdd: (xp: number) => void }) {
   );
 }
 
+/** A class picker and button that give the current level to that class. */
+function LevelUp({ options, start, onLevel }: { options: string[]; start: string; onLevel: (name: string) => void }) {
+  const [name, setName] = useState(start);
+  const submit = (event: SubmitEvent) => {
+    event.preventDefault();
+    onLevel(name);
+  };
+  return (
+    <form class="add-xp" onSubmit={submit}>
+      <select aria-label="Class for this level" value={name} onChange={(event) => setName(event.currentTarget.value)}>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {humanize(option)}
+          </option>
+        ))}
+      </select>
+      <button type="submit">Level up</button>
+    </form>
+  );
+}
+
 /** Actions taken at the table, newest first: who acted, with what, and what it rolled. */
 function Log({ data, tip }: { data: unknown; tip: Omit<ComponentProps<typeof History>, 'children'> }) {
   const entries = at(data, 'log');
@@ -521,9 +546,22 @@ function Sheet({ data, expressions, turn }: { data: unknown; expressions: Map<st
           <h2>{String(get('name'))}</h2>
           <p>
             Level <History {...tip('level')}>{String(get('level'))}</History> {humanize(String(get('species')))}{' '}
-            {humanize(String(get('class')))} · <History {...tip('xp')}>{String(get('xp'))}</History> XP
+            {classesOf(sheet).map(({ name, label, level }, i) => (
+              <span key={name}>
+                {i > 0 ? ' / ' : null}
+                {label} <History {...tip(`classes.${name}.level`)}>{String(level)}</History>
+              </span>
+            ))}{' '}
+            · <History {...tip('xp')}>{String(get('xp'))}</History> XP
           </p>
-          <AddXP onAdd={(xp) => turn([call(`${CHARACTER}.add_xp`, [xp])])} />
+          <div class="advance">
+            <AddXP onAdd={(xp) => turn([call(`${CHARACTER}.add_xp`, [xp])])} />
+            <LevelUp
+              options={classOptions(sheet)}
+              start={String(get('class'))}
+              onLevel={(name) => turn([call(`${CHARACTER}.level_up`, [name])])}
+            />
+          </div>
         </header>
 
         <Combat data={data} turn={turn} />
@@ -639,7 +677,7 @@ function Sheet({ data, expressions, turn }: { data: unknown; expressions: Map<st
 
           <Section title="Proficiencies">
             <h3>Skills</h3>
-            <Tags items={get('skills.trained')} />
+            <Tags items={skillsOf(sheet)} />
             <h3>
               <History {...tip('proficiencies.armor')}>Armor</History>
             </h3>
@@ -652,22 +690,27 @@ function Sheet({ data, expressions, turn }: { data: unknown; expressions: Map<st
         </div>
 
         <Section title="Features">
-          <dl class="features">
-            {fields(get('features')).map(([name, feature]) => {
-              const choice = unwrap(feature);
-              return (
-                <div key={name}>
-                  <dt>
-                    <History {...tip(`features.${name}`)}>
-                      {labelOf(feature, name)}
-                      {typeof choice === 'string' ? `: ${humanize(choice)}` : null}
-                    </History>
-                  </dt>
-                  <dd>{at(feature, ':doc') as string | undefined}</dd>
-                </div>
-              );
-            })}
-          </dl>
+          {featureGroups(sheet).map(({ path, label, features }) => (
+            <div key={path}>
+              {label === undefined ? null : <h3>{label}</h3>}
+              <dl class="features">
+                {features.map(([name, feature]) => {
+                  const choice = unwrap(feature);
+                  return (
+                    <div key={name}>
+                      <dt>
+                        <History {...tip(`${path}.${name}`)}>
+                          {labelOf(feature, name)}
+                          {typeof choice === 'string' ? `: ${humanize(choice)}` : null}
+                        </History>
+                      </dt>
+                      <dd>{at(feature, ':doc') as string | undefined}</dd>
+                    </div>
+                  );
+                })}
+              </dl>
+            </div>
+          ))}
         </Section>
       </article>
 

@@ -1,165 +1,176 @@
 '@': Character
-$if: "@.class == 'fighter'"
+$if: "$lib.list.has(@.class_names, 'fighter')"
 
-'@.hit_die': d10
-'@.proficiencies.weapon':
-  - simple_weapons
-  - martial_weapons
-'@.proficiencies.armor':
-  - all_armor
-  - shields
-'@.proficiencies.saving_throws':
-  - strength
-  - constitution
-'@.skills.trained':
-  :label: Skill Proficiencies
-  :doc: 'Choose two proficient skills.'
-  :param: true
-  :type: array
-  :options:
-    - acrobatics
-    - animal_handling
-    - athletics
-    - history
-    - insight
-    - intimidation
-    - perception
-    - survival
-  :count: 2
-  :unique: true
-'@.features':
-  +fighting_style:
-    :label: Fighting Style
-    :doc: Pick the combat style you trained in.
+'@.classes':
+  +fighter:
+    :label: Fighter
+    level: "@.class_level('fighter')"
+    qualified: '@.abilities.strength.base >= 13 || @.abilities.dexterity.base >= 13'
+
+# A starting fighter takes the hit die, saving throws, skill picks and
+# proficiencies; one multiclassed into gets only the proficiencies below.
+'@.skills':
+  $if: "@.class == 'fighter'"
+  trained:
+    :label: Skill Proficiencies
+    :doc: 'Choose two proficient skills.'
     :param: true
-    :type: string
+    :type: array
     :options:
-      - archery
-      - blind_fighting
-      - defense
-      - dueling
-      - great_weapon_fighting
-      - interception
-      - protection
-      - thrown_weapon_fighting
-      - two_weapon_fighting
-      - unarmed_fighting
-  +weapon_mastery:
-    :label: Weapon Mastery
-    :doc: Mastery properties of three weapons; the number increases at levels 4, 10, and 16.
-    weapons: 3 + (@.level >= 4) + (@.level >= 10) + (@.level >= 16)
-  +second_wind:
-    :label: Second Wind
-    :doc: Regain hit points using a limited well of stamina. Uses increase with fighter level.
-    '@.resources':
-      +second_wind:
-        :label: Second Wind
-        :doc: Expend to regain hit points. Restores on a short or long rest.
-        current: '[Uses](.max)'
-        max: '[Max Uses](2 + (@.level >= 4) + (@.level >= 10))'
-        recover: short
-    '@.actions':
-      +second_wind:
-        :label: Second Wind
-        :doc: As a bonus action, regain 1d10 + fighter level hit points, up to your maximum.
-        type: bonus_action
-        # Heals 1d10 + level, no more than is missing, only while a use
-        # remains (`ready` is 0 or 1) — so with none left nothing changes or logs.
-        'use()': |
-          ready = @.resources.second_wind.current > 0
-          roll = [d10](1d10) + [Level](@.level)
-          healed = $lib.math.min(roll, @.hit_points.max - @.hit_points.current) * ready
-          @.hit_points.current += healed
-          @.resources.second_wind.current -= ready
-          $.log += ready ? [{ actor: @.name, action: 'second_wind', roll: roll, healed: healed }] : []
-  +action_surge:
-    $if: '@.level >= 2'
-    :label: Action Surge
-    :doc: Take one additional action on your turn. Restores on a short rest.
-    '@.resources':
-      +action_surge:
-        :label: Action Surge
-        :doc: Expend to gain an additional action. Restores on a short or long rest.
-        current: .max
-        max: 1 + (@.level >= 17)
-        recover: short
-  +tactical_mind:
-    $if: '@.level >= 2'
-    :label: Tactical Mind
-    :doc: When you fail an ability check, expend a Second Wind use and add 1d10; if you still fail, the use is not expended.
-  +tactical_shift:
-    $if: '@.level >= 5'
-    :label: Tactical Shift
-    :doc: Immediately after using Second Wind, move up to half your Speed without provoking Opportunity Attacks.
-  +tactical_master:
-    $if: '@.level >= 9'
-    :label: Tactical Master
-    :doc: When using Weapon Mastery, you can use Push, Sap, or Slow instead of the weapon's mastery property.
-  +martial_archetype:
-    $if: '@.level >= 3'
-    :label: Martial Archetype
-    :doc: 'Choose a subclass for your character.'
-    :param: true
-    :type: string
-    :options: [champion, battle_master, eldritch_knight]
-  +ability_score_improvement_1:
-    $if: '@.level >= 4'
-    :label: Ability Score Improvement
-    :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    '@.improvements.level_4': '$.feature.ability_improvement(4)'
-  +extra_attack:
-    $if: '@.level >= 5'
-    :label: Extra Attack
-    :doc: Strike twice whenever you take the Attack action.
-    '+@.attacks': 1 + (@.level >= 11) + (@.level >= 20)
-    '@.actions':
-      +extra_attack:
-        :label: Extra Attack
-        :doc: Make two attacks instead of one (three at 11, four at 20).
-  +ability_score_improvement_2:
-    $if: '@.level >= 6'
-    :label: Ability Score Improvement
-    :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    '@.improvements.level_6': '$.feature.ability_improvement(6)'
-  +ability_score_improvement_3:
-    $if: '@.level >= 8'
-    :label: Ability Score Improvement
-    :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    '@.improvements.level_8': '$.feature.ability_improvement(8)'
-  +indomitable:
-    $if: '@.level >= 9'
-    :label: Indomitable
-    :doc: Reroll a failed saving throw and add your Fighter level to the save. Uses increase at levels 13 and 17.
-    '@.resources':
-      +indomitable_points:
-        :label: Indomitable Uses
-        :doc: Expend to reroll a failed save. Restores on a long rest.
-        current: .max
-        max: 1 + (@.level >= 13) + (@.level >= 17)
-        recover: long
-  +ability_score_improvement_4:
-    $if: '@.level >= 12'
-    :label: Ability Score Improvement
-    :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    '@.improvements.level_12': '$.feature.ability_improvement(12)'
-  +ability_score_improvement_5:
-    $if: '@.level >= 14'
-    :label: Ability Score Improvement
-    :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    '@.improvements.level_14': '$.feature.ability_improvement(14)'
-  +ability_score_improvement_6:
-    $if: '@.level >= 16'
-    :label: Ability Score Improvement
-    :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    '@.improvements.level_16': '$.feature.ability_improvement(16)'
-  +studied_attacks:
-    $if: '@.level >= 13'
-    :label: Studied Attacks
-    :doc: After missing a creature with an attack roll, you have Advantage on your next attack roll against it before the end of your next turn.
-  +epic_boon:
-    $if: '@.level >= 19'
-    :label: Epic Boon
-    :doc: Gain an Epic Boon feat or another feat for which you qualify.
+      - acrobatics
+      - animal_handling
+      - athletics
+      - history
+      - insight
+      - intimidation
+      - perception
+      - survival
+    :count: 2
+    :unique: true
+  $then:
+    '@.hit_die': d10
+    '@.proficiencies.saving_throws': [strength, constitution]
+    '@.proficiencies.weapon': [+simple_weapons, +martial_weapons]
+    '@.proficiencies.armor': [+all_armor, +shields]
+'@.proficiencies':
+  $if: "@.class != 'fighter'"
+  weapon: [+martial_weapons]
+  armor: [+light_armor, +medium_armor, +shields]
+'@.features':
+  +fighter:
+    :label: Fighter
+    +fighting_style:
+      :label: Fighting Style
+      :doc: Pick the combat style you trained in.
+      :param: true
+      :type: string
+      :options:
+        - archery
+        - blind_fighting
+        - defense
+        - dueling
+        - great_weapon_fighting
+        - interception
+        - protection
+        - thrown_weapon_fighting
+        - two_weapon_fighting
+        - unarmed_fighting
+    +weapon_mastery:
+      :label: Weapon Mastery
+      :doc: Mastery properties of three weapons; the number increases at levels 4, 10, and 16.
+      weapons: 3 + (@.classes.fighter.level >= 4) + (@.classes.fighter.level >= 10) + (@.classes.fighter.level >= 16)
+    +second_wind:
+      :label: Second Wind
+      :doc: Regain hit points using a limited well of stamina. Uses increase with fighter level.
+      '@.resources':
+        +second_wind:
+          :label: Second Wind
+          :doc: Expend to regain hit points. Restores on a short or long rest.
+          current: '[Uses](.max)'
+          max: '[Max Uses](2 + (@.classes.fighter.level >= 4) + (@.classes.fighter.level >= 10))'
+          recover: short
+      '@.actions':
+        +second_wind:
+          :label: Second Wind
+          :doc: As a bonus action, regain 1d10 + fighter level hit points, up to your maximum.
+          type: bonus_action
+          # Heals 1d10 + level, no more than is missing, only while a use
+          # remains (`ready` is 0 or 1) — so with none left nothing changes or logs.
+          'use()': |
+            ready = @.resources.second_wind.current > 0
+            roll = [d10](1d10) + [Level](@.classes.fighter.level)
+            healed = $lib.math.min(roll, @.hit_points.max - @.hit_points.current) * ready
+            @.hit_points.current += healed
+            @.resources.second_wind.current -= ready
+            $.log += ready ? [{ actor: @.name, action: 'second_wind', roll: roll, healed: healed }] : []
+    +action_surge:
+      $if: '@.classes.fighter.level >= 2'
+      :label: Action Surge
+      :doc: Take one additional action on your turn. Restores on a short rest.
+      '@.resources':
+        +action_surge:
+          :label: Action Surge
+          :doc: Expend to gain an additional action. Restores on a short or long rest.
+          current: .max
+          max: 1 + (@.classes.fighter.level >= 17)
+          recover: short
+    +tactical_mind:
+      $if: '@.classes.fighter.level >= 2'
+      :label: Tactical Mind
+      :doc: When you fail an ability check, expend a Second Wind use and add 1d10; if you still fail, the use is not expended.
+    +tactical_shift:
+      $if: '@.classes.fighter.level >= 5'
+      :label: Tactical Shift
+      :doc: Immediately after using Second Wind, move up to half your Speed without provoking Opportunity Attacks.
+    +tactical_master:
+      $if: '@.classes.fighter.level >= 9'
+      :label: Tactical Master
+      :doc: When using Weapon Mastery, you can use Push, Sap, or Slow instead of the weapon's mastery property.
+    +martial_archetype:
+      $if: '@.classes.fighter.level >= 3'
+      :label: Martial Archetype
+      :doc: 'Choose a subclass for your character.'
+      :param: true
+      :type: string
+      :options: [champion, battle_master, eldritch_knight]
+    +ability_score_improvement_1:
+      $if: '@.classes.fighter.level >= 4'
+      :label: Ability Score Improvement
+      :doc: Add +2 to one ability score or +1 to two (or take a feat).
+      '@.improvements.fighter_4': "$.feature.ability_improvement('Fighter', 4)"
+    +extra_attack:
+      $if: '@.classes.fighter.level >= 5'
+      :label: Extra Attack
+      :doc: Strike twice whenever you take the Attack action.
+      '+@.attacks': 1 + (@.classes.fighter.level >= 11) + (@.classes.fighter.level >= 20)
+      '@.actions':
+        +extra_attack:
+          :label: Extra Attack
+          :doc: Make two attacks instead of one (three at 11, four at 20).
+    +ability_score_improvement_2:
+      $if: '@.classes.fighter.level >= 6'
+      :label: Ability Score Improvement
+      :doc: Add +2 to one ability score or +1 to two (or take a feat).
+      '@.improvements.fighter_6': "$.feature.ability_improvement('Fighter', 6)"
+    +ability_score_improvement_3:
+      $if: '@.classes.fighter.level >= 8'
+      :label: Ability Score Improvement
+      :doc: Add +2 to one ability score or +1 to two (or take a feat).
+      '@.improvements.fighter_8': "$.feature.ability_improvement('Fighter', 8)"
+    +indomitable:
+      $if: '@.classes.fighter.level >= 9'
+      :label: Indomitable
+      :doc: Reroll a failed saving throw and add your Fighter level to the save. Uses increase at levels 13 and 17.
+      '@.resources':
+        +indomitable_points:
+          :label: Indomitable Uses
+          :doc: Expend to reroll a failed save. Restores on a long rest.
+          current: .max
+          max: 1 + (@.classes.fighter.level >= 13) + (@.classes.fighter.level >= 17)
+          recover: long
+    +ability_score_improvement_4:
+      $if: '@.classes.fighter.level >= 12'
+      :label: Ability Score Improvement
+      :doc: Add +2 to one ability score or +1 to two (or take a feat).
+      '@.improvements.fighter_12': "$.feature.ability_improvement('Fighter', 12)"
+    +ability_score_improvement_5:
+      $if: '@.classes.fighter.level >= 14'
+      :label: Ability Score Improvement
+      :doc: Add +2 to one ability score or +1 to two (or take a feat).
+      '@.improvements.fighter_14': "$.feature.ability_improvement('Fighter', 14)"
+    +ability_score_improvement_6:
+      $if: '@.classes.fighter.level >= 16'
+      :label: Ability Score Improvement
+      :doc: Add +2 to one ability score or +1 to two (or take a feat).
+      '@.improvements.fighter_16': "$.feature.ability_improvement('Fighter', 16)"
+    +studied_attacks:
+      $if: '@.classes.fighter.level >= 13'
+      :label: Studied Attacks
+      :doc: After missing a creature with an attack roll, you have Advantage on your next attack roll against it before the end of your next turn.
+    +epic_boon:
+      $if: '@.classes.fighter.level >= 19'
+      :label: Epic Boon
+      :doc: Gain an Epic Boon feat or another feat for which you qualify.
 
 _subclasses:
   champion: $mixin('champion.yaml')

@@ -411,7 +411,7 @@ level: $.level.level_for(@.xp.value)
 A patch value that is a single call — `$tmpl('…')` or a call to a
 record-bodied function — inlines on the way in, so a repeated node can live
 in one place and still be filled: `5e/class/fighter/fighter.yaml` writes
-`'@.improvements.level_4': '$.feature.ability_improvement()'`, and the
+`'@.improvements.fighter_4': "$.feature.ability_improvement('Fighter', 4)"`, and the
 `:param` record it hands back lands in the actor tree where the query finds
 it.
 
@@ -590,7 +590,7 @@ patch touched print bare, as before.
   ":value": 2,
   ":events": [
     { ":source": "character.yaml", ":set": 1 },
-    { ":source": "class/fighter/fighter.yaml", ":add": 1 }     // `1 + (@.level >= 11) + …` at level 5
+    { ":source": "class/fighter/fighter.yaml", ":add": 1 }     // `1 + (@.classes.fighter.level >= 11) + …` at fighter level 5
   ]
 },
 "second_wind": {                               // a record takes the key in place
@@ -663,7 +663,7 @@ roll can be made once, used, and logged with how it was made:
 # 5e/class/fighter/fighter.yaml (examples/20-locals.yaml)
 'use()': |
   ready = @.resources.second_wind.current > 0
-  roll = [d10](1d10) + [Level](@.level)
+  roll = [d10](1d10) + [Level](@.classes.fighter.level)
   healed = $lib.math.min(roll, @.hit_points.max - @.hit_points.current) * ready
   @.hit_points.current += healed
   @.resources.second_wind.current -= ready
@@ -703,7 +703,7 @@ it. Each `$tmpl` makes a fresh copy, so one file can fill several slots.
 - Provided values fill in before each mixin applies, so a later one can gate
   on a choice an earlier one declared: `class/fighter/fighter.yaml` mixes in
   its subclasses, each gated on
-  `@.level >= 3 && @.features.martial_archetype == '…'` (level first, since
+  `@.classes.fighter.level >= 3 && @.features.fighter.martial_archetype == '…'` (level first, since
   `&&` never reads the choice before the fighter declares it).
 - Template paths are root-relative; nested references resolve relative to
   their own file.
@@ -855,7 +855,7 @@ declared.
 
 5e mixes alternatives in this way: the character document mixes in its
 ability-score methods (each gated on `@.ability_method`), and the fighter
-patch its subclasses (each gated on `@.features.martial_archetype`), so only
+patch its subclasses (each gated on `@.features.fighter.martial_archetype`), so only
 the chosen one adds anything. A mixin called from an actor document applies
 when the document first evaluates, so place it after the fields it merges
 into (`_ability_methods` follows `abilities`):
@@ -1144,6 +1144,14 @@ JSON values, once per run) calls a function on the fully resolved document.
   `:events` like any assignment, and follow the invoke in the CLI's
   `events`. An override given after an invoke still wins over what it
   wrote; earlier overrides are the base it works from.
+- Mixins and `$if` gates see what the invokes wrote. A run with invokes
+  resolves twice: once to run the calls, then again from the start, with
+  each place a call wrote holding its value after them while mixins gate.
+  Those values are laid over the tree, not written: they log nothing, a
+  patch writing the same field builds on what it held before, and they are
+  lifted before the calls run again on the same dice. So a call that raises
+  a level brings in the features gated on it, drops those it no longer
+  meets, and asks for any param they bring (`examples/21-regate.yaml`).
 - The CLI only invokes on a stable state. `--invoke` cannot share a run with
   `--param` or `--set` (`--invoke cannot be combined with --param or
   --set…`), and the state it acts on must resolve to `{ data }`: the `--in`
@@ -1160,6 +1168,28 @@ JSON values, once per run) calls a function on the fully resolved document.
 ```ts
 engine.resolve('04-functions.yaml', [invoke('utils.double', [21])]);
 // { data: { … }, result: 42 }
+```
+
+5e multiclasses this way. `level_up(name)` gives the current level to a
+class, and each class file gates on the classes taken, reading its own
+level wherever it read the character's (`@.classes.rogue.level >= 2`). A
+level nobody chose goes to the starting class, so `add_xp` alone still
+levels it:
+
+```yaml
+# 5e/character.yaml
+level_choices: {}
+'level_up(name)': |
+  @.level_choices['level_' + @.level] = name
+  $.log += [{ actor: @.name, action: 'level_up', level: @.level, class: name }]
+class_names: $lib.set.union([@.class], $lib.record.values(@.level_choices))
+
+# 5e/class/rogue/rogue.yaml
+$if: "$lib.list.has(@.class_names, 'rogue')"
+'@.classes':
+  +rogue:
+    level: "@.class_level('rogue')"
+    qualified: '@.abilities.dexterity.base >= 13' # !validate on `classes` checks every one
 ```
 
 ## Evaluation model

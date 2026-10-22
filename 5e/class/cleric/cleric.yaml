@@ -1,81 +1,91 @@
 '@': Character
-$if: "@.class == 'cleric'"
+$if: "$lib.list.has(@.class_names, 'cleric')"
 
-'@.hit_die': d8
-'@.proficiencies.weapon':
-  - simple_weapons
-'@.proficiencies.armor':
-  - light_armor
-  - medium_armor
-  - shields
-'@.proficiencies.saving_throws':
-  - wisdom
-  - charisma
-'@.skills.trained':
-  :label: Skill Proficiencies
-  :doc: 'Choose two proficient skills.'
-  :param: true
-  :type: array
-  :options:
-    - history
-    - insight
-    - medicine
-    - persuasion
-    - religion
-  :count: 2
-  :unique: true
+'@.classes':
+  +cleric:
+    :label: Cleric
+    level: "@.class_level('cleric')"
+    qualified: '@.abilities.wisdom.base >= 13'
+
+# A starting cleric takes the hit die, saving throws, skill picks and
+# proficiencies; one multiclassed into gets only the proficiencies below.
+'@.skills':
+  $if: "@.class == 'cleric'"
+  trained:
+    :label: Skill Proficiencies
+    :doc: 'Choose two proficient skills.'
+    :param: true
+    :type: array
+    :options:
+      - history
+      - insight
+      - medicine
+      - persuasion
+      - religion
+    :count: 2
+    :unique: true
+  $then:
+    '@.hit_die': d8
+    '@.proficiencies.saving_throws': [wisdom, charisma]
+    '@.proficiencies.weapon': [+simple_weapons]
+    '@.proficiencies.armor': [+light_armor, +medium_armor, +shields]
+'@.proficiencies':
+  $if: "@.class != 'cleric'"
+  armor: [+light_armor, +medium_armor, +shields]
 '@.features':
-  +spellcasting:
-    :label: Spellcasting
-    :doc: Cast Cleric spells using Wisdom; cantrips, prepared spells, and slots increase with cleric level. Slots restore on a long rest.
-  +divine_order:
-    :label: Divine Order
-    :doc: Choose Protector (Martial weapon proficiency and Heavy armor training) or Thaumaturge (an extra cantrip and your Wisdom modifier to Arcana and Religion checks).
-  +channel_divinity:
-    $if: '@.level >= 2'
-    :label: Channel Divinity
-    :doc: Channel divine energy for Divine Spark or Turn Undead. Uses increase at levels 6 and 18; one restores on a short rest, all on a long rest.
-  +ability_score_improvement_1:
-    $if: '@.level >= 4'
-    :label: Ability Score Improvement
-    :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    '@.improvements.level_4': '$.feature.ability_improvement(4)'
-  +sear_undead:
-    $if: '@.level >= 5'
-    :label: Sear Undead
-    :doc: When you Turn Undead, roll d8s equal to your Wisdom modifier and deal that much Radiant damage to each Undead that fails the save.
-  +blessed_strikes:
-    $if: '@.level >= 7'
-    :label: Blessed Strikes
-    :doc: Choose Divine Strike (an extra 1d8 damage once per turn on a weapon hit) or Potent Spellcasting (your Wisdom modifier to cantrip damage).
-  +ability_score_improvement_2:
-    $if: '@.level >= 8'
-    :label: Ability Score Improvement
-    :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    '@.improvements.level_8': '$.feature.ability_improvement(8)'
-  +divine_intervention:
-    $if: '@.level >= 10'
-    :label: Divine Intervention
-    :doc: Cast any Cleric spell of level 5 or lower without a spell slot or Material components. Restores on a long rest.
-  +ability_score_improvement_3:
-    $if: '@.level >= 12'
-    :label: Ability Score Improvement
-    :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    '@.improvements.level_12': '$.feature.ability_improvement(12)'
-  +improved_blessed_strikes:
-    $if: '@.level >= 14'
-    :label: Improved Blessed Strikes
-    :doc: Divine Strike deals 2d8, or Potent Spellcasting also grants temporary hit points when you deal cantrip damage.
-  +ability_score_improvement_4:
-    $if: '@.level >= 16'
-    :label: Ability Score Improvement
-    :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    '@.improvements.level_16': '$.feature.ability_improvement(16)'
-  +epic_boon:
-    $if: '@.level >= 19'
-    :label: Epic Boon
-    :doc: Gain an Epic Boon feat or another feat for which you qualify.
-  +greater_divine_intervention:
-    $if: '@.level >= 20'
-    :label: Greater Divine Intervention
-    :doc: Divine Intervention can cast Wish; afterwards you can't use it again for 2d4 long rests.
+  +cleric:
+    :label: Cleric
+    +spellcasting:
+      :label: Spellcasting
+      :doc: Cast Cleric spells using Wisdom; cantrips, prepared spells, and slots increase with cleric level. Slots restore on a long rest.
+    +divine_order:
+      :label: Divine Order
+      :doc: Choose Protector (Martial weapon proficiency and Heavy armor training) or Thaumaturge (an extra cantrip and your Wisdom modifier to Arcana and Religion checks).
+    +channel_divinity:
+      $if: '@.classes.cleric.level >= 2'
+      :label: Channel Divinity
+      :doc: Channel divine energy for Divine Spark or Turn Undead. Uses increase at levels 6 and 18; one restores on a short rest, all on a long rest.
+    +ability_score_improvement_1:
+      $if: '@.classes.cleric.level >= 4'
+      :label: Ability Score Improvement
+      :doc: Add +2 to one ability score or +1 to two (or take a feat).
+      '@.improvements.cleric_4': "$.feature.ability_improvement('Cleric', 4)"
+    +sear_undead:
+      $if: '@.classes.cleric.level >= 5'
+      :label: Sear Undead
+      :doc: When you Turn Undead, roll d8s equal to your Wisdom modifier and deal that much Radiant damage to each Undead that fails the save.
+    +blessed_strikes:
+      $if: '@.classes.cleric.level >= 7'
+      :label: Blessed Strikes
+      :doc: Choose Divine Strike (an extra 1d8 damage once per turn on a weapon hit) or Potent Spellcasting (your Wisdom modifier to cantrip damage).
+    +ability_score_improvement_2:
+      $if: '@.classes.cleric.level >= 8'
+      :label: Ability Score Improvement
+      :doc: Add +2 to one ability score or +1 to two (or take a feat).
+      '@.improvements.cleric_8': "$.feature.ability_improvement('Cleric', 8)"
+    +divine_intervention:
+      $if: '@.classes.cleric.level >= 10'
+      :label: Divine Intervention
+      :doc: Cast any Cleric spell of level 5 or lower without a spell slot or Material components. Restores on a long rest.
+    +ability_score_improvement_3:
+      $if: '@.classes.cleric.level >= 12'
+      :label: Ability Score Improvement
+      :doc: Add +2 to one ability score or +1 to two (or take a feat).
+      '@.improvements.cleric_12': "$.feature.ability_improvement('Cleric', 12)"
+    +improved_blessed_strikes:
+      $if: '@.classes.cleric.level >= 14'
+      :label: Improved Blessed Strikes
+      :doc: Divine Strike deals 2d8, or Potent Spellcasting also grants temporary hit points when you deal cantrip damage.
+    +ability_score_improvement_4:
+      $if: '@.classes.cleric.level >= 16'
+      :label: Ability Score Improvement
+      :doc: Add +2 to one ability score or +1 to two (or take a feat).
+      '@.improvements.cleric_16': "$.feature.ability_improvement('Cleric', 16)"
+    +epic_boon:
+      $if: '@.classes.cleric.level >= 19'
+      :label: Epic Boon
+      :doc: Gain an Epic Boon feat or another feat for which you qualify.
+    +greater_divine_intervention:
+      $if: '@.classes.cleric.level >= 20'
+      :label: Greater Divine Intervention
+      :doc: Divine Intervention can cast Wish; afterwards you can't use it again for 2d4 long rests.

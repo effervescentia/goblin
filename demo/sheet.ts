@@ -183,7 +183,7 @@ export const TEMPLATES: Template[] = [
       'abilities.intelligence.assigned': 8,
       'abilities.wisdom.assigned': 13,
       'abilities.charisma.assigned': 12,
-      'features.fighting_style': 'defense',
+      'features.fighter.fighting_style': 'defense',
       'skills.trained': ['athletics', 'intimidation'],
     },
   },
@@ -241,6 +241,38 @@ export function combatOf(data: unknown): Combat | null {
       formula: formulaAt(combat, `rolls.${key}.initiative`),
     })),
   };
+}
+
+/** Each class taken with its level, the starting class first. */
+export function classesOf(sheet: unknown): { name: string; label: string; level: unknown }[] {
+  const start = at(sheet, 'class');
+  return fields(at(sheet, 'classes'))
+    .map(([name, entry]) => ({ name, label: labelOf(entry, name), level: at(entry, 'level') }))
+    .sort((a, b) => Number(b.name === start) - Number(a.name === start));
+}
+
+/** The classes a level can go to: the `class` choice's options. */
+export function classOptions(sheet: unknown): string[] {
+  const param = isRecord(sheet) ? sheet.class : undefined;
+  return isRecord(param) && Array.isArray(param[':options']) ? param[':options'].map(String) : [];
+}
+
+/** Every skill picked: the starting class's, then the one each class multiclassed into grants. */
+export const skillsOf = (sheet: unknown) =>
+  fields(at(sheet, 'skills')).flatMap(([, picks]) => [unwrap(picks)].flat().filter((pick) => pick != null));
+
+/** Features by where they come from: each class's under it, then the rest (species, background) on their own. */
+export function featureGroups(sheet: unknown): { path: string; label?: string; features: [string, unknown][] }[] {
+  const classes = classesOf(sheet);
+  const taken = new Set(classes.map(({ name }) => name));
+  return [
+    ...classes.map(({ name, label }) => ({
+      path: `features.${name}`,
+      label,
+      features: fields(at(sheet, `features.${name}`)),
+    })),
+    { path: 'features', features: fields(at(sheet, 'features')).filter(([name]) => !taken.has(name)) },
+  ];
 }
 
 /** A field's `:doc`, if it has one. */

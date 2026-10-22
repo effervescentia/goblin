@@ -651,24 +651,42 @@ export class GoblinEngine {
       .filter(isWriteEvent)
       .map((event) => (typeof event.value === 'string' ? event.value.trim().match(TEMPLATE_CALL)?.[2] : undefined))
       .filter((namespace) => namespace !== undefined);
-    const run = this.journal.begin(actorRaw, events, inputs);
-    return Die.within(run, () => this.resolveInputs(actorRaw, inputs, written));
+    const invoked = inputs.some((event) => event.type === 'invoke');
+    const snapshot =
+      invoked && actorRaw !== null && typeof actorRaw === 'object' ? this.provenance.snapshot(actorRaw) : undefined;
+    const shared = snapshot && { ...this.appRoot };
+    const probe = Die.within(this.journal.begin(actorRaw, events, inputs), () =>
+      this.resolveInputs(actorRaw, inputs, written),
+    );
+    // Mixins gated before the invokes ran: build the tree again with what they
+    // wrote in place while mixins gate, so a level-up brings in its features.
+    const seeds = snapshot === undefined ? [] : this.journal.invokeWrites();
+    if (snapshot === undefined || shared === undefined || seeds.length === 0) return probe;
+    this.provenance.reset(actorRaw as Record<string, unknown>, snapshot as Record<string, unknown>);
+    // `$` shares the entry's top level again from scratch (see `shareWithApp`).
+    for (const key of Object.keys(this.appRoot)) delete this.appRoot[key];
+    Object.assign(this.appRoot, shared);
+    this.cache.clear();
+    const settled = seeds.map(({ path, value }) => ({ version: 0, type: 'override' as const, path, value }));
+    return Die.within(this.journal.restart(), () => this.resolveInputs(actorRaw, inputs, written, settled));
   }
 
   private resolveInputs(
     actorRaw: unknown,
     given: InputEvent[],
     written: string[],
+    seeds?: InputEvent[],
   ): { data: unknown; result?: unknown } | { query: MissingParam[] } {
     let inputs = given;
     let keyed = this.splitNamespaced(actorRaw, inputs, written);
     this.applyOverrides(actorRaw, keyed.inputs);
     const scope: EvalRoots = { doc: actorRaw, actor: actorRaw, app: this.appRoot, current: actorRaw, ...keyed };
-    this.patcher.expandCalls(actorRaw, scope);
+    this.expandSeeded(actorRaw, scope, seeds);
     this.applyOverrides(actorRaw, keyed.inputs);
     this.shareWithApp(actorRaw);
     const outstanding = RecordNode.collectParams(actorRaw, this.namespaceOf, inputs, this.optionsAt(scope));
-    if (outstanding.length > 0) return { query: outstanding };
+    // Seeded, the invokes already ran once: params they bring in are asked for after.
+    if (outstanding.length > 0 && seeds === undefined) return { query: outstanding };
     const invokes = keyed.inputs.filter((event) => event.type === 'invoke');
     if (invokes.length === 0) return { data: debug(this.evaluate(actorRaw, scope)) };
     // The expansion `evaluate` would run: it re-applies nested actors'
@@ -691,7 +709,7 @@ export class GoblinEngine {
       this.applyOverrides(actorRaw, later.inputs);
       // An actor the call wrote in expands with its mixins; a second pass
       // puts its overrides back over what they wrote.
-      if (this.patcher.expandCalls(actorRaw, { ...scope, ...later }))
+      if (this.expandSeeded(actorRaw, { ...scope, ...later }, seeds))
         this.patcher.expandCalls(actorRaw, { ...scope, ...later });
       // Filled now, so a later invoke into that actor reads its choices.
       RecordNode.materializeParams(actorRaw, keyed.inputs, this.namespaceOf);
@@ -704,6 +722,34 @@ export class GoblinEngine {
     if (asked.length > 0) return { query: asked };
     // Already expanded: a fresh expansion would re-apply every set.
     return { data: debug(this.evaluate(actorRaw, { ...settled, path: [] })), result: debug(result) ?? null };
+  }
+
+  /** Expand calls with `seeds` laid over the tree, so mixins gate on them,
+   * then put back what each replaced. */
+  private expandSeeded(raw: unknown, scope: EvalRoots, seeds: InputEvent[] | undefined): boolean {
+    if (seeds === undefined) return this.patcher.expandCalls(raw, scope);
+    this.laySeeds(raw, seeds);
+    try {
+      return this.patcher.expandCalls(raw, { ...scope, seeds });
+    } finally {
+      this.journal.lift();
+      this.cache.clear();
+    }
+  }
+
+  /** Lay each seed over `actorRaw` where its record already exists. One under
+   * a nested actor waits for expansion to enter it, after its overrides. */
+  laySeeds(actorRaw: unknown, seeds: readonly InputEvent[]): void {
+    for (const { path: key, value } of seeds) {
+      const path = key.split('.');
+      const owner = getPath(actorRaw, path.slice(0, -1)) as Record<string, unknown> | null | undefined;
+      const last = path.at(-1);
+      if (owner === null || typeof owner !== 'object' || last === undefined) continue;
+      const within = path.slice(0, -1).map((_, i) => getPath(actorRaw, path.slice(0, i + 1)));
+      if (within.some((node) => typeof (node as Record<string, unknown>)[ACTOR_KEY] === 'string')) continue;
+      this.journal.lay(owner, last, value);
+    }
+    this.cache.clear();
   }
 
   /** An actor `event`'s call wrote in starts fresh: the inputs given for its
@@ -909,6 +955,7 @@ export class GoblinEngine {
       current: record,
       home: undefined,
       inputs: [...nest(scope.inputs, path), ...named],
+      seeds: scope.seeds && nest(scope.seeds, path),
       path: scope.path === undefined ? undefined : [],
     };
   }

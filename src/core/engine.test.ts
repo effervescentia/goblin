@@ -835,6 +835,56 @@ describe('mixins', () => {
     const stranger = engineWith({ 'boon.yaml': boon, 'pet.yaml': { $actor: 'Pet', x: "$mixin('boon.yaml')" } });
     expect(() => stranger.resolve('pet.yaml')).toThrow("$mixin('boon.yaml'): no parent document defines actor Hero");
   });
+
+  describe('after an invoke', () => {
+    // A hero at the table who levels up by invoke: the mixins gate on `level`.
+    const table = (hero: Record<string, unknown> = {}) =>
+      engineWith({
+        'table.yaml': { log: [], party: { ash: "$tmpl('hero.yaml', 'ash')" } },
+        'hero.yaml': {
+          $actor: 'Hero',
+          level: 1,
+          gold: 1,
+          features: {},
+          'level_up()': "@.level += 1\n$.log += ['ash levels']",
+          _perks: { novice: "$mixin('novice.yaml')", veteran: "$mixin('veteran.yaml')" },
+          ...hero,
+        },
+        'novice.yaml': { '@': 'Hero', $if: '@.level < 2', '@.features': { '+training': { doc: 'still learning' } } },
+        'veteran.yaml': { '@': 'Hero', $if: '@.level >= 2', '@.features': { '+dash': { speed: 10 } }, '+@.gold': 5 },
+      });
+    type Table = { data: { log: unknown; party: { ash: Record<string, unknown> } } };
+
+    it('gates on what the call wrote, bringing in features and dropping ones no longer met', () => {
+      const before = table().resolve('table.yaml') as Table;
+      expect(Object.keys(before.data.party.ash.features as object)).toEqual(['training']);
+      const after = table().resolve('table.yaml', [invoke('party.ash.level_up')]) as Table;
+      const { ash } = after.data.party;
+      expect(fieldValue(ash.level)).toBe(2);
+      expect(Object.keys(ash.features as object)).toEqual(['dash']);
+      expect(fieldValue(ash.gold)).toBe(6);
+      // The call's own writes land once, as it made them.
+      expect(fieldValue(after.data.log)).toEqual(['ash levels']);
+    });
+
+    it('keeps a field a mixin writes too as the patches and the call leave it', () => {
+      const engine = table({ 'pay()': '@.gold = @.gold * 2', 'level_up()': '@.level += 1' });
+      const state = engine.resolve('table.yaml', [invoke('party.ash.level_up', [], 1), invoke('party.ash.pay', [], 2)]);
+      // 1, plus the veteran's 5 once the level-up lets it in, doubled.
+      expect(fieldValue((state as Table).data.party.ash.gold)).toBe(12);
+    });
+
+    it('asks for the params a gate the call opened brings in', () => {
+      const engine = table();
+      engine.register('veteran.yaml', {
+        '@': 'Hero',
+        $if: '@.level >= 2',
+        '@.specialty': { ':param': true, ':type': 'string' },
+      });
+      const asked = engine.resolve('table.yaml', [invoke('party.ash.level_up')]) as { query: Array<{ path: string }> };
+      expect(asked.query.map(({ path }) => path)).toEqual(['ash.specialty']);
+    });
+  });
 });
 
 describe('nested actors', () => {

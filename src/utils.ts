@@ -40,6 +40,9 @@ export interface EvalRoots {
   /** Events led by an actor namespace (`aria.name`), read by whichever nested
    * actor holds that namespace. */
   namespaced?: InputEvent[];
+  /** What invoked calls left at each path, laid over `actor` (and each nested
+   * actor as expansion enters it) while mixins gate, then taken back. */
+  seeds?: InputEvent[];
   /** Document that wrote the expression being evaluated — the only one that
    * may reach `_` fields it wrote. */
   source?: string;

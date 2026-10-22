@@ -171,6 +171,7 @@ export class Patcher {
       const nested = this.engine.isNestedActor(record, outer);
       const inner = nested ? this.engine.enterActor(record, outer, path) : outer;
       if (nested && inner.inputs) this.engine.applyOverrides(record, inner.inputs);
+      if (nested && inner.seeds) this.engine.laySeeds(record, inner.seeds);
       const base = nested ? [] : path;
       for (const [key, value] of Object.entries(record)) {
         if (isMetaKey(key) || isValidateKey(key)) continue;

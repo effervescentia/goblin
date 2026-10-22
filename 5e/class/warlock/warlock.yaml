@@ -1,85 +1,97 @@
 '@': Character
-$if: "@.class == 'warlock'"
+$if: "$lib.list.has(@.class_names, 'warlock')"
 
-'@.hit_die': d8
-'@.proficiencies.weapon':
-  - simple_weapons
-'@.proficiencies.armor':
-  - light_armor
-'@.proficiencies.saving_throws':
-  - wisdom
-  - charisma
-'@.skills.trained':
-  :label: Skill Proficiencies
-  :doc: 'Choose two proficient skills.'
-  :param: true
-  :type: array
-  :options:
-    - arcana
-    - deception
-    - history
-    - intimidation
-    - investigation
-    - nature
-    - religion
-  :count: 2
-  :unique: true
+'@.classes':
+  +warlock:
+    :label: Warlock
+    level: "@.class_level('warlock')"
+    qualified: '@.abilities.charisma.base >= 13'
+
+# A starting warlock takes the hit die, saving throws, skill picks and
+# proficiencies; one multiclassed into gets only the proficiencies below.
+'@.skills':
+  $if: "@.class == 'warlock'"
+  trained:
+    :label: Skill Proficiencies
+    :doc: 'Choose two proficient skills.'
+    :param: true
+    :type: array
+    :options:
+      - arcana
+      - deception
+      - history
+      - intimidation
+      - investigation
+      - nature
+      - religion
+    :count: 2
+    :unique: true
+  $then:
+    '@.hit_die': d8
+    '@.proficiencies.saving_throws': [wisdom, charisma]
+    '@.proficiencies.weapon': [+simple_weapons]
+    '@.proficiencies.armor': [+light_armor]
+'@.proficiencies':
+  $if: "@.class != 'warlock'"
+  armor: [+light_armor]
 '@.features':
-  +eldritch_invocations:
-    :label: Eldritch Invocations
-    :doc: Learn Eldritch Invocations, gaining more as your warlock level increases; replace one whenever you gain a level.
-  +pact_magic:
-    :label: Pact Magic
-    :doc: Cast Warlock spells using Charisma; slots are all the same level, increase with warlock level, and restore on a short or long rest.
-  +magical_cunning:
-    $if: '@.level >= 2'
-    :label: Magical Cunning
-    :doc: Spend 1 minute to regain up to half your expended Pact Magic slots. Restores on a long rest.
-  +ability_score_improvement_1:
-    $if: '@.level >= 4'
-    :label: Ability Score Improvement
-    :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    '@.improvements.level_4': '$.feature.ability_improvement(4)'
-  +ability_score_improvement_2:
-    $if: '@.level >= 8'
-    :label: Ability Score Improvement
-    :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    '@.improvements.level_8': '$.feature.ability_improvement(8)'
-  +contact_patron:
-    $if: '@.level >= 9'
-    :label: Contact Patron
-    :doc: Always have Contact Other Plane prepared, and cast it without a spell slot once per long rest, automatically succeeding on its save.
-  +mystic_arcanum_1:
-    $if: '@.level >= 11'
-    :label: Mystic Arcanum
-    :doc: Choose a level 6 Warlock spell to cast without a spell slot. Restores on a long rest.
-  +ability_score_improvement_3:
-    $if: '@.level >= 12'
-    :label: Ability Score Improvement
-    :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    '@.improvements.level_12': '$.feature.ability_improvement(12)'
-  +mystic_arcanum_2:
-    $if: '@.level >= 13'
-    :label: Mystic Arcanum
-    :doc: Choose a level 7 Warlock spell to cast without a spell slot. Restores on a long rest.
-  +mystic_arcanum_3:
-    $if: '@.level >= 15'
-    :label: Mystic Arcanum
-    :doc: Choose a level 8 Warlock spell to cast without a spell slot. Restores on a long rest.
-  +ability_score_improvement_4:
-    $if: '@.level >= 16'
-    :label: Ability Score Improvement
-    :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    '@.improvements.level_16': '$.feature.ability_improvement(16)'
-  +mystic_arcanum_4:
-    $if: '@.level >= 17'
-    :label: Mystic Arcanum
-    :doc: Choose a level 9 Warlock spell to cast without a spell slot. Restores on a long rest.
-  +epic_boon:
-    $if: '@.level >= 19'
-    :label: Epic Boon
-    :doc: Gain an Epic Boon feat or another feat for which you qualify.
-  +eldritch_master:
-    $if: '@.level >= 20'
-    :label: Eldritch Master
-    :doc: Magical Cunning regains all your expended Pact Magic slots.
+  +warlock:
+    :label: Warlock
+    +eldritch_invocations:
+      :label: Eldritch Invocations
+      :doc: Learn Eldritch Invocations, gaining more as your warlock level increases; replace one whenever you gain a level.
+    +pact_magic:
+      :label: Pact Magic
+      :doc: Cast Warlock spells using Charisma; slots are all the same level, increase with warlock level, and restore on a short or long rest.
+    +magical_cunning:
+      $if: '@.classes.warlock.level >= 2'
+      :label: Magical Cunning
+      :doc: Spend 1 minute to regain up to half your expended Pact Magic slots. Restores on a long rest.
+    +ability_score_improvement_1:
+      $if: '@.classes.warlock.level >= 4'
+      :label: Ability Score Improvement
+      :doc: Add +2 to one ability score or +1 to two (or take a feat).
+      '@.improvements.warlock_4': "$.feature.ability_improvement('Warlock', 4)"
+    +ability_score_improvement_2:
+      $if: '@.classes.warlock.level >= 8'
+      :label: Ability Score Improvement
+      :doc: Add +2 to one ability score or +1 to two (or take a feat).
+      '@.improvements.warlock_8': "$.feature.ability_improvement('Warlock', 8)"
+    +contact_patron:
+      $if: '@.classes.warlock.level >= 9'
+      :label: Contact Patron
+      :doc: Always have Contact Other Plane prepared, and cast it without a spell slot once per long rest, automatically succeeding on its save.
+    +mystic_arcanum_1:
+      $if: '@.classes.warlock.level >= 11'
+      :label: Mystic Arcanum
+      :doc: Choose a level 6 Warlock spell to cast without a spell slot. Restores on a long rest.
+    +ability_score_improvement_3:
+      $if: '@.classes.warlock.level >= 12'
+      :label: Ability Score Improvement
+      :doc: Add +2 to one ability score or +1 to two (or take a feat).
+      '@.improvements.warlock_12': "$.feature.ability_improvement('Warlock', 12)"
+    +mystic_arcanum_2:
+      $if: '@.classes.warlock.level >= 13'
+      :label: Mystic Arcanum
+      :doc: Choose a level 7 Warlock spell to cast without a spell slot. Restores on a long rest.
+    +mystic_arcanum_3:
+      $if: '@.classes.warlock.level >= 15'
+      :label: Mystic Arcanum
+      :doc: Choose a level 8 Warlock spell to cast without a spell slot. Restores on a long rest.
+    +ability_score_improvement_4:
+      $if: '@.classes.warlock.level >= 16'
+      :label: Ability Score Improvement
+      :doc: Add +2 to one ability score or +1 to two (or take a feat).
+      '@.improvements.warlock_16': "$.feature.ability_improvement('Warlock', 16)"
+    +mystic_arcanum_4:
+      $if: '@.classes.warlock.level >= 17'
+      :label: Mystic Arcanum
+      :doc: Choose a level 9 Warlock spell to cast without a spell slot. Restores on a long rest.
+    +epic_boon:
+      $if: '@.classes.warlock.level >= 19'
+      :label: Epic Boon
+      :doc: Gain an Epic Boon feat or another feat for which you qualify.
+    +eldritch_master:
+      $if: '@.classes.warlock.level >= 20'
+      :label: Eldritch Master
+      :doc: Magical Cunning regains all your expended Pact Magic slots.

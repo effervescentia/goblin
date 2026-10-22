@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import type { InspectNode } from '@/inspect';
 import {
   at,
+  classesOf,
+  classOptions,
   combatOf,
   describeEvent,
   docOf,
   eventsAt,
   expressionsOf,
+  featureGroups,
   fields,
   formulaAt,
   humanize,
@@ -17,6 +20,7 @@ import {
   readParam,
   type Segment,
   signed,
+  skillsOf,
   slotsOf,
   solve,
   solvedText,
@@ -191,6 +195,32 @@ describe('sheet', () => {
     expect(readParam(members, [])).toBeUndefined();
     expect(readParam(members, ['', '1'])).toEqual(['bram']);
     expect(readParam(members, ['1', '1'])).toEqual(['aria', 'bram']);
+  });
+
+  it('reads a multiclassed character: its classes, skills and features by class', () => {
+    const multiclassed = {
+      class: { ':param': true, ':options': ['fighter', 'rogue'], ':value': 'rogue' },
+      classes: { '!validate': [], fighter: { ':label': 'Fighter', level: 4 }, rogue: { ':label': 'Rogue', level: 1 } },
+      skills: { trained: { ':value': ['athletics', 'perception'] }, rogue: { ':param': true, ':value': 'stealth' } },
+      features: {
+        fighter: { ':label': 'Fighter', second_wind: { ':label': 'Second Wind' } },
+        rogue: { ':label': 'Rogue', sneak_attack: {} },
+        darkvision: {},
+      },
+    };
+    expect(classesOf(multiclassed)).toEqual([
+      { name: 'rogue', label: 'Rogue', level: 1 },
+      { name: 'fighter', label: 'Fighter', level: 4 },
+    ]);
+    expect(classOptions(multiclassed)).toEqual(['fighter', 'rogue']);
+    expect(skillsOf(multiclassed)).toEqual(['athletics', 'perception', 'stealth']);
+    expect(
+      featureGroups(multiclassed).map(({ path, label, features }) => [path, label, features.map(([k]) => k)]),
+    ).toEqual([
+      ['features.rogue', 'Rogue', ['sneak_attack']],
+      ['features.fighter', 'Fighter', ['second_wind']],
+      ['features', undefined, ['darkvision']],
+    ]);
   });
 
   it('reads the fight in turn order, or null between fights', () => {

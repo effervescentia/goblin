@@ -272,6 +272,21 @@ describe('examples', () => {
     });
   });
 
+  it('21-regate.yaml gates its mixin on what an invoke wrote, in the same run', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'goblin-regate-'));
+    const state = join(dir, 'state.json');
+    try {
+      const before = cli('examples/21-regate.yaml', '--strip-metadata', '--out', state) as { data: unknown };
+      expect(before.data).toMatchObject({ level: 1, gold: 10, features: {} });
+      const after = cli('examples/21-regate.yaml', '--strip-metadata', '--in', state, '--invoke', 'level_up') as {
+        data: unknown;
+      };
+      expect(after.data).toMatchObject({ level: 2, gold: 15, features: { dash: null } });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('11-private-fields.yaml reads its own `_` fields and strips them', () => {
     const state = cli('examples/11-private-fields.yaml', '--strip-metadata') as { data: unknown };
     expect(state.data).toEqual({ budget: { limit: 27, left: 15 } });

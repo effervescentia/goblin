@@ -948,13 +948,13 @@ describe('cli', () => {
       '--param',
       'xp=6500',
       '--param',
-      'features.fighting_style=dueling',
+      'features.fighter.fighting_style=dueling',
       '--param',
-      'features.martial_archetype=champion',
+      'features.fighter.martial_archetype=champion',
       '--param',
       'skills.trained=["athletics","perception"]',
       '--param',
-      'improvements.level_4=["strength","strength"]',
+      'improvements.fighter_4=["strength","strength"]',
     ].map((arg) => (arg === '--param' ? arg : `aria.${arg}`));
     const args = ['5e/main.yaml', '--compact', ...params, ...COMPANION_PARAMS];
     const full = runCli(...args);
@@ -995,7 +995,7 @@ describe('cli', () => {
     expect(pc.name).toBe('Aria');
     expect(pc.level).toBe(5);
     expect(pc.initiative).toEqual({ base: 2, roll: '1d20 + [Initiative](.base)' }); // dex 14 → +2
-    expect((pc.features as Record<string, unknown>).second_wind).toBeNull();
+    expect((pc.features as Record<string, Record<string, unknown>>).fighter?.second_wind).toBeNull();
   });
 });
 

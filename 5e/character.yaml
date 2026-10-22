@@ -61,7 +61,7 @@ initiative:
   'roll()': 1d20 + [Initiative](.base)
 
 hit_die:
-  :doc: Hit die granted by your class; the adopted class patch fills this slot.
+  :doc: Hit die granted by your starting class; its patch fills this slot.
   :type: die
 hit_points:
   '!validate':
@@ -122,10 +122,31 @@ _backgrounds:
 
 class:
   :label: Class
-  :doc: Choose a class for your character.
+  :doc: Choose a starting class for your character.
   :param: true
   :type: string
   :options: $lib.record.keys(._classes)
+
+# The class each level past the first went to, keyed `level_<n>`; a level not
+# chosen goes to the starting class. `level_up(name)` picks the current level's.
+level_choices: {}
+'level_up(name)': |
+  @.level_choices['level_' + @.level] = name
+  $.log += [{ actor: @.name, action: 'level_up', level: @.level, class: name }]
+
+# Every class taken, the starting one first; each mixes in below.
+class_names: $lib.set.union([@.class], $lib.record.values(@.level_choices))
+'class_level(name)': >-
+  (name == @.class) * (@.level - $lib.list.length($lib.record.values(@.level_choices))) +
+  $lib.list.count($lib.record.values(@.level_choices), name)
+
+# One entry per class taken, added by its file: its `level`, its `hit_die`, and
+# whether the scores meet its multiclassing prerequisite (`qualified`). A class
+# can be taken past the first only when every class held qualifies.
+classes:
+  '!validate':
+    - $lib.list.count(.*.level, 0) == 0
+    - $lib.list.length(.*) == 1 || $lib.list.count(.*.qualified, false) == 0
 
 _classes:
   barbarian: $mixin('class/barbarian/barbarian.yaml')

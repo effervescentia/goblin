@@ -1,120 +1,149 @@
 '@': Character
-$if: "@.class == 'rogue'"
+$if: "$lib.list.has(@.class_names, 'rogue')"
 
-'@.hit_die': d8
-'@.proficiencies.weapon':
-  - simple_weapons
-  - finesse_or_light_martial_weapons
-'@.proficiencies.armor':
-  - light_armor
-'@.proficiencies.saving_throws':
-  - dexterity
-  - intelligence
-'@.skills.trained':
-  :label: Skill Proficiencies
-  :doc: 'Choose four proficient skills.'
-  :param: true
-  :type: array
-  :options:
-    - acrobatics
-    - athletics
-    - deception
-    - insight
-    - intimidation
-    - investigation
-    - perception
-    - persuasion
-    - sleight_of_hand
-    - stealth
-  :count: 4
-  :unique: true
+'@.classes':
+  +rogue:
+    :label: Rogue
+    level: "@.class_level('rogue')"
+    qualified: '@.abilities.dexterity.base >= 13'
+
+# A starting rogue takes the hit die, saving throws, skill picks and
+# proficiencies; one multiclassed into gets only the proficiencies below.
+'@.skills':
+  $if: "@.class == 'rogue'"
+  trained:
+    :label: Skill Proficiencies
+    :doc: 'Choose four proficient skills.'
+    :param: true
+    :type: array
+    :options:
+      - acrobatics
+      - athletics
+      - deception
+      - insight
+      - intimidation
+      - investigation
+      - perception
+      - persuasion
+      - sleight_of_hand
+      - stealth
+    :count: 4
+    :unique: true
+  $then:
+    '@.hit_die': d8
+    '@.proficiencies.saving_throws': [dexterity, intelligence]
+    '@.proficiencies.weapon': [+simple_weapons, +finesse_or_light_martial_weapons]
+    '@.proficiencies.armor': [+light_armor]
+'@.proficiencies':
+  $if: "@.class != 'rogue'"
+  armor: [+light_armor]
+  tool: [+thieves_tools]
+  $then:
+    '@.skills.rogue':
+      :label: Multiclass Skill
+      :doc: 'Choose one proficient skill from multiclassing into rogue.'
+      :param: true
+      :type: string
+      :options:
+        - acrobatics
+        - athletics
+        - deception
+        - insight
+        - intimidation
+        - investigation
+        - perception
+        - persuasion
+        - sleight_of_hand
+        - stealth
 '@.features':
-  +expertise_1:
-    :label: Expertise
-    :doc: Gain Expertise in two skills you're proficient in.
-  +sneak_attack:
-    :label: Sneak Attack
-    :doc: Once per turn, deal extra damage on a Finesse or Ranged weapon hit with Advantage or an ally next to the target; starts at 1d6 and grows by 1d6 every odd level.
-  +thieves_cant:
-    :label: Thieves' Cant
-    :doc: Know Thieves' Cant, the rogues' secret language, and one other language.
-  +weapon_mastery:
-    :label: Weapon Mastery
-    :doc: Mastery properties of two weapons; you can change one of them on a long rest.
-  +cunning_action:
-    $if: '@.level >= 2'
-    :label: Cunning Action
-    :doc: Take the Dash, Disengage, or Hide action as a bonus action.
-  +steady_aim:
-    $if: '@.level >= 3'
-    :label: Steady Aim
-    :doc: As a bonus action if you haven't moved, gain Advantage on your next attack roll this turn; your Speed becomes 0 until the turn ends.
-  +ability_score_improvement_1:
-    $if: '@.level >= 4'
-    :label: Ability Score Improvement
-    :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    '@.improvements.level_4': '$.feature.ability_improvement(4)'
-  +cunning_strike:
-    $if: '@.level >= 5'
-    :label: Cunning Strike
-    :doc: Forgo Sneak Attack dice to add a Poison, Trip, or Withdraw effect to a Sneak Attack hit.
-  +uncanny_dodge:
-    $if: '@.level >= 5'
-    :label: Uncanny Dodge
-    :doc: As a reaction, halve the damage of an attack from an attacker you can see.
-  +expertise_2:
-    $if: '@.level >= 6'
-    :label: Expertise
-    :doc: Gain Expertise in two more skills you're proficient in.
-  +evasion:
-    $if: '@.level >= 7'
-    :label: Evasion
-    :doc: When a Dexterity saving throw allows half damage, take none on a success and half on a failure.
-  +reliable_talent:
-    $if: '@.level >= 7'
-    :label: Reliable Talent
-    :doc: Treat a d20 roll of 9 or lower as a 10 on ability checks using a skill or tool you're proficient in.
-  +ability_score_improvement_2:
-    $if: '@.level >= 8'
-    :label: Ability Score Improvement
-    :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    '@.improvements.level_8': '$.feature.ability_improvement(8)'
-  +ability_score_improvement_3:
-    $if: '@.level >= 10'
-    :label: Ability Score Improvement
-    :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    '@.improvements.level_10': '$.feature.ability_improvement(10)'
-  +improved_cunning_strike:
-    $if: '@.level >= 11'
-    :label: Improved Cunning Strike
-    :doc: Apply up to two Cunning Strike effects to one Sneak Attack.
-  +ability_score_improvement_4:
-    $if: '@.level >= 12'
-    :label: Ability Score Improvement
-    :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    '@.improvements.level_12': '$.feature.ability_improvement(12)'
-  +devious_strikes:
-    $if: '@.level >= 14'
-    :label: Devious Strikes
-    :doc: Add Daze, Knock Out, and Obscure to your Cunning Strike options.
-  +slippery_mind:
-    $if: '@.level >= 15'
-    :label: Slippery Mind
-    :doc: Proficiency in Wisdom and Charisma saving throws.
-  +ability_score_improvement_5:
-    $if: '@.level >= 16'
-    :label: Ability Score Improvement
-    :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    '@.improvements.level_16': '$.feature.ability_improvement(16)'
-  +elusive:
-    $if: '@.level >= 18'
-    :label: Elusive
-    :doc: Attack rolls against you can't have Advantage unless you're Incapacitated.
-  +epic_boon:
-    $if: '@.level >= 19'
-    :label: Epic Boon
-    :doc: Gain an Epic Boon feat or another feat for which you qualify.
-  +stroke_of_luck:
-    $if: '@.level >= 20'
-    :label: Stroke of Luck
-    :doc: Turn a failed d20 test into a 20. Restores on a short or long rest.
+  +rogue:
+    :label: Rogue
+    +expertise_1:
+      :label: Expertise
+      :doc: Gain Expertise in two skills you're proficient in.
+    +sneak_attack:
+      :label: Sneak Attack
+      :doc: Once per turn, deal extra damage on a Finesse or Ranged weapon hit with Advantage or an ally next to the target; starts at 1d6 and grows by 1d6 every odd level.
+    +thieves_cant:
+      :label: Thieves' Cant
+      :doc: Know Thieves' Cant, the rogues' secret language, and one other language.
+    +weapon_mastery:
+      :label: Weapon Mastery
+      :doc: Mastery properties of two weapons; you can change one of them on a long rest.
+    +cunning_action:
+      $if: '@.classes.rogue.level >= 2'
+      :label: Cunning Action
+      :doc: Take the Dash, Disengage, or Hide action as a bonus action.
+    +steady_aim:
+      $if: '@.classes.rogue.level >= 3'
+      :label: Steady Aim
+      :doc: As a bonus action if you haven't moved, gain Advantage on your next attack roll this turn; your Speed becomes 0 until the turn ends.
+    +ability_score_improvement_1:
+      $if: '@.classes.rogue.level >= 4'
+      :label: Ability Score Improvement
+      :doc: Add +2 to one ability score or +1 to two (or take a feat).
+      '@.improvements.rogue_4': "$.feature.ability_improvement('Rogue', 4)"
+    +cunning_strike:
+      $if: '@.classes.rogue.level >= 5'
+      :label: Cunning Strike
+      :doc: Forgo Sneak Attack dice to add a Poison, Trip, or Withdraw effect to a Sneak Attack hit.
+    +uncanny_dodge:
+      $if: '@.classes.rogue.level >= 5'
+      :label: Uncanny Dodge
+      :doc: As a reaction, halve the damage of an attack from an attacker you can see.
+    +expertise_2:
+      $if: '@.classes.rogue.level >= 6'
+      :label: Expertise
+      :doc: Gain Expertise in two more skills you're proficient in.
+    +evasion:
+      $if: '@.classes.rogue.level >= 7'
+      :label: Evasion
+      :doc: When a Dexterity saving throw allows half damage, take none on a success and half on a failure.
+    +reliable_talent:
+      $if: '@.classes.rogue.level >= 7'
+      :label: Reliable Talent
+      :doc: Treat a d20 roll of 9 or lower as a 10 on ability checks using a skill or tool you're proficient in.
+    +ability_score_improvement_2:
+      $if: '@.classes.rogue.level >= 8'
+      :label: Ability Score Improvement
+      :doc: Add +2 to one ability score or +1 to two (or take a feat).
+      '@.improvements.rogue_8': "$.feature.ability_improvement('Rogue', 8)"
+    +ability_score_improvement_3:
+      $if: '@.classes.rogue.level >= 10'
+      :label: Ability Score Improvement
+      :doc: Add +2 to one ability score or +1 to two (or take a feat).
+      '@.improvements.rogue_10': "$.feature.ability_improvement('Rogue', 10)"
+    +improved_cunning_strike:
+      $if: '@.classes.rogue.level >= 11'
+      :label: Improved Cunning Strike
+      :doc: Apply up to two Cunning Strike effects to one Sneak Attack.
+    +ability_score_improvement_4:
+      $if: '@.classes.rogue.level >= 12'
+      :label: Ability Score Improvement
+      :doc: Add +2 to one ability score or +1 to two (or take a feat).
+      '@.improvements.rogue_12': "$.feature.ability_improvement('Rogue', 12)"
+    +devious_strikes:
+      $if: '@.classes.rogue.level >= 14'
+      :label: Devious Strikes
+      :doc: Add Daze, Knock Out, and Obscure to your Cunning Strike options.
+    +slippery_mind:
+      $if: '@.classes.rogue.level >= 15'
+      :label: Slippery Mind
+      :doc: Proficiency in Wisdom and Charisma saving throws.
+    +ability_score_improvement_5:
+      $if: '@.classes.rogue.level >= 16'
+      :label: Ability Score Improvement
+      :doc: Add +2 to one ability score or +1 to two (or take a feat).
+      '@.improvements.rogue_16': "$.feature.ability_improvement('Rogue', 16)"
+    +elusive:
+      $if: '@.classes.rogue.level >= 18'
+      :label: Elusive
+      :doc: Attack rolls against you can't have Advantage unless you're Incapacitated.
+    +epic_boon:
+      $if: '@.classes.rogue.level >= 19'
+      :label: Epic Boon
+      :doc: Gain an Epic Boon feat or another feat for which you qualify.
+    +stroke_of_luck:
+      $if: '@.classes.rogue.level >= 20'
+      :label: Stroke of Luck
+      :doc: Turn a failed d20 test into a 20. Restores on a short or long rest.

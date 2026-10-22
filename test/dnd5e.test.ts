@@ -81,11 +81,11 @@ const script = `
   const baseProvided = (xp) => ({
     name: 'X',
     xp,
-    'features.fighting_style': 'defense',
-    'features.martial_archetype': 'champion',
+    'features.fighter.fighting_style': 'defense',
+    'features.fighter.martial_archetype': 'champion',
     'skills.trained': ['athletics', 'perception'],
     // The level-4 feature's pick: the same ability twice is +2.
-    'improvements.level_4': ['strength', 'strength'],
+    'improvements.fighter_4': ['strength', 'strength'],
     // Point buy: the classic 15/14/13/10/10/8 spread, 25 of 27 points.
     ...BOUGHT,
   });
@@ -227,8 +227,8 @@ describe('5e', () => {
         'ability_method',
         'background',
         'class',
-        'features.fighting_style',
-        'features.martial_archetype',
+        'features.fighter.fighting_style',
+        'features.fighter.martial_archetype',
         'name',
         'skills.trained',
         'species',
@@ -289,19 +289,19 @@ describe('5e', () => {
       '--param',
       'xp=6500',
       '--param',
-      'features.fighting_style=dueling',
+      'features.fighter.fighting_style=dueling',
       '--param',
-      'features.martial_archetype=champion',
+      'features.fighter.martial_archetype=champion',
       '--param',
       'skills.trained=["athletics","perception"]',
       '--param',
-      'improvements.level_4=["strength","strength"]',
+      'improvements.fighter_4=["strength","strength"]',
     ) as {
       data: {
         level: unknown;
         attacks: Record<string, unknown>;
         armor_class: unknown;
-        features: Record<string, unknown>;
+        features: { fighter: Record<string, unknown> };
       };
     };
     expect(data.data.level).toEqual({
@@ -323,16 +323,16 @@ describe('5e', () => {
       ':events': [
         // Each write cites the key behind it: `attacks: 1`, then `'+@.attacks'`.
         { ':source': 'character.yaml', ':line': 55, ':column': 1, ':set': 1 },
-        { ':source': 'class/fighter/fighter.yaml', ':line': 114, ':column': 5, ':add': 1 },
+        { ':source': 'class/fighter/fighter.yaml', ':line': 125, ':column': 7, ':add': 1 },
       ],
     });
     // A `+key` addition is itself a change: the feature records who added it.
-    expect(data.data.features.extra_attack).toEqual({
+    expect(data.data.features.fighter.extra_attack).toEqual({
       ':label': 'Extra Attack',
       ':doc': 'Strike twice whenever you take the Attack action.',
-      ':events': [{ ':source': 'class/fighter/fighter.yaml', ':line': 110, ':column': 3, ':add': 'extra_attack' }],
+      ':events': [{ ':source': 'class/fighter/fighter.yaml', ':line': 121, ':column': 5, ':add': 'extra_attack' }],
     });
-    expect(data.data.features.fighting_style).toEqual({
+    expect(data.data.features.fighter.fighting_style).toEqual({
       ':label': 'Fighting Style',
       ':doc': 'Pick the combat style you trained in.',
       ':param': true,
@@ -350,7 +350,7 @@ describe('5e', () => {
         'unarmed_fighting',
       ],
       ':value': 'dueling',
-      ':events': [{ ':source': 'class/fighter/fighter.yaml', ':line': 31, ':column': 3, ':add': 'fighting_style' }],
+      ':events': [{ ':source': 'class/fighter/fighter.yaml', ':line': 42, ':column': 5, ':add': 'fighting_style' }],
     });
   });
 
@@ -364,13 +364,13 @@ describe('5e', () => {
       '--param',
       'xp=6500',
       '--param',
-      'features.fighting_style=dueling',
+      'features.fighter.fighting_style=dueling',
       '--param',
-      'features.martial_archetype=champion',
+      'features.fighter.martial_archetype=champion',
       '--param',
       'skills.trained=["athletics","perception"]',
       '--param',
-      `improvements.level_4=${picks}`,
+      `improvements.fighter_4=${picks}`,
     ];
     const sheet = (picks: string) =>
       cli(...args(picks)) as {
@@ -389,11 +389,11 @@ describe('5e', () => {
 
     // A pick outside the six abilities is refused.
     expect(cliFails(...args('["luck","luck"]'))).toContain(
-      'param options mismatch: improvements.level_4[0] expected one of',
+      'param options mismatch: improvements.fighter_4[0] expected one of',
     );
     // Exactly two picks: no more, no fewer.
     expect(cliFails(...args('["strength"]'))).toContain(
-      'param count mismatch: improvements.level_4 expected 2 items, got 1',
+      'param count mismatch: improvements.fighter_4 expected 2 items, got 1',
     );
   });
 
@@ -417,7 +417,7 @@ describe('5e', () => {
       '--param',
       'xp=0',
       '--param',
-      'features.fighting_style=dueling',
+      'features.fighter.fighting_style=dueling',
       '--param',
       'skills.trained=["athletics","perception"]',
     ];
@@ -459,7 +459,7 @@ describe('5e', () => {
       '--param',
       'ability_method=standard_array',
       '--param',
-      'features.fighting_style=dueling',
+      'features.fighter.fighting_style=dueling',
       '--param',
       'skills.trained=["athletics","perception"]',
     ];
@@ -520,7 +520,7 @@ describe('5e', () => {
       '--param',
       'ability_method=roll',
       '--param',
-      'features.fighting_style=dueling',
+      'features.fighter.fighting_style=dueling',
       '--param',
       'skills.trained=["athletics","perception"]',
     ];
@@ -558,7 +558,7 @@ describe('5e', () => {
       '--param',
       'ability_method=roll_assign',
       '--param',
-      'features.fighting_style=dueling',
+      'features.fighter.fighting_style=dueling',
       '--param',
       'skills.trained=["athletics","perception"]',
     ];
@@ -616,14 +616,14 @@ describe('5e', () => {
       '--param',
       'ability_method=roll',
       '--param',
-      'features.fighting_style=dueling',
+      'features.fighter.fighting_style=dueling',
       '--param',
       'skills.trained=["athletics","perception"]',
     ];
     // Every fighter ability improvement, so high levels resolve.
     const improvements = [4, 6, 8, 12, 14, 16].flatMap((level) => [
       '--param',
-      `improvements.level_${level}=["strength","strength"]`,
+      `improvements.fighter_${level}=["strength","strength"]`,
     ]);
     // biome-ignore lint/suspicious/noExplicitAny: assertions walk loose JSON sheets
     type Sheet = { data: Record<string, any>; errors?: string[] };
@@ -635,25 +635,25 @@ describe('5e', () => {
         '--param',
         `xp=${xp}`,
         '--param',
-        `features.martial_archetype=${archetype}`,
+        `features.fighter.martial_archetype=${archetype}`,
         ...extra,
       ) as Sheet;
 
     it('applies only the chosen subclass, from 3rd level', () => {
       const early = cli('5e/main.yaml', ...base, '--param', 'xp=899') as Sheet;
-      expect(early.data.features.improved_critical).toBeUndefined();
+      expect(early.data.features.fighter.improved_critical).toBeUndefined();
       const champion = sheet(900, 'champion').data;
       expect(champion.critical_hit).toBe(19);
-      expect(champion.features.spellcasting).toBeUndefined();
+      expect(champion.features.fighter.spellcasting).toBeUndefined();
       expect(champion.resources.superiority_dice).toBeUndefined();
     });
 
     it('widens the champion critical range and adds its later features', () => {
-      const champion = sheet(265000, 'champion', '--param', 'features.additional_fighting_style=defense').data;
+      const champion = sheet(265000, 'champion', '--param', 'features.fighter.additional_fighting_style=defense').data;
       expect(champion.critical_hit).toBe(18);
-      expect(champion.features.remarkable_athlete).toEqual({ bonus: 3 }); // half of +6, rounded up
-      expect(champion.features.additional_fighting_style).toBe('defense');
-      expect(Object.keys(champion.features.survivor)).toEqual(['regain']);
+      expect(champion.features.fighter.remarkable_athlete).toEqual({ bonus: 3 }); // half of +6, rounded up
+      expect(champion.features.fighter.additional_fighting_style).toBe('defense');
+      expect(Object.keys(champion.features.fighter.survivor)).toEqual(['regain']);
     });
 
     it('gives the battle master superiority dice and maneuvers, each learned once', () => {
@@ -673,7 +673,7 @@ describe('5e', () => {
         '--param',
         'xp=900',
         '--param',
-        'features.martial_archetype=battle_master',
+        'features.fighter.martial_archetype=battle_master',
       ) as {
         query: Array<{ path: string; count?: number }>;
       };
@@ -700,7 +700,7 @@ describe('5e', () => {
 
     it('casts as an eldritch knight, with slots that grow by level', () => {
       const knight = sheet(305000, 'eldritch_knight').data;
-      expect(knight.features.spellcasting).toMatchObject({
+      expect(knight.features.fighter.spellcasting).toMatchObject({
         ability: 'intelligence',
         cantrips_known: 3,
         spells_known: 12,
@@ -732,7 +732,7 @@ describe('5e', () => {
     const labels = Object.fromEntries(query.query.map((param) => [param.path, param.label]));
     expect(labels['abilities.strength.bought']).toBe('Strength');
     expect(labels['abilities.charisma.bought']).toBe('Charisma');
-    expect(labels['improvements.level_4']).toBe('Ability Score Improvement (level 4)');
+    expect(labels['improvements.fighter_4']).toBe('Ability Score Improvement (Fighter 4)');
   });
 
   it.each(TEMPLATES)('answers every choice from the $label template', ({ params }) => {
@@ -754,16 +754,16 @@ describe('5e', () => {
         '--param',
         'xp=6500',
         '--param',
-        'features.fighting_style=kung_fu',
+        'features.fighter.fighting_style=kung_fu',
         '--param',
-        'features.martial_archetype=champion',
+        'features.fighter.martial_archetype=champion',
         '--param',
         'skills.trained=["athletics","perception"]',
         '--param',
-        'improvements.level_4=["strength","strength"]',
+        'improvements.fighter_4=["strength","strength"]',
       ),
     ).toContain(
-      'param options mismatch: features.fighting_style expected one of ["archery", "blind_fighting", "defense", "dueling", "great_weapon_fighting", "interception", "protection", "thrown_weapon_fighting", "two_weapon_fighting", "unarmed_fighting"], got "kung_fu"',
+      'param options mismatch: features.fighter.fighting_style expected one of ["archery", "blind_fighting", "defense", "dueling", "great_weapon_fighting", "interception", "protection", "thrown_weapon_fighting", "two_weapon_fighting", "unarmed_fighting"], got "kung_fu"',
     );
   });
 
@@ -776,11 +776,11 @@ describe('5e', () => {
       '--param',
       'xp=6500',
       '--param',
-      'features.fighting_style=dueling',
+      'features.fighter.fighting_style=dueling',
       '--param',
-      'features.martial_archetype=champion',
+      'features.fighter.martial_archetype=champion',
       '--param',
-      'improvements.level_4=["strength","strength"]',
+      'improvements.fighter_4=["strength","strength"]',
     ];
     expect(cliFails(...base, '--param', 'skills.trained=["athletics","sneak"]')).toContain(
       'param options mismatch: skills.trained[1] expected one of ["acrobatics", "animal_handling", "athletics", "history", "insight", "intimidation", "perception", "survival"], got "sneak"',
@@ -800,9 +800,9 @@ describe('5e', () => {
     // Adoption follows the overridden level (L5 features apply); xp has a
     // default so it is not asked.
     expect(query.query.map((param) => param.path).sort()).toEqual([
-      'features.fighting_style',
-      'features.martial_archetype',
-      'improvements.level_4',
+      'features.fighter.fighting_style',
+      'features.fighter.martial_archetype',
+      'improvements.fighter_4',
       'skills.trained',
     ]);
 
@@ -816,13 +816,13 @@ describe('5e', () => {
       '--param',
       'xp=0',
       '--param',
-      'features.fighting_style=dueling',
+      'features.fighter.fighting_style=dueling',
       '--param',
-      'features.martial_archetype=champion',
+      'features.fighter.martial_archetype=champion',
       '--param',
       'skills.trained=["athletics","perception"]',
       '--param',
-      'improvements.level_4=["strength","strength"]',
+      'improvements.fighter_4=["strength","strength"]',
     ) as { data: { level: Record<string, unknown>; attacks: Record<string, unknown> } };
     expect(data.data.attacks[':value']).toBe(2);
     // `--set` beats the derivation it replaced (level 1 at 0 XP), and says so.
@@ -845,7 +845,7 @@ describe('5e', () => {
       '--param',
       'xp=0',
       '--param',
-      'features.fighting_style=dueling',
+      'features.fighter.fighting_style=dueling',
       '--param',
       'skills.trained=["athletics","perception"]',
     ].map((arg, i, args) => (args[i - 1] === '--param' ? `${PC}.${arg}` : arg));
@@ -1018,6 +1018,90 @@ describe('5e', () => {
     });
   });
 
+  describe('multiclassing', () => {
+    // A level-5 champion from BOUGHT (STR 17, DEX 14, WIS 11): a rogue may join, a monk may not.
+    const CHAMPION = [
+      ...BOUGHT,
+      ...['--param', 'name=Aria', '--param', 'xp=6500', '--param', 'skills.trained=["athletics","perception"]'],
+      ...['--param', 'features.fighter.fighting_style=dueling'],
+      ...['--param', 'features.fighter.martial_archetype=champion'],
+      ...['--param', 'improvements.fighter_4=["strength","strength"]'],
+    ].map((arg, i, args) => (args[i - 1] === '--param' ? `${PC}.${arg}` : arg));
+    type Character = {
+      level: number;
+      proficiency_bonus: number;
+      attacks: number;
+      hit_die: string;
+      classes: Record<string, { level: number; qualified: boolean }>;
+      features: Record<string, Record<string, unknown>>;
+      proficiencies: Record<string, string[]>;
+      skills: Record<string, unknown>;
+    };
+    type Sheet = {
+      data?: { party: { aria: Character } };
+      query?: Array<{ path: string }>;
+      errors?: string[];
+    };
+    const turn = (state: string, ...extra: string[]) =>
+      run('5e/main.yaml', '--in', state, '--strip-metadata', ...extra, '--out', state) as Sheet;
+
+    it('levels up into a second class, gated on its own level, kept on replay', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'goblin-multiclass-'));
+      const state = join(dir, 'state.json');
+      try {
+        run('5e/main.yaml', ...CHAMPION, ...COMPANION_PARAMS, '--out', state);
+        // Level 5 goes to rogue: it asks the one skill a rogue multiclass grants.
+        const asked = turn(state, '--invoke', 'party.aria.level_up("rogue")');
+        expect(asked.query?.map(({ path }) => path)).toEqual([`${PC}.skills.rogue`]);
+        const aria = turn(state, '--param', `${PC}.skills.rogue=stealth`).data?.party.aria;
+        expect(aria?.classes).toEqual({ fighter: { level: 4, qualified: true }, rogue: { level: 1, qualified: true } });
+        expect(aria?.level).toBe(5);
+        expect(aria?.proficiency_bonus).toBe(3);
+        // Fighter 4 loses Extra Attack; rogue brings its first-level features.
+        expect(aria?.features.fighter?.extra_attack).toBeUndefined();
+        expect(aria?.attacks).toBe(1);
+        expect(Object.keys(aria?.features.rogue ?? {})).toEqual([
+          'expertise_1',
+          'sneak_attack',
+          'thieves_cant',
+          'weapon_mastery',
+        ]);
+        // The starting class keeps the hit die and saves; rogue adds only its multiclass proficiencies.
+        expect(aria?.hit_die).toBe('d10');
+        expect(aria?.proficiencies).toMatchObject({
+          saving_throws: ['strength', 'constitution'],
+          armor: ['all_armor', 'shields', 'light_armor'],
+          tool: ['calligraphers_supplies', 'thieves_tools'],
+        });
+        expect(aria?.skills).toEqual({ trained: ['athletics', 'perception'], rogue: 'stealth' });
+        const log = (turn(state).data as unknown as { log: Record<string, unknown>[] }).log;
+        expect(log.at(-1)).toEqual({ actor: 'Aria', action: 'level_up', level: 5, class: 'rogue' });
+
+        // Level 6 goes to the starting class unless chosen: fighter 5 has Extra Attack again.
+        const sixth = turn(state, '--invoke', 'party.aria.add_xp(7500)').data?.party.aria;
+        expect(sixth?.classes.fighter?.level).toBe(5);
+        expect(sixth?.features.fighter?.extra_attack).toBeDefined();
+        expect(sixth?.attacks).toBe(2);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('refuses a class whose prerequisite the scores do not meet', () => {
+      const dir = mkdtempSync(join(tmpdir(), 'goblin-multiclass-'));
+      const state = join(dir, 'state.json');
+      try {
+        run('5e/main.yaml', ...CHAMPION, ...COMPANION_PARAMS, '--out', state);
+        // A monk needs Dexterity and Wisdom of 13; Wisdom is 11.
+        expect(turn(state, '--invoke', 'party.aria.level_up("monk")').errors).toEqual([
+          '$lib.list.length(.*) == 1 || $lib.list.count(.*.qualified, false) == 0',
+        ]);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
   describe('export and import', () => {
     const named = (args: string[]) => args.map((arg, i) => (args[i - 1] === '--param' ? `${PC}.${arg}` : arg));
     // A rolled champion, hurt and then rested: rolls, a --set and an invoke's writes to carry over.
@@ -1025,8 +1109,13 @@ describe('5e', () => {
       ...['--param', 'name=Aria', '--param', 'xp=6500', '--param', 'class=fighter', '--param', 'species=dwarf'],
       ...['--param', 'background=acolyte', '--param', 'improvements.background=["intelligence","wisdom","charisma"]'],
       ...['--param', 'ability_method=roll', '--param', 'skills.trained=["athletics","perception"]'],
-      ...['--param', 'features.fighting_style=dueling', '--param', 'features.martial_archetype=champion'],
-      ...['--param', 'improvements.level_4=["strength","strength"]'],
+      ...[
+        '--param',
+        'features.fighter.fighting_style=dueling',
+        '--param',
+        'features.fighter.martial_archetype=champion',
+      ],
+      ...['--param', 'improvements.fighter_4=["strength","strength"]'],
     ]);
     // Another aria altogether: a level-1 wizard from the standard array.
     const WIZARD = named([

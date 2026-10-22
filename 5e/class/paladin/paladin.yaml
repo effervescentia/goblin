@@ -1,105 +1,116 @@
 '@': Character
-$if: "@.class == 'paladin'"
+$if: "$lib.list.has(@.class_names, 'paladin')"
 
-'@.hit_die': d10
-'@.proficiencies.weapon':
-  - simple_weapons
-  - martial_weapons
-'@.proficiencies.armor':
-  - all_armor
-  - shields
-'@.proficiencies.saving_throws':
-  - wisdom
-  - charisma
-'@.skills.trained':
-  :label: Skill Proficiencies
-  :doc: 'Choose two proficient skills.'
-  :param: true
-  :type: array
-  :options:
-    - athletics
-    - insight
-    - intimidation
-    - medicine
-    - persuasion
-    - religion
-  :count: 2
-  :unique: true
+'@.classes':
+  +paladin:
+    :label: Paladin
+    level: "@.class_level('paladin')"
+    qualified: '@.abilities.strength.base >= 13 && @.abilities.charisma.base >= 13'
+
+# A starting paladin takes the hit die, saving throws, skill picks and
+# proficiencies; one multiclassed into gets only the proficiencies below.
+'@.skills':
+  $if: "@.class == 'paladin'"
+  trained:
+    :label: Skill Proficiencies
+    :doc: 'Choose two proficient skills.'
+    :param: true
+    :type: array
+    :options:
+      - athletics
+      - insight
+      - intimidation
+      - medicine
+      - persuasion
+      - religion
+    :count: 2
+    :unique: true
+  $then:
+    '@.hit_die': d10
+    '@.proficiencies.saving_throws': [wisdom, charisma]
+    '@.proficiencies.weapon': [+simple_weapons, +martial_weapons]
+    '@.proficiencies.armor': [+all_armor, +shields]
+'@.proficiencies':
+  $if: "@.class != 'paladin'"
+  weapon: [+martial_weapons]
+  armor: [+light_armor, +medium_armor, +shields]
 '@.features':
-  +lay_on_hands:
-    :label: Lay On Hands
-    :doc: A pool of healing equal to five times your paladin level; as a bonus action, restore hit points or spend 5 to end the Poisoned condition. Restores on a long rest.
-  +spellcasting:
-    :label: Spellcasting
-    :doc: Cast Paladin spells using Charisma; cantrips, prepared spells, and slots increase with paladin level. Slots restore on a long rest.
-  +weapon_mastery:
-    :label: Weapon Mastery
-    :doc: Mastery properties of two weapons; you can change one of them on a long rest.
-  +fighting_style:
-    $if: '@.level >= 2'
-    :label: Fighting Style
-    :doc: Gain a Fighting Style feat, or Blessed Warrior for two Cleric cantrips.
-  +paladinss_smite:
-    $if: '@.level >= 2'
-    :label: Paladin's Smite
-    :doc: Always have Divine Smite prepared, and cast it without a spell slot once per long rest.
-  +channel_divinity:
-    $if: '@.level >= 3'
-    :label: Channel Divinity
-    :doc: Channel divine energy for Divine Sense. Uses increase at level 11; one restores on a short rest, all on a long rest.
-  +ability_score_improvement_1:
-    $if: '@.level >= 4'
-    :label: Ability Score Improvement
-    :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    '@.improvements.level_4': '$.feature.ability_improvement(4)'
-  +extra_attack:
-    $if: '@.level >= 5'
-    :label: Extra Attack
-    :doc: Attack twice instead of once whenever you take the Attack action.
-  +faithful_steed:
-    $if: '@.level >= 5'
-    :label: Faithful Steed
-    :doc: Always have Find Steed prepared, and cast it without a spell slot once per long rest.
-  +aura_of_protection:
-    $if: '@.level >= 6'
-    :label: Aura of Protection
-    :doc: You and allies within 10 feet add your Charisma modifier to saving throws while you aren't Incapacitated.
-  +ability_score_improvement_2:
-    $if: '@.level >= 8'
-    :label: Ability Score Improvement
-    :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    '@.improvements.level_8': '$.feature.ability_improvement(8)'
-  +abjure_foes:
-    $if: '@.level >= 9'
-    :label: Abjure Foes
-    :doc: Expend a Channel Divinity use to Frighten a number of creatures within 60 feet equal to your Charisma modifier for 1 minute.
-  +aura_of_courage:
-    $if: '@.level >= 10'
-    :label: Aura of Courage
-    :doc: You and allies in your Aura of Protection are immune to the Frightened condition.
-  +radiant_strikes:
-    $if: '@.level >= 11'
-    :label: Radiant Strikes
-    :doc: Your melee weapon and unarmed strike hits deal an extra 1d8 Radiant damage.
-  +ability_score_improvement_3:
-    $if: '@.level >= 12'
-    :label: Ability Score Improvement
-    :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    '@.improvements.level_12': '$.feature.ability_improvement(12)'
-  +restoring_touch:
-    $if: '@.level >= 14'
-    :label: Restoring Touch
-    :doc: Lay On Hands can also end Blinded, Charmed, Deafened, Frightened, Paralyzed, or Stunned, at 5 points per condition.
-  +ability_score_improvement_4:
-    $if: '@.level >= 16'
-    :label: Ability Score Improvement
-    :doc: Add +2 to one ability score or +1 to two (or take a feat).
-    '@.improvements.level_16': '$.feature.ability_improvement(16)'
-  +aura_expansion:
-    $if: '@.level >= 18'
-    :label: Aura Expansion
-    :doc: Your Aura of Protection extends to 30 feet.
-  +epic_boon:
-    $if: '@.level >= 19'
-    :label: Epic Boon
-    :doc: Gain an Epic Boon feat or another feat for which you qualify.
+  +paladin:
+    :label: Paladin
+    +lay_on_hands:
+      :label: Lay On Hands
+      :doc: A pool of healing equal to five times your paladin level; as a bonus action, restore hit points or spend 5 to end the Poisoned condition. Restores on a long rest.
+    +spellcasting:
+      :label: Spellcasting
+      :doc: Cast Paladin spells using Charisma; cantrips, prepared spells, and slots increase with paladin level. Slots restore on a long rest.
+    +weapon_mastery:
+      :label: Weapon Mastery
+      :doc: Mastery properties of two weapons; you can change one of them on a long rest.
+    +fighting_style:
+      $if: '@.classes.paladin.level >= 2'
+      :label: Fighting Style
+      :doc: Gain a Fighting Style feat, or Blessed Warrior for two Cleric cantrips.
+    +paladinss_smite:
+      $if: '@.classes.paladin.level >= 2'
+      :label: Paladin's Smite
+      :doc: Always have Divine Smite prepared, and cast it without a spell slot once per long rest.
+    +channel_divinity:
+      $if: '@.classes.paladin.level >= 3'
+      :label: Channel Divinity
+      :doc: Channel divine energy for Divine Sense. Uses increase at level 11; one restores on a short rest, all on a long rest.
+    +ability_score_improvement_1:
+      $if: '@.classes.paladin.level >= 4'
+      :label: Ability Score Improvement
+      :doc: Add +2 to one ability score or +1 to two (or take a feat).
+      '@.improvements.paladin_4': "$.feature.ability_improvement('Paladin', 4)"
+    +extra_attack:
+      $if: '@.classes.paladin.level >= 5'
+      :label: Extra Attack
+      :doc: Attack twice instead of once whenever you take the Attack action.
+    +faithful_steed:
+      $if: '@.classes.paladin.level >= 5'
+      :label: Faithful Steed
+      :doc: Always have Find Steed prepared, and cast it without a spell slot once per long rest.
+    +aura_of_protection:
+      $if: '@.classes.paladin.level >= 6'
+      :label: Aura of Protection
+      :doc: You and allies within 10 feet add your Charisma modifier to saving throws while you aren't Incapacitated.
+    +ability_score_improvement_2:
+      $if: '@.classes.paladin.level >= 8'
+      :label: Ability Score Improvement
+      :doc: Add +2 to one ability score or +1 to two (or take a feat).
+      '@.improvements.paladin_8': "$.feature.ability_improvement('Paladin', 8)"
+    +abjure_foes:
+      $if: '@.classes.paladin.level >= 9'
+      :label: Abjure Foes
+      :doc: Expend a Channel Divinity use to Frighten a number of creatures within 60 feet equal to your Charisma modifier for 1 minute.
+    +aura_of_courage:
+      $if: '@.classes.paladin.level >= 10'
+      :label: Aura of Courage
+      :doc: You and allies in your Aura of Protection are immune to the Frightened condition.
+    +radiant_strikes:
+      $if: '@.classes.paladin.level >= 11'
+      :label: Radiant Strikes
+      :doc: Your melee weapon and unarmed strike hits deal an extra 1d8 Radiant damage.
+    +ability_score_improvement_3:
+      $if: '@.classes.paladin.level >= 12'
+      :label: Ability Score Improvement
+      :doc: Add +2 to one ability score or +1 to two (or take a feat).
+      '@.improvements.paladin_12': "$.feature.ability_improvement('Paladin', 12)"
+    +restoring_touch:
+      $if: '@.classes.paladin.level >= 14'
+      :label: Restoring Touch
+      :doc: Lay On Hands can also end Blinded, Charmed, Deafened, Frightened, Paralyzed, or Stunned, at 5 points per condition.
+    +ability_score_improvement_4:
+      $if: '@.classes.paladin.level >= 16'
+      :label: Ability Score Improvement
+      :doc: Add +2 to one ability score or +1 to two (or take a feat).
+      '@.improvements.paladin_16': "$.feature.ability_improvement('Paladin', 16)"
+    +aura_expansion:
+      $if: '@.classes.paladin.level >= 18'
+      :label: Aura Expansion
+      :doc: Your Aura of Protection extends to 30 feet.
+    +epic_boon:
+      $if: '@.classes.paladin.level >= 19'
+      :label: Epic Boon
+      :doc: Gain an Epic Boon feat or another feat for which you qualify.

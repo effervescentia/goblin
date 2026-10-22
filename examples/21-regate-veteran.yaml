@@ -1,0 +1,9 @@
+# Mixin side of 21-regate.yaml: gated on a level only an invoke raises.
+
+'@': Adventurer
+$if: '@.level >= 2'
+
+'@.features':
+  +dash:
+    :doc: Move twice as far on your turn.
+'+@.gold': 5

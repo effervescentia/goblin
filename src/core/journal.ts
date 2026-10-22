@@ -140,7 +140,7 @@ function entry(
 
 export class Journal {
   /** Patch writes per field, keyed by the record holding the field. */
-  private readonly fieldEvents = new WeakMap<object, Map<string, unknown[]>>();
+  private fieldEvents = new WeakMap<object, Map<string, unknown[]>>();
   /** Every patch and assignment write in the order made. */
   private readonly writeLog: LoggedWrite[] = [];
   /** Every roll, the first time this run used it. */
@@ -160,7 +160,7 @@ export class Journal {
   /** Rolls already credited to an inner field, so an outer one only counts its own. */
   private attributedRolls = 0;
   /** Expression fields whose own evaluation rolled dice. */
-  private readonly rolledFields = new WeakMap<object, Set<string>>();
+  private rolledFields = new WeakMap<object, Set<string>>();
   /** Location of the patch key being applied; events cite it. */
   private writingAt: Location | undefined;
   /** Source names for the apply in progress (the patch, and the actor under it). */
@@ -168,6 +168,8 @@ export class Journal {
   private actorSource: string | undefined;
   /** The innermost expression being evaluated, when it is labelled. */
   private calculating: Calculation | undefined;
+  /** Values laid over fields while mixins gate, with what each replaced. */
+  private laid = new Map<object, Map<string, { had: boolean; prior: unknown }>>();
 
   constructor(private readonly provenance: Provenance) {}
 
@@ -189,7 +191,25 @@ export class Journal {
     }
     this.entryRoot = entryRoot;
     this.phase = undefined;
-    // Rolls outside any field (a `$if`, say) take their turn in one run-wide context.
+    return this.rootFrame();
+  }
+
+  /** Start the run over on a rebuilt tree: what it logged is dropped, but the
+   * tape keeps every roll it made, so each die lands as it did. */
+  restart(): RollFrame {
+    this.writeLog.length = 0;
+    this.rollLog.length = 0;
+    this.seq = 0;
+    this.fieldEvents = new WeakMap();
+    this.rolledFields = new WeakMap();
+    this.attributedRolls = 0;
+    this.phase = undefined;
+    for (const rolls of this.tape.values()) for (const roll of rolls) roll.logged = false;
+    return this.rootFrame();
+  }
+
+  /** Rolls outside any field (a `$if`, say) take their turn in one run-wide context. */
+  private rootFrame(): RollFrame {
     let n = 0;
     return { roll: (count, sides) => this.tapeRoll('field:', '', n++, count, sides) };
   }
@@ -263,6 +283,29 @@ export class Journal {
     }
   }
 
+  /** Lay `value` over `target[key]` until `lift`: not a write, so it logs
+   * nothing, and a write to the field lifts it first. */
+  lay(target: Record<string, unknown>, key: string, value: unknown): void {
+    const fields = this.laid.get(target) ?? new Map();
+    if (!fields.has(key)) fields.set(key, { had: key in target, prior: target[key] });
+    this.laid.set(target, fields);
+    target[key] = value;
+  }
+
+  /** Put back what `lay` replaced: at `target[key]`, or everywhere. */
+  lift(target?: Record<string, unknown>, key?: string): void {
+    for (const [record, fields] of [...this.laid].reverse()) {
+      if (target !== undefined && record !== target) continue;
+      for (const [field, { had, prior }] of [...fields].reverse()) {
+        if (key !== undefined && field !== key) continue;
+        if (had) (record as Record<string, unknown>)[field] = prior;
+        else delete (record as Record<string, unknown>)[field];
+        fields.delete(field);
+      }
+      if (fields.size === 0) this.laid.delete(record);
+    }
+  }
+
   /** Note a patch write, in application order. Call before writing. Returns
    * the value to write: a replayed invoke's recorded value in place of `value`. */
   record(
@@ -280,6 +323,7 @@ export class Journal {
       rolled = false,
       calculation,
     } = options;
+    this.lift(target, key);
     const event = entry(source, kind, value, at);
     this.seed(target, key, origin).push(event);
     const logged: LoggedWrite = {
@@ -306,6 +350,7 @@ export class Journal {
   /** Open a field's log, recording what it already holds as the first event.
    * Call before mutating in place, so that origin is the prior value. */
   seed(target: Record<string, unknown>, key: string, origin = this.actorSource): unknown[] {
+    this.lift(target, key);
     let fields = this.fieldEvents.get(target);
     if (fields === undefined) {
       fields = new Map();
@@ -368,6 +413,25 @@ export class Journal {
       if (by !== cause || kind !== SET_KEY || tmpl === null || at === undefined) return [];
       return [{ path: [...at, key].join('.'), namespace: tmpl[2] }];
     });
+  }
+
+  /** Every place an invoked call wrote, from the entry root, holding what it
+   * holds now — under an actor a call wrote in, but never that actor itself. */
+  invokeWrites(): { path: string; value: unknown }[] {
+    const paths = this.treePaths();
+    const actors = new Set(
+      this.writeLog
+        .flatMap(({ cause }) => (cause === undefined ? [] : this.writtenActors(cause)))
+        .map(({ path }) => path),
+    );
+    const writes = new Map<string, unknown>();
+    for (const { record, key, cause } of this.writeLog) {
+      const at = paths.get(record);
+      const path = at === undefined ? '' : [...at, key].join('.');
+      if (cause === undefined || at === undefined || actors.has(path)) continue;
+      writes.set(path, (record as Record<string, unknown>)[key]);
+    }
+    return [...writes].map(([path, value]) => ({ path, value }));
   }
 
   /** Drop the field rolls recorded under `path` before `version`: they
