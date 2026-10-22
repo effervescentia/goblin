@@ -49,6 +49,7 @@ import {
   type StateEvent,
   unpackImports,
 } from '@/inputs';
+import { Calculation } from '@/nodes/calculation';
 import { Die, DieNode } from '@/nodes/die';
 import { ExpressionNode } from '@/nodes/expression';
 import { FunctionNode } from '@/nodes/function';
