@@ -7,10 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { COMPANION_PARAMS } from '@test/dnd5e.fixtures';
 import { decode, decodeMultiple, encode } from 'cbor-x';
 import { describe, expect, it } from 'vitest';
-import { type InputEvent, invoke, latest, nest, override, parameter, paramValue } from '@/inputs';
+import { type InputEvent, invoke, latest, nest, override, parameter, paramValue, unpackImports } from '@/inputs';
 import { print } from '@/nodes/serialize';
-import { parseArgs, parseParamValue, rehydrate, weave, withHash } from './cli';
-import { USAGE } from './constants';
+import { parseArgs, parseParamValue, readExport, rehydrate, weave, withHash } from './cli';
+import { EXPORT_ALONE, IMPORT_ALONE, USAGE } from './constants';
 
 describe('parseArgs', () => {
   it('defaults to no entry and pretty output', () => {
@@ -171,6 +171,35 @@ describe('parseArgs', () => {
     expect(() => parseArgs(['--invoke', 'f', '--set', 'a=1'])).toThrow(alone);
   });
 
+  it('accepts --export an actor, taking no inputs', () => {
+    expect(parseArgs(['--in', 'state.json', '--export', 'party.scout'])).toMatchObject({
+      in: 'state.json',
+      export: 'party.scout',
+      events: [],
+    });
+    expect(() => parseArgs(['--export'])).toThrow('--export expects an actor');
+    expect(() => parseArgs(['--export', '--compact'])).toThrow('--export expects an actor');
+    expect(() => parseArgs(['--export', 'aria', '--set', 'a=1'])).toThrow(EXPORT_ALONE);
+    expect(() => parseArgs(['--invoke', 'f', '--export', 'aria'])).toThrow(EXPORT_ALONE);
+    expect(() => parseArgs(['--export', 'aria', '--import', 'aria=a.json'])).toThrow(EXPORT_ALONE);
+  });
+
+  it('accepts one --import path=file per run, alone', () => {
+    expect(parseArgs(['--import', 'party.guide=exports/scout.json'])).toMatchObject({
+      import: { path: 'party.guide', file: 'exports/scout.json' },
+      events: [],
+    });
+    expect(parseArgs(['--import', 'aria=-']).import).toEqual({ path: 'aria', file: '-' });
+    expect(() => parseArgs(['--import'])).toThrow('--import expects path=export.json');
+    expect(() => parseArgs(['--import', 'aria.json'])).toThrow('--import expects path=export.json');
+    expect(() => parseArgs(['--import', 'aria='])).toThrow('--import expects path=export.json');
+    expect(() => parseArgs(['--import', 'a=x.json', '--import', 'b=y.json'])).toThrow('once per run');
+    expect(() => parseArgs(['--param', 'a=1', '--import', 'aria=a.json'])).toThrow(IMPORT_ALONE);
+    expect(() => parseArgs(['--import', 'aria=a.json', '--set', 'a=1'])).toThrow(IMPORT_ALONE);
+    expect(() => parseArgs(['--invoke', 'f', '--import', 'aria=a.json'])).toThrow(IMPORT_ALONE);
+    expect(() => parseArgs(['--in', '-', '--import', 'aria=-'])).toThrow('cannot both read stdin');
+  });
+
   it('rejects malformed --set', () => {
     expect(() => parseArgs(['--set'])).toThrow('--set expects key=value');
     expect(() => parseArgs(['--set', 'nokey'])).toThrow('--set expects key=value');
@@ -276,6 +305,8 @@ describe('parseArgs --server', () => {
     ['--param', 'level=3'],
     ['--set', 'level=3'],
     ['--invoke', 'heal(5)'],
+    ['--export', 'aria'],
+    ['--import', 'aria=aria.json'],
     ['--out', 'out.json'],
     ['--strip-metadata'],
     ['--compact'],
@@ -350,6 +381,22 @@ describe('inputs', () => {
     expect(paramValue(events, 'level')).toBe(5);
     expect(paramValue(events, 'missing', 'level')).toBe(5);
     expect(paramValue(events, 'hp')).toBeUndefined();
+  });
+
+  it('unpacks an import in place into a parameter and an override per set, under its path', () => {
+    const imported: InputEvent = {
+      version: 4,
+      type: 'import',
+      path: 'party.aria',
+      value: { application: 'sha256:x', events: [{ type: 'set', path: 'hp', value: 3 }] },
+    };
+    const [first, ...rest] = events;
+    expect(unpackImports([...events.slice(0, 1), imported, ...rest])).toEqual([
+      first,
+      parameter('party.aria.hp', 3, 4),
+      override('party.aria.hp', 3, 4),
+      ...rest,
+    ]);
   });
 
   it('re-paths events nested under a path', () => {
@@ -432,6 +479,15 @@ describe('rehydrate', () => {
     );
   });
 
+  it('accepts import events, each carrying its application and sets', () => {
+    const value = { application: 'sha256:x', events: [{ type: 'set', path: 'hp', value: 3 }] };
+    const imported = [...events, { version: 3, type: 'import', path: 'aria', value } as InputEvent];
+    expect(rehydrate(withHash({ data: {} }, imported, 3))).toEqual({ version: 3, events: imported, stable: true });
+    expect(() =>
+      rehydrate({ data: {}, events: [{ version: 1, type: 'import', path: 'aria', value: { events: [] } }] }),
+    ).toThrow('events must be');
+  });
+
   it('keeps recorded writes, whose rolls the engine replays', () => {
     const writes = [{ version: 1, type: 'add', path: 'gold', value: 5, rolled: true, source: 'boon.yaml' }];
     const stream = [...events, ...(writes as never[])];
@@ -467,10 +523,29 @@ describe('rehydrate', () => {
   });
 });
 
+describe('readExport', () => {
+  const body = { application: 'sha256:app', actor: 'aria', events: [{ type: 'set', path: 'hp', value: 3 }] };
+  const hash = `sha256:${createHash('sha256').update(JSON.stringify(body)).digest('hex')}`;
+
+  it('hands back the application and sets of an --export output whose hash checks out', () => {
+    const value = { application: body.application, events: body.events };
+    expect(readExport({ hash, ...body })).toEqual(value);
+    expect(readExport(body)).toEqual(value);
+  });
+
+  it('rejects an edited or malformed export', () => {
+    expect(() => readExport({ hash, ...body, actor: 'bram' })).toThrow('export hash does not match');
+    expect(() => readExport({ ...body, events: [{ type: 'add', path: 'hp', value: 1 }] })).toThrow(
+      '--import expects an --export output',
+    );
+    expect(() => readExport({ data: {} })).toThrow('--import expects an --export output');
+  });
+});
+
 describe('USAGE', () => {
   it('documents the CLI', () => {
     expect(USAGE).toContain(
-      'goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--stateless] [--session id] [--history n] [--format cbor|json] [--port n] [--help]',
+      'goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--export actor] [--import path=export.json|-] [--strip-metadata] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--stateless] [--session id] [--history n] [--format cbor|json] [--port n] [--help]',
     );
     expect(USAGE).toContain('--stateless');
     expect(USAGE).toContain('--history');
@@ -481,6 +556,8 @@ describe('USAGE', () => {
     expect(USAGE).toContain('--strip-metadata');
     expect(USAGE).toContain('--param');
     expect(USAGE).toContain('--set');
+    expect(USAGE).toContain('--export');
+    expect(USAGE).toContain('--import');
     expect(USAGE).toContain('--help, -h');
   });
 });
@@ -656,6 +733,93 @@ describe('cli', () => {
         'details.title=Kid',
       );
       expect(JSON.parse(answered.stdout)).toMatchObject({ version: 2, data: {} });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('--export collapses an actor to one set per node, and --import lands it on another actor as one event', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'goblin-export-'));
+    const state = join(dir, 'state.json');
+    const exported = join(dir, 'scout.json');
+    const imported = join(dir, 'imported.json');
+    const entry = 'examples/16-actor-namespaces.yaml';
+    try {
+      const named = ['--param', 'party.scout.name=Sam', '--param', 'bree.name=Bree'];
+      expect(runCli(entry, ...named, '--out', state).status).toBe(0);
+      const gold = runCli(entry, '--in', state, '--set', 'party.scout.gold=99', '--set', 'party.scout.name=Sid');
+      writeFileSync(state, gold.stdout);
+
+      const out = runCli(entry, '--in', state, '--export', 'party.scout', '--out', exported);
+      expect(out.status).toBe(0);
+      const payload = JSON.parse(out.stdout);
+      expect(payload).toEqual({
+        hash: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+        application: expect.stringMatching(/^sha256:[0-9a-f]{64}$/),
+        actor: 'party.scout',
+        events: [
+          { type: 'set', path: 'gold', value: 99 },
+          { type: 'set', path: 'name', value: 'Sid' },
+        ],
+      });
+      expect(readFileSync(exported, 'utf8')).toBe(out.stdout);
+
+      // Into the guide by its namespace: the scout's sets land on it, the scout keeps its own.
+      const landed = runCli(
+        entry,
+        '--in',
+        state,
+        '--strip-metadata',
+        '--import',
+        `bree=${exported}`,
+        '--out',
+        imported,
+      );
+      expect(landed.status).toBe(0);
+      const after = JSON.parse(landed.stdout);
+      expect(after).toMatchObject({ version: 3, data: { party: { guide: { name: 'Sid', gold: 99 } } } });
+      expect(after.events.filter((event: InputEvent) => event.type === 'import')).toEqual([
+        {
+          version: 3,
+          type: 'import',
+          path: 'bree',
+          value: { application: payload.application, events: payload.events },
+        },
+      ]);
+      expect(JSON.parse(runCli(entry, '--in', imported, '--strip-metadata').stdout).data).toEqual(after.data);
+      // Exported again, the guide carries the same state.
+      expect(JSON.parse(runCli(entry, '--in', imported, '--export', 'bree').stdout).events).toEqual(payload.events);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('--import refuses an export from other files, an edited one, or a path with no actor', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'goblin-import-'));
+    const state = join(dir, 'state.json');
+    const exported = join(dir, 'scout.json');
+    const other = join(dir, 'other.json');
+    const entry = 'examples/15-nested-actors.yaml';
+    try {
+      const named = ['--param', 'party.scout.name=Sam', '--param', 'party.guide.name=Gil'];
+      expect(runCli(entry, ...named, '--out', state).status).toBe(0);
+      expect(runCli(entry, '--in', state, '--export', 'party.scout', '--out', exported).status).toBe(0);
+      const payload = JSON.parse(readFileSync(exported, 'utf8'));
+
+      const nested = runCli('examples/16-actor-namespaces.yaml', '--import', `party.guide=${exported}`);
+      expect(nested.status).toBe(1);
+      expect(nested.stderr).toContain('--import: the export is from another application');
+
+      writeFileSync(other, JSON.stringify({ ...payload, actor: 'party.guide' }));
+      expect(runCli(entry, '--in', state, '--import', `party.guide=${other}`).stderr).toContain(
+        'export hash does not match',
+      );
+      const missing = runCli(entry, '--in', state, '--import', `party=${exported}`);
+      expect(missing.status).toBe(1);
+      expect(missing.stderr).toContain('--import: no actor at party');
+
+      expect(runCli(entry, '--export', 'party.scout').stderr).toContain('--export needs a stable state');
+      expect(runCli(entry, '--in', state, '--export', 'nobody').stderr).toContain('--export: no actor nobody');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

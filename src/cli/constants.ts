@@ -1,10 +1,11 @@
-export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--strip-metadata] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--stateless] [--session id] [--history n] [--format cbor|json] [--port n] [--help]
+export const USAGE = `goblin [entry.yaml] [--compact] [--param key=value] [--set path=value] [--invoke fn(args)] [--export actor] [--import path=export.json|-] [--strip-metadata] [--in state.json|-] [--out file.json] [--server stdio|http|websocket] [--stateless] [--session id] [--history n] [--format cbor|json] [--port n] [--help]
 
 Resolves a goblin document and prints the result as JSON: either
 { "hash", "version", "events", "data" } when all :param values are
 satisfied (version counts runs since the first, bumped by each --in; events
-is the stream of every --param/--set/--invoke given so far, in order, each
-as { version, type: "parameter" | "override" | "invoke", path, value }, with the
+is the stream of every --param/--set/--invoke/--import given so far, in order,
+each as { version, type: "parameter" | "override" | "invoke" | "import", path,
+value }, with the
 engine's writes woven in as { version, type: "set" | "add" | "subtract",
 path, value, rolled, source, line, column } and every roll as
 { version, type: "roll", path, dice: "XdY", value: [faces] } — in the order
@@ -32,6 +33,25 @@ Arguments:
                 --in state (or, without one, the entry) that resolves to
                 "data". An invoke that brings in new params answers
                 { "query" }; save it and answer with --param.
+  --export      Print one actor's state instead of the envelope, by namespace
+                (--export aria) or tree path (--export party.scout):
+                { "hash", "application", "actor", "events" }, where events
+                holds one { type: "set", path, value } per node the files
+                cannot make again on their own (params, --set values,
+                imports, an invoke's writes, rolls), with its current value
+                and its path relative to the actor; application is a sha256
+                over every goblin file loaded. It exports the --in state (or
+                the entry), which must resolve to "data"; it takes no
+                --param, --set, --invoke or --import.
+  --import      Import an --export output (a file, or - for stdin) into the
+                actor at path, a namespace or tree path that may differ from
+                the one it was exported from: --import aria=aria.json. It is
+                saved as one { type: "import", path, value: { application,
+                events } } event of the next version; on replay each set
+                fills a :param node there, or else overrides it like --set,
+                and later inputs still win. It fails unless application
+                matches this entry's files and path holds an actor. It
+                cannot be combined with --param, --set or --invoke.
   --strip-metadata  Drop metadata keys (:doc, :type, !validate, …) from the
                 printed data, leaving plain values only. Functions print as
                 their source expression; records left empty collapse to null.
@@ -59,8 +79,11 @@ Arguments:
                 of { type: "parameter" | "override" | "invoke", path, value }
                 — and answers the envelope a run would print, plus
                 "previous" and "sessionID" unless --stateless.
-                Cannot be combined with --param, --set, --invoke, --out,
-                --strip-metadata or --compact.
+                Method "export" takes { entry?, in?, actor } and answers what
+                --export prints; "import" takes { entry?, in?, path, export }
+                and answers like "resolve" (a session's head stands in for in).
+                Cannot be combined with --param, --set, --invoke, --export,
+                --import, --out, --strip-metadata or --compact.
   --stateless   Answer each --server call on its own (needs --server). By
                 default a server is a session: it gets a UUID ("sessionID"
                 in every answer) and appends each turn a call answers (bar
@@ -99,7 +122,20 @@ export const DEFAULT_PORT = 8080;
 export const INVOKE_ALONE =
   '--invoke cannot be combined with --param or --set: invoke on a stable state, answer in another run';
 
+export const IMPORT_ALONE = '--import cannot be combined with --param, --set or --invoke: import in a run of its own';
+
+export const EXPORT_ALONE = '--export takes no inputs: it exports the --in state (or the entry) as it stands';
+
 export const STATEFUL_IN = 'a stateful --server keeps its own history: in (--in) needs --stateless';
 
 /** Flags that shape a single run's inputs or output, meaningless to a server answering many. */
-export const ONE_SHOT = new Set(['--param', '--set', '--invoke', '--out', '--strip-metadata', '--compact']);
+export const ONE_SHOT = new Set([
+  '--param',
+  '--set',
+  '--invoke',
+  '--export',
+  '--import',
+  '--out',
+  '--strip-metadata',
+  '--compact',
+]);

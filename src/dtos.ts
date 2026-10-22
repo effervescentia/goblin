@@ -38,4 +38,17 @@ const RollEventSchema = versioned
     return sides !== undefined && value.length === count && value.every((face) => face <= sides);
   });
 
-export const StateEventSchema = z.union([InputEventSchema, WriteEventSchema, RollEventSchema]);
+const ActorSetSchema = z.object({ type: z.literal('set'), path: z.string().min(1), value: z.unknown() });
+
+const ImportValueSchema = z.object({ application: z.string(), events: z.array(ActorSetSchema) });
+
+const ImportEventSchema = versioned.extend({
+  type: z.literal('import'),
+  path: z.string().min(1),
+  value: ImportValueSchema,
+});
+
+export const StateEventSchema = z.union([InputEventSchema, WriteEventSchema, RollEventSchema, ImportEventSchema]);
+
+/** What `--export` prints: an actor's sets, the application they came from, and a hash over the rest. */
+export const ActorExportSchema = ImportValueSchema.extend({ hash: z.string().optional(), actor: z.string().min(1) });

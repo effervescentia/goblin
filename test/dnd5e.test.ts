@@ -1017,4 +1017,62 @@ describe('5e', () => {
       }
     });
   });
+
+  describe('export and import', () => {
+    const named = (args: string[]) => args.map((arg, i) => (args[i - 1] === '--param' ? `${PC}.${arg}` : arg));
+    // A rolled champion, hurt and then rested: rolls, a --set and an invoke's writes to carry over.
+    const CHAMPION = named([
+      ...['--param', 'name=Aria', '--param', 'xp=6500', '--param', 'class=fighter', '--param', 'species=dwarf'],
+      ...['--param', 'background=acolyte', '--param', 'improvements.background=["intelligence","wisdom","charisma"]'],
+      ...['--param', 'ability_method=roll', '--param', 'skills.trained=["athletics","perception"]'],
+      ...['--param', 'features.fighting_style=dueling', '--param', 'features.martial_archetype=champion'],
+      ...['--param', 'improvements.level_4=["strength","strength"]'],
+    ]);
+    // Another aria altogether: a level-1 wizard from the standard array.
+    const WIZARD = named([
+      ...['--param', 'name=Bea', '--param', 'xp=300', '--param', 'class=wizard', '--param', 'species=human'],
+      ...['--param', 'background=acolyte', '--param', 'improvements.background=["intelligence","wisdom","charisma"]'],
+      ...['--param', 'ability_method=standard_array', '--param', 'skills.trained=["arcana","history"]'],
+      ...['strength=8', 'dexterity=14', 'constitution=13', 'intelligence=15', 'wisdom=12', 'charisma=10'].flatMap(
+        (score) => ['--param', `abilities.${score.replace('=', '.assigned=')}`],
+      ),
+    ]);
+    type Sheet = { data: { party: Record<string, unknown> } };
+    const sheet = (state: string) => run('5e/main.yaml', '--in', state, '--strip-metadata') as Sheet;
+    const save = (state: string, ...extra: string[]) => run('5e/main.yaml', ...extra, '--out', state);
+
+    it("carries one session's actor into another's, there or in another slot, as it stands", () => {
+      const dir = mkdtempSync(join(tmpdir(), 'goblin-export-'));
+      const [a, b, exported] = ['a.json', 'b.json', 'aria.json'].map((file) => join(dir, file)) as [
+        string,
+        string,
+        string,
+      ];
+      try {
+        save(a, ...CHAMPION);
+        save(a, '--in', a, '--set', `${PC}.hit_points.current=3`);
+        save(a, '--in', a, '--invoke', 'party.aria.rest.short');
+        const payload = save(exported, '--in', a, '--export', PC) as { events: Array<{ path: string }> };
+        expect(payload.events.map((event) => event.path)).toEqual(
+          expect.arrayContaining(['abilities.strength.start', 'class', 'hit_points.current', 'xp']),
+        );
+        const aria = sheet(a).data.party.aria;
+
+        save(b, ...WIZARD);
+        save(b, '--in', b, '--invoke', 'party.aria.rest.long');
+        save(b, '--in', b, '--import', `${PC}=${exported}`);
+        // The champion's rolls, choices and wounds replace the wizard's, a long rest's writes and all.
+        expect(sheet(b).data.party.aria).toEqual(aria);
+        expect((run('5e/main.yaml', '--in', b, '--export', PC) as typeof payload).events).toEqual(payload.events);
+
+        // Into a recruit: the same character under another namespace.
+        save(b, '--in', b, '--invoke', 'recruit("bram")');
+        save(b, '--in', b, ...COMPANION_PARAMS);
+        save(b, '--in', b, '--import', `bram=${exported}`);
+        expect(sheet(b).data.party.bram).toEqual(aria);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
 });

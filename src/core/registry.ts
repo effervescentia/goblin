@@ -2,6 +2,7 @@
  * Loaded documents: reading `.yaml` files (Bun-only), following `$tmpl('…')`
  * references, and binding their top-level tables into `$` and `$lib`.
  */
+import { createHash } from 'node:crypto';
 import { TEMPLATE_SCAN } from '@/constants';
 import { withNatives } from '@/lib';
 import { isBareSigil, isMetaKey, isValidateKey, joinPath } from '@/utils';
@@ -15,6 +16,8 @@ export class Registry {
   readonly appRoot: Record<string, unknown> = {};
   /** `$lib` — standard library: natives bound in code, yaml helpers merged on load. */
   readonly library: Record<string, unknown> = withNatives();
+  /** Source text by file path, for every document registered with its text. */
+  private readonly sources = new Map<string, string>();
   private libLoaded = false;
 
   constructor(
@@ -81,6 +84,7 @@ export class Registry {
   register(file: string, data: unknown, text?: string): unknown {
     const { provenance } = this;
     this.docs.set(file, data);
+    if (text !== undefined) this.sources.set(file, text);
     if (text !== undefined && data !== null && typeof data === 'object' && !provenance.locations.has(data)) {
       collectLocations(text, data, provenance.locations);
     }
@@ -99,6 +103,12 @@ export class Registry {
       }
     }
     return data;
+  }
+
+  /** sha256 over every registered file's path and text, in path order, so load order cannot change it. */
+  application(): string {
+    const files = [...this.sources].sort(([a], [b]) => (a < b ? -1 : 1));
+    return `sha256:${createHash('sha256').update(JSON.stringify(files)).digest('hex')}`;
   }
 
   /** `$tmpl('other.yaml')` helper + any registered template loader. */

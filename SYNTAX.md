@@ -972,10 +972,11 @@ engine.evaluateDoc('08-parameters.yaml', [parameter('starting_level', 'high')]);
 ## Resolution
 
 Inputs reach the engine as an append-only event stream, the same one the
-CLI saves: `InputEvent = { version, type: 'parameter' | 'override' | 'invoke', path, value }`
+CLI saves: `InputEvent = { version, type: 'parameter' | 'override' | 'invoke' | 'import', path, value }`
 (`src/inputs.ts`; `parameter(path, value, version = 1)`, `override(…)` and
 `invoke(path, args = [], version = 1)` build them; the CLI's `--set` is an
-`override`). Replaying the stream, the latest `parameter` / `override` for a
+`override`, and `--import` an `import` — see Exporting and importing actors).
+Replaying the stream, the latest `parameter` / `override` for a
 path wins; every `invoke` runs, in order.
 `resolve(file, events)` answers a document in one call, returning an
 envelope that is either satisfied or asking:
@@ -1058,6 +1059,57 @@ envelope that is either satisfied or asking:
 ```ts
 engine.resolve('08-parameters.yaml', [override('hero_name', 'Aria')]);
 // { data: { hero_name: 'Aria', … } }  (overridden params are not queried)
+```
+
+### Exporting and importing actors
+
+`--export <actor>` prints one actor's state — named by its namespace
+(`aria`) or tree path (`party.scout`) — from the `--in` state (or the
+entry), which must resolve to `{ data }`:
+
+```json
+{ "hash": "sha256:…", "application": "sha256:…", "actor": "aria",
+  "events": [{ "type": "set", "path": "class", "value": "fighter" },
+             { "type": "set", "path": "hit_points.current", "value": 7 }] }
+```
+
+- `events` collapses everything the goblin files cannot make again on
+  their own to **one `set` per node**, holding its current (printed)
+  value, its `path` relative to the actor, in path order: every node a
+  `parameter`, `override` or earlier `import` reached, every write an
+  invoke made, and every field dice rolled. Mixin writes are left out —
+  the same files make them again. A node under another one kept is
+  dropped, its value part of that one's.
+- `application` is a sha256 over every goblin file loaded (path and text,
+  in path order); `hash` is a sha256 over the compact
+  `JSON.stringify({ application, actor, events })`.
+
+`--import <path>=<export.json>` (or `=-` for stdin) brings one into another
+session built from the same files, onto the actor at `path` — a namespace
+or tree path, not necessarily the one it was exported from. It is one turn
+of its own (no `--param`, `--set` or `--invoke` beside it), saved as a
+single event of the next version:
+
+```json
+{ "version": 4, "type": "import", "path": "aria",
+  "value": { "application": "sha256:…", "events": [{ "type": "set", "path": "class", "value": "fighter" }, …] } }
+```
+
+It refuses an export whose `hash` does not match, whose `application` is
+not this entry's, or a `path` holding no actor. Replayed, each `set` lands
+at `<path>.<set path>` where the import sits in the stream: on a `:param`
+node it fills the param (mixins choose by it, and a later `--param` still
+changes it), anywhere else it overrides like `--set`. Later inputs win over
+it as over any earlier one; an earlier invoke's writes do not. Inputs the
+target held for paths the export does not name stay as they were, and a
+mixin field that rolls rolls again before its imported value replaces it.
+
+```ts
+engine.resolve('party.yaml', [
+  { version: 2, type: 'import', path: 'bree',
+    value: { application: 'sha256:…', events: [{ type: 'set', path: 'name', value: 'Ivy' }] } },
+]);
+// party.guide.name → 'Ivy' (the `:param` filled), its other params still asked
 ```
 
 ```ts

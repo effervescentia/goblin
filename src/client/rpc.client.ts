@@ -3,8 +3,17 @@
  * back to their callers by id. Framing and encoding belong to the transport.
  */
 import { RpcError } from '@/errors';
+import type { ActorExport } from '@/inputs';
 import type { InspectNode } from '@/inspect';
-import { type Answer, type InspectParams, type ResolveParams, ResponseSchema, type Rewound } from './dtos';
+import {
+  type Answer,
+  type ExportParams,
+  type ImportParams,
+  type InspectParams,
+  type ResolveParams,
+  ResponseSchema,
+  type Rewound,
+} from './dtos';
 
 interface Waiting {
   resolve: (result: unknown) => void;
@@ -32,6 +41,16 @@ export abstract class RpcClient {
   /** Every field of the resolved state, with the expression behind it and what it reads; empty while it asks. */
   inspect(params: InspectParams = {}): Promise<InspectNode[]> {
     return this.call('inspect', params) as Promise<InspectNode[]>;
+  }
+
+  /** One actor's state as a `set` per node, for `import` into a session built from the same files. */
+  export(params: ExportParams): Promise<ActorExport> {
+    return this.call('export', params) as Promise<ActorExport>;
+  }
+
+  /** Import an `export` answer into the actor at `path` as one turn, answering like `resolve`. */
+  import(params: ImportParams): Promise<Answer> {
+    return this.call('import', params) as Promise<Answer>;
   }
 
   /** Cut a stateful server's session back to `version`, so the next `resolve` continues from it. */
