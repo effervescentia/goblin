@@ -91,7 +91,7 @@ apart. Treat a missing spec update as an incomplete change.
   for `aria` in `5e/main.yaml`: `demo/server.ts` spawns a stateful
   `--server websocket`, and the page (Preact) talks to it only through `goblin/client`,
   answering `{ query }` with form inputs and invoking rests and actions. Hovering a value shows
-  its expression (from the `inspect` method) and its `:events`, minus an empty first slot.
+  its expression (from the `inspect` method) and its `:events`, minus an empty first slot (only once the Events checkbox in the header is ticked).
   Reading the resolved tree (`:value`, `:label`) lives in `demo/sheet.ts`, pure.
 - Engine inputs are the same `InputEvent` stream the CLI saves (`src/inputs.ts`):
   `resolve`/`evaluateDoc`/`apply` take `InputEvent[]`, never param/override

@@ -6,8 +6,8 @@
  * its new inputs and a reload picks up where the session left off.
  */
 import type { ComponentChildren } from 'preact';
-import { render } from 'preact';
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { createContext, render } from 'preact';
+import { useContext, useEffect, useRef, useState } from 'preact/hooks';
 import { match, P } from 'ts-pattern';
 import type { Answer, ResolveParams } from '@/client/dtos';
 import { createClient, type GoblinClient } from '@/client/main';
@@ -53,12 +53,16 @@ const message = (err: unknown) => (err instanceof Error ? err.message : String(e
 /** A call to the function at `path` (full, from the root). */
 const call = (path: string, args: unknown[] = []): Input => ({ type: 'invoke', path, value: args });
 
+/** Whether tooltips list the `:events` behind a field, or only how it is derived. */
+const ShowEvents = createContext(false);
+
 function App() {
   const client = useRef<GoblinClient>(undefined);
   const busy = useRef(false);
   const [answer, setAnswer] = useState<Answer>();
   const [status, setStatus] = useState('connecting…');
   const [view, setView] = useState<'sheet' | 'json'>('sheet');
+  const [showEvents, setShowEvents] = useState(false);
   const resolved = answer !== undefined && 'data' in answer;
   const [sessionID, setSessionID] = useState<string>();
   const [expressions, setExpressions] = useState(new Map<string, string>());
@@ -116,6 +120,12 @@ function App() {
             ))}
           </nav>
         ) : null}
+        {resolved && view === 'sheet' ? (
+          <label class="check">
+            <input type="checkbox" checked={showEvents} onChange={(e) => setShowEvents(e.currentTarget.checked)} />
+            Events
+          </label>
+        ) : null}
       </header>
       <main>
         {answer === undefined ? null : 'errors' in answer ? (
@@ -130,7 +140,9 @@ function App() {
         ) : view === 'json' ? (
           <Json actor={at(answer.data, CHARACTER)} />
         ) : (
-          <Sheet data={answer.data} events={answer.events} expressions={expressions} turn={turn} />
+          <ShowEvents.Provider value={showEvents}>
+            <Sheet data={answer.data} events={answer.events} expressions={expressions} turn={turn} />
+          </ShowEvents.Provider>
         )}
       </main>
     </>
@@ -269,7 +281,7 @@ function Derivation({ formula, expression, value }: { formula?: Formula; express
  * `formula` and it solved, else the raw `expression` — and the `events` that set or changed them. */
 function History({
   path,
-  events = [],
+  events: all = [],
   formula,
   expression,
   value,
@@ -286,6 +298,7 @@ function History({
   title?: string;
   children: ComponentChildren;
 }) {
+  const events = useContext(ShowEvents) ? all : [];
   if (events.length === 0 && formula === undefined && expression === undefined) return <>{children}</>;
   return (
     // biome-ignore lint/a11y/noNoninteractiveTabindex: focus shows the tooltip to keyboard users
