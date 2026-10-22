@@ -10,8 +10,9 @@ xp:
   :param: true
   :type: integer
   :default: 0
+add_xp(xp): '@.xp += xp'
 
-level: '$.level.level_for(.xp)'
+level: '$.level.level_for([XP](.xp))'
 
 # How the six scores start; the method mixed in below adds its choice to
 # each ability.
@@ -44,7 +45,7 @@ _ability_methods:
   roll: $mixin('ability/roll.yaml')
   roll_assign: $mixin('ability/roll_assign.yaml')
 
-proficiency_bonus: '$.level.proficiency_for(.level)'
+proficiency_bonus: '$.level.proficiency_for([Level](.level))'
 
 armor_class: '10 + [DEX](.abilities.dexterity.modifier)'
 speed:

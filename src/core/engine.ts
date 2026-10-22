@@ -820,10 +820,12 @@ export class GoblinEngine {
     });
   }
 
-  /** A logged write's value: expressions evaluate (once, keyed on the event), lists item by item. */
+  /** A logged write's value: expressions evaluate (once, keyed on the event), params read their fill, lists item by item. */
   private resolveWritten(owner: object, key: string, raw: unknown, scope: EvalRoots): unknown {
     if (Array.isArray(raw)) return raw.map((item, i) => this.resolveWritten(owner, `${key}.${i}`, item, scope));
     if (typeof raw === 'string' && ExpressionNode.matches(raw)) return this.evaluateField(owner, key, raw, scope);
+    // A param's first event logs its declaration; show the value it was filled with.
+    if (RecordNode.isParam(raw)) return this.derefValue(raw);
     return raw;
   }
 

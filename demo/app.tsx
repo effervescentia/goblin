@@ -50,8 +50,8 @@ type Turn = (inputs?: Input[]) => void;
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-/** A call to the function at `path` (full, from the root), with no arguments. */
-const call = (path: string): Input => ({ type: 'invoke', path, value: [] });
+/** A call to the function at `path` (full, from the root). */
+const call = (path: string, args: unknown[] = []): Input => ({ type: 'invoke', path, value: args });
 
 function App() {
   const client = useRef<GoblinClient>(undefined);
@@ -340,6 +340,31 @@ function Tags({ items }: { items: unknown }) {
   );
 }
 
+/** A number box and button that award XP. */
+function AddXP({ onAdd }: { onAdd: (xp: number) => void }) {
+  const [raw, setRaw] = useState('');
+  const submit = (event: SubmitEvent) => {
+    event.preventDefault();
+    const xp = Number(raw);
+    if (raw === '' || !Number.isInteger(xp)) return;
+    onAdd(xp);
+    setRaw('');
+  };
+  return (
+    <form class="add-xp" onSubmit={submit}>
+      <input
+        type="number"
+        step={1}
+        placeholder="XP"
+        aria-label="XP to add"
+        value={raw}
+        onInput={(event) => setRaw(event.currentTarget.value)}
+      />
+      <button type="submit">Add XP</button>
+    </form>
+  );
+}
+
 /** The fight in progress, in initiative order, or a button to start one. */
 function Combat({ data, events, turn }: { data: unknown; events: StateEvent[]; turn: Turn }) {
   const combat = combatOf(data, events);
@@ -412,8 +437,9 @@ function Sheet({
         <h2>{String(get('name'))}</h2>
         <p>
           Level <History {...tip('level')}>{String(get('level'))}</History> {humanize(String(get('species')))}{' '}
-          {humanize(String(get('class')))} · {String(get('xp'))} XP
+          {humanize(String(get('class')))} · <History {...tip('xp')}>{String(get('xp'))}</History> XP
         </p>
+        <AddXP onAdd={(xp) => turn([call(`${CHARACTER}.add_xp`, [xp])])} />
       </header>
 
       <Combat data={data} events={events} turn={turn} />

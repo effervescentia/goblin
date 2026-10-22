@@ -55,8 +55,8 @@ $if: "@.class == 'fighter'"
       +second_wind:
         :label: Second Wind
         :doc: Expend to regain hit points. Restores on a short or long rest.
-        current: .max
-        max: 2 + (@.level >= 4) + (@.level >= 10)
+        current: '[Uses](.max)'
+        max: '[Max Uses](2 + (@.level >= 4) + (@.level >= 10))'
         recover: short
     '@.actions':
       +second_wind:
