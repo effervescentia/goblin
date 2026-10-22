@@ -20,6 +20,8 @@ export const LIST_LIB: Record<string, (...args: never[]) => number> = {
   count: ((value: unknown, item: unknown) => picksOf(value).filter((pick) => pick === item).length) as never,
   /** 1 when picked at all, else 0 — expressions do arithmetic on that. */
   has: ((value: unknown, item: unknown) => (picksOf(value).includes(item) ? 1 : 0)) as never,
+  /** How many items a list holds, each record counted once (`size` counts the picks inside). */
+  length: ((value: unknown) => (Array.isArray(value) ? value.length : 0)) as never,
   /** How many picks were made in total. */
   size: ((value: unknown) => picksOf(value).length) as never,
   /** Takes only unique values from an array */

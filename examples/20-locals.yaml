@@ -1,0 +1,14 @@
+# Locals: a bare name assigned in a statement block lives for that call only —
+# no field, no event. A labelled one keeps its formula, so the log entry below
+# stores roll as { :value, :formula: "d8 + Bonus", :parts }. Invoke `heal`.
+
+$actor: Medic
+
+bonus: 2
+hp: 3
+log: []
+
+'heal()': |
+  roll = [d8](1d8) + [Bonus](@.bonus)
+  @.hp += roll
+  @.log += [{ action: 'heal', roll: roll, hp: @.hp }]

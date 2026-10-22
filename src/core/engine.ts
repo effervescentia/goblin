@@ -14,6 +14,7 @@
  *   blocks (`1:`, `2:` …) applied in order.
  */
 
+import { match } from 'ts-pattern';
 import {
   ACTOR_KEY,
   ADD_KEY,
@@ -38,6 +39,7 @@ import {
   VALUE_KEY,
 } from '@/constants';
 import { type InputEvent, isInputEvent, isWriteEvent, latest, nest, type StateEvent } from '@/inputs';
+import { Calculation } from '@/nodes/calculation';
 import { Die, DieNode } from '@/nodes/die';
 import { ExpressionNode } from '@/nodes/expression';
 import { FunctionNode } from '@/nodes/function';
@@ -49,6 +51,7 @@ import {
   compileBody,
   deepClone,
   type EvalRoots,
+  fillLabel,
   formulaOf,
   getChild,
   getChildEntry,
@@ -88,9 +91,11 @@ export class GoblinEngine {
   private readonly cache = new Map<string, unknown>();
   private readonly resolving: string[] = [];
   /** The `[Label](…)` parts each expression field evaluated, from its latest evaluation. */
-  private readonly parts = new WeakMap<object, Map<string, Record<string, unknown>[]>>();
+  private readonly parts = new WeakMap<object, Map<string, { formula?: string; labels: Record<string, unknown>[] }>>();
   private readonly objIds = new WeakMap<object, number>();
   private nextId = 1;
+  /** The resolved entry whose top-level values `$` shares (see `shareWithApp`). */
+  private appEntry: Record<string, unknown> | undefined;
 
   constructor(rootDir = '.') {
     this.registry = new Registry(this.provenance, rootDir);
@@ -287,6 +292,7 @@ export class GoblinEngine {
   }
 
   private hooks(scope: EvalRoots, labels: Record<string, unknown>[]): ResolveHooks {
+    const read = (ref: string) => this.resolveRef(ref, scope);
     // Each statement's value is computed just before its assign: rolls since
     // the last one are that value's.
     let mark = this.journal.mark();
@@ -316,8 +322,13 @@ export class GoblinEngine {
         mark = this.journal.mark();
       },
       label: (label: string, value: unknown) => {
-        labels.push({ [LABEL_KEY]: label, [PARAM_VALUE_KEY]: value });
+        labels.push({ [LABEL_KEY]: fillLabel(label, read), [PARAM_VALUE_KEY]: value });
         return value;
+      },
+      calc: (source: string, run: () => unknown) => {
+        const from = labels.length;
+        const value = run();
+        return new Calculation(value, formulaOf(source, read), labels.slice(from));
       },
     };
   }
@@ -333,9 +344,18 @@ export class GoblinEngine {
     scope: EvalRoots,
     rolled = false,
   ): unknown {
+    // `$` shares the entry's top-level values: a write through it lands on the entry, so replacing one keeps them shared.
+    const entry = base === this.appRoot ? this.sharedEntry(path[0]) : undefined;
+    const tree = entry ?? base;
+    const held =
+      op === '='
+        ? undefined
+        : this.resolveRef(root === CURRENT ? `.${path.join('.')}` : `${root}.${path.join('.')}`, scope);
+    // `+=` on a list appends the items; anything else adds as numbers.
+    const appending = op === '+' && Array.isArray(held);
     // Dice roll once here, so the event and the field hold the same number.
-    let amount = op === '=' ? value : Number(value);
-    const slot = ownerOf(base, path);
+    let amount = op === '=' || appending ? value : Number(value);
+    const slot = ownerOf(tree, path);
     if (slot) {
       const kind = op === '=' ? SET_KEY : op === '+' ? ADD_KEY : SUBTRACT_KEY;
       amount = this.journal.record(slot.owner, slot.key, kind, deepClone(amount), {
@@ -348,14 +368,12 @@ export class GoblinEngine {
         calculation: this.journal.calculation,
       });
     }
-    let next = amount;
-    if (op !== '=') {
-      const held = Number(
-        this.resolveRef(root === CURRENT ? `.${path.join('.')}` : `${root}.${path.join('.')}`, scope),
-      );
-      next = op === '+' ? held + Number(amount) : held - Number(amount);
-    }
-    setPath(base, path, next);
+    const next = match(op)
+      .with('=', () => amount)
+      .with('+', () => (appending ? [...(held as unknown[]), ...[amount].flat()] : Number(held) + Number(amount)))
+      .otherwise(() => Number(held) - Number(amount));
+    setPath(tree, path, next);
+    if (entry && path[0] !== undefined) this.appRoot[path[0]] = entry[path[0]];
     this.cache.clear();
     return next;
   }
@@ -385,7 +403,7 @@ export class GoblinEngine {
     }
     const { labels = [], ...inner } = scope;
     const run = compileBody(trimmed, Object.keys(inner.params ?? {}));
-    const formula = formulaOf(trimmed);
+    const formula = formulaOf(trimmed, (ref) => this.resolveRef(ref, inner));
     return this.journal.calculate(formula === undefined ? undefined : { formula, parts: labels }, () =>
       run(this.hooks(inner, labels), inner.params ?? {}),
     );
@@ -431,8 +449,8 @@ export class GoblinEngine {
   private evaluateLabelled(record: object, key: string, raw: string, scope: EvalRoots): unknown {
     const labels: Record<string, unknown>[] = [];
     const value = this.evaluate(raw, { ...scope, labels });
-    const fields = this.parts.get(record) ?? new Map<string, Record<string, unknown>[]>();
-    fields.set(key, labels);
+    const fields = this.parts.get(record) ?? new Map();
+    fields.set(key, { formula: formulaOf(raw, (ref) => this.resolveRef(ref, scope)), labels });
     this.parts.set(record, fields);
     return value;
   }
@@ -442,7 +460,8 @@ export class GoblinEngine {
   labelsFor(record: object, key: string, raw: unknown): Record<string, unknown> | undefined {
     const formula = typeof raw === 'string' && ExpressionNode.matches(raw) ? formulaOf(raw) : undefined;
     if (formula === undefined) return undefined;
-    return { [FORMULA_KEY]: formula, [PARTS_KEY]: this.parts.get(record)?.get(key) ?? [] };
+    const evaluated = this.parts.get(record)?.get(key);
+    return { [FORMULA_KEY]: evaluated?.formula ?? formula, [PARTS_KEY]: evaluated?.labels ?? [] };
   }
 
   /** The document that wrote `record[key]`: its latest write's `:source`,
@@ -758,11 +777,19 @@ export class GoblinEngine {
   private shareWithApp(entry: unknown): void {
     const source = this.provenance.sourceOf(entry);
     if (source === undefined || entry === null || typeof entry !== 'object' || Array.isArray(entry)) return;
+    this.appEntry = entry as Record<string, unknown>;
     for (const [key, value] of Object.entries(entry)) {
       const held = this.appRoot[key];
       if (held !== null && typeof held === 'object' && this.provenance.owners.get(held) === source)
         this.appRoot[key] = value;
     }
+  }
+
+  /** The entry, when `$.<key>` is its own value rather than another document's. */
+  private sharedEntry(key: string | undefined): Record<string, unknown> | undefined {
+    const entry = this.appEntry;
+    if (key === undefined || entry === undefined || !(key in entry)) return undefined;
+    return entry[key] === this.appRoot[key] ? entry : undefined;
   }
 
   // -- patches (class files, levels, conditions) ----------------------------

@@ -153,8 +153,8 @@ another index is indexing; anywhere else it opens a list literal
 A path that goes on past the indexes of a plain ref (`$.party[name].level`)
 reads the ref its keys spell (`$.party.aria.level`), so the target evaluates
 lazily, as itself: inside a nested actor, `@` and `#` are that actor and its
-functions are callable (`$.party[name].initiative.roll()`, as 5e's combat
-rolls). Each key names one segment, as for an indexed assignment (see
+functions are callable (`$.party[name].initiative.roll()`), and its fields
+readable (`$.party[name].initiative.base`, as 5e's combat rolls). Each key names one segment, as for an indexed assignment (see
 Statements and assignment): an identifier string or a non-negative integer,
 else it throws (`invalid path key "a.b" for $.party`). A key naming nothing
 is an unresolvable reference.
@@ -179,7 +179,10 @@ champion: '#.podium[#.ranked[0]].name' # → Ash
 parenthesized sum, nested or not. It is told apart from a list the same way
 indexing is: a `[` that does not follow a ref, call or index, whose `]` is
 directly followed by `(` (a list is never called). The label is plain text,
-never evaluated, and may not be empty or contain unbalanced brackets.
+never evaluated, and may not be empty or contain unbalanced brackets — except
+that `{ref}` in it reads that ref when the expression runs, so a label can
+name what it wraps: `[{.die}]($lib.dice.roll(.die))` is labelled `d4` (or
+`d8`, once a patch changes the die), in both the formula and the part.
 
 A field whose expression has labels prints as
 `{ :value, :formula, :parts }` (a record value takes the two keys in place):
@@ -204,6 +207,20 @@ composes labelled expressions like any other (`(10) + (Dexterity)`).
 armor_class: '10 + [Dexterity](#.dexterity)'
 # → { ":value": 12, ":formula": "10 + Dexterity",
 #     ":parts": [{ ":label": "Dexterity", ":value": 2 }] }
+```
+
+A labelled value in an object literal keeps its formula the same way: the
+property holds `{ :value, :formula, :parts }`, with the parts its own tags
+reached, while unlabelled properties stay plain. That is how written data —
+5e's log — remembers how each value was rolled, after the expression is
+gone:
+
+```yaml
+# 5e/character.yaml (examples/19-append.yaml)
+'roll()': |
+  $.log += [{ actor: @.name, action: 'unarmed_strike', attack: [d20](1d20) + [STR](@.abilities.strength.modifier) + …, damage: [{.die}]($lib.dice.roll(.die)) + [STR](…) }]
+# → attack: { ":value": 19, ":formula": "d20 + STR + Proficiency",
+#             ":parts": [{ ":label": "d20", ":value": 13 }, …] }
 ```
 
 ## Dice
@@ -292,6 +309,8 @@ table takes precedence for `$lib.…` refs. Native namespaces:
   and sums the `keep` highest — 5e's rolled scores are
   `$lib.dice.keep_highest(4, 6, 3)` (4d6, drop the lowest). It takes numbers,
   since inline `NdM` rolls to a sum before a call could see each die.
+  `roll(die)` rolls a die *field* where it stands alone and would otherwise
+  stay a spec — inside a label, say (`[{.die}]($lib.dice.roll(.die))`).
   `max(die)` is the most a die can roll (`2d6` → 12) — 5e's level-1 hit
   points are `$lib.dice.max(@.hit_die) + …`. It takes a die *field*, for the
   same reason: inline dice roll before the call sees them.
@@ -302,16 +321,19 @@ table takes precedence for `$lib.…` refs. Native namespaces:
   score improvements are `:count: 2` pick lists, and each ability's score
   counts its own name across them (`10 + $lib.list.count(@.improvements,
   'strength')`), so the same ability twice is +2 and two abilities once each
-  is +1 apiece.
+  is +1 apiece. `length(list)` is how many items a list holds, a record
+  counting once (`size` counts the picks inside it), so
+  `$.log[$lib.list.length($.log) - 1]` is the latest entry.
 - `record`: records as tables keyed by name. `keys(record)` lists its data
   keys (never metadata), in order; `rank(record, ...tiebreaks)` the keys,
   highest value first, a tie going to the higher value in each `tiebreaks`
   record (keyed the same) in turn, then keeping its order; `from(keys, fn)` builds a record holding
-  `fn(key)` for each key. A function is passed by its ref, uncalled
-  (`$lib.record.from(@.members, .roll)`), and keeps its own `#` and `@`.
-  5e's combat rolls initiative this way (`5e/combat.yaml`), offers the
-  party's keys as its members' `:options` with `keys`, and orders turns
-  with `rank`, Dexterity breaking initiative ties.
+  `fn(key)` for each key; `values(record)` lists its data values, in key
+  order. A function is passed by its ref, uncalled
+  (`$lib.record.from(@.members, ._roll)`), and keeps its own `#` and `@`.
+  5e's combat rolls initiative this way (`5e/combat.yaml`) and logs the rolls
+  with `values`, offers the party's keys as its members' `:options` with
+  `keys`, and orders turns with `rank`, Dexterity breaking initiative ties.
 - `set`: lists as sets, reading picks the way `list` does. `union(a, b)`,
   `intersection(a, b)` and `difference(a, b)` (in `a`, not in `b`) return
   lists without repeats, in order of first appearance; `subset(a, b)` is 1
@@ -326,9 +348,11 @@ floored: $lib.math.floor(2.9)                 # → 2
 smallest: $lib.math.min(3, 9)                 # → 3
 ability_roll: $lib.dice.keep_highest(4, 6, 3) # → 3..18
 best_damage: $lib.dice.max(#.damage)          # damage: 2d6 → 12
+rolled_damage: $lib.dice.roll(#.damage)       # damage: 2d6 → 2..12
 athletics_picks: $lib.list.count(@.picks, 'athletics')
 ranking: $lib.record.rank(@.scores)           # { ash: 12, bree: 17 } → [bree, ash]
 doubles: "$lib.record.from(['ash'], #.doubled)" # → { ash: 24 }
+score_list: $lib.record.values(@.scores)       # { ash: 12, bree: 17 } → [12, 17]
 ```
 
 ```yaml
@@ -544,7 +568,7 @@ patch touched print bare, as before.
   `null`), not its declaration.
 - `:add` names what an addition added: the value a `+@.path` key added
   (resolved, like `:set`),
-  the items a `+item` list appended, or the key a `+key` record addition
+  the items a `+item` list or a list's `+=` appended, or the key a `+key` record addition
   introduced. A `+key` holding a scalar or a
   list records that value instead, so nothing is logged twice.
 - Assignments in statement bodies file events too, under the document whose
@@ -586,7 +610,9 @@ unchanged by this.
 Bodies spanning multiple lines (or `;`-separated) are statement blocks. A
 statement of the form `<ref> = <expr>` — where the left side is exactly one
 reference — assigns through the sigil (`$.` writes app state, `@.` actor
-state, `.` the current node) and clears the resolution cache. The block's
+state, `.` the current node) and clears the resolution cache. A `$.` write to
+one of the entry's own top-level fields lands on the entry (its events file
+there too), so a nested actor can write table state — 5e's `$.log`. The block's
 value is its last non-assignment statement (all-assignment blocks evaluate
 to `undefined`). Watch the single `=`: `$if: '@.level = 5'` does not compare —
 it assigns 5 and passes truthy. Comparisons always use `==`.
@@ -601,8 +627,48 @@ rest:
 `+=` and `-=` add to or take from what the target holds: `x += y` is
 `x = x + (y)`, logged as an `:add` / `:subtract` of `y` rather than a `:set`
 (see Change events), so 5e's Second Wind heals with
-`@.hit_points.current += $lib.math.min(1d10 + @.level, @.hit_points.max - @.hit_points.current) * …`.
+`@.hit_points.current += healed` (see Locals).
 On a wildcard target each match adds to its own value.
+
+On a field holding a list, `+=` appends instead: `log += [entry]` adds the
+right side's items to the end (a lone non-list value is appended as one
+item), logged as an `:add` of what it appended. 5e's unarmed strike records
+each attack in the table's log this way:
+
+```yaml
+# 5e/main.yaml
+log: []
+
+# 5e/character.yaml (examples/19-append.yaml)
+actions:
+  unarmed_strike:
+    die: d4
+    'roll()': |
+      $.log += [{ actor: @.name, action: 'unarmed_strike', attack: [d20](1d20) + [STR](@.abilities.strength.modifier) + [Proficiency](@.proficiency_bonus), damage: [{.die}]($lib.dice.roll(.die)) + [STR](@.abilities.strength.modifier) }]
+```
+
+### Locals
+
+A bare name on the left (`roll = …`, no sigil) is a **local**: a variable
+that lives for one call of the function. It is never state — it writes no
+field and logs no event — and later statements in the block read it by its
+bare name, like a parameter (assigning a parameter rebinds it the same way).
+`+=` / `-=` on a local add to it as numbers. A local assigned a labelled
+expression keeps its formula: arithmetic and comparisons read its value,
+and writing it into data (a list entry, say) stores
+`{ :value, :formula, :parts }`, the shape a labelled field prints as. So a
+roll can be made once, used, and logged with how it was made:
+
+```yaml
+# 5e/class/fighter/fighter.yaml (examples/20-locals.yaml)
+'use()': |
+  ready = @.resources.second_wind.current > 0
+  roll = [d10](1d10) + [Level](@.level)
+  healed = $lib.math.min(roll, @.hit_points.max - @.hit_points.current) * ready
+  @.hit_points.current += healed
+  @.resources.second_wind.current -= ready
+  $.log += ready ? [{ actor: @.name, action: 'second_wind', roll: roll, healed: healed }] : []
+```
 
 A wildcard target (`@.resources.*.current`) assigns each match, with the
 right side evaluated per match and `.` bound to that match's record (see
@@ -730,23 +796,33 @@ party:
 5e models a fight this way. `5e/main.yaml` writes a `Combat` actor
 (`5e/combat.yaml`) in at `combat`, through `#`: `$` shares the entry's
 top-level records (see Nested actors), and `combat` starts as `null`. Its `members` choice
-offers the party's keys; each member rolls initiative once, and
-`end_turn()` walks the order round by round:
+offers the party's keys; `roll_initiative()` then rolls once for each member,
+logging every roll at the table (with its formula), and `end_turn()` walks the
+order round by round, logging whose turn ended in which round:
 
 ```yaml
 # 5e/main.yaml
 combat: null
 game:
-  'start_combat()': "#.combat = $tmpl('combat.yaml')" # → { query: [combat.members] }
-  'end_combat()': '#.combat = null'
+  'start_combat()': | # → { query: [combat.members] }
+    #.combat = $tmpl('combat.yaml')
+    $.log += [{ action: 'start_combat' }]
+  'end_combat()': |
+    #.combat = null
+    $.log += [{ action: 'end_combat' }]
 
 # 5e/combat.yaml
 members:
   :param: true
   :type: array
   :options: $lib.record.keys($.party)
-'roll(name)': $.party[name].initiative.roll()
-initiative: $lib.record.from(@.members, .roll) # → { aria: 14, bram: 9 }
+'_roll(name)': "{ actor: $.party[name].name, action: 'initiative', initiative: [d20](1d20) + [Initiative]($.party[name].initiative.base) }"
+rolls: {} # → { aria: { actor: Aria, action: initiative, initiative: { :value: 14, :formula: d20 + Initiative, … } }, … }
+'roll_initiative()': |
+  @.rolls = $lib.record.from(@.members, ._roll)
+  $.log += $lib.record.values(@.rolls)
+'_score(name)': .rolls[name].initiative
+initiative: $lib.record.from($lib.record.keys(.rolls), ._score) # → { aria: 14, bram: 9 }; {} until rolled
 '_dexterity_of(name)': $.party[name].abilities.dexterity.base
 _dexterity: $lib.record.from(@.members, ._dexterity_of) # → { aria: 14, bram: 13 }
 order: $lib.record.rank(.initiative, ._dexterity)      # → [aria, bram]; a tie → higher Dexterity

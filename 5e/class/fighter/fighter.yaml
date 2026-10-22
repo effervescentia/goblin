@@ -63,11 +63,15 @@ $if: "@.class == 'fighter'"
         :label: Second Wind
         :doc: As a bonus action, regain 1d10 + fighter level hit points, up to your maximum.
         type: bonus_action
-        # Adds 1d10 + level, no more than is missing, only while a use remains
-        # (the comparison is 0 or 1) — so with none left nothing changes.
+        # Heals 1d10 + level, no more than is missing, only while a use
+        # remains (`ready` is 0 or 1) — so with none left nothing changes or logs.
         'use()': |
-          @.hit_points.current += $lib.math.min(1d10 + @.level, @.hit_points.max - @.hit_points.current) * (@.resources.second_wind.current > 0)
-          @.resources.second_wind.current -= @.resources.second_wind.current > 0
+          ready = @.resources.second_wind.current > 0
+          roll = [d10](1d10) + [Level](@.level)
+          healed = $lib.math.min(roll, @.hit_points.max - @.hit_points.current) * ready
+          @.hit_points.current += healed
+          @.resources.second_wind.current -= ready
+          $.log += ready ? [{ actor: @.name, action: 'second_wind', roll: roll, healed: healed }] : []
   +action_surge:
     $if: '@.level >= 2'
     :label: Action Surge

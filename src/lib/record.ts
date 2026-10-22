@@ -20,6 +20,8 @@ function fieldValue(value: unknown): unknown {
 export const RECORD_LIB: Record<string, (...args: never[]) => unknown> = {
   /** The record's keys, in order. */
   keys: ((record: unknown) => keysOf(record)) as never,
+  /** The record's values, in key order: a table's rows as a list. */
+  values: ((record: unknown) => keysOf(record).map((key) => (record as Record<string, unknown>)[key])) as never,
   /** A record keyed by each pick, holding `fn` called with it. */
   from: ((keys: unknown, fn: unknown) => {
     if (typeof fn !== 'function') throw new Error('$lib.record.from: expected a function');
